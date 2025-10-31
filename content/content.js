@@ -1,175 +1,154 @@
 // content/content.js
-// Runs inside YouTube tabs. Detects page type, asks background, shows overlay.
+// ROLE: The "eyes and hands" of FocusTube.
+// Watches YouTube pages, tells the background what’s happening,
+// and enforces the decision (pause, overlay, redirect).
 
-const DEBUG = true;
-const LOG = (...a) => DEBUG && console.log("[FT content]", ...a);
+// ─────────────────────────────────────────────────────────────
+// BASIC HELPERS
+// ─────────────────────────────────────────────────────────────
 
-// Avoid running in iframes (player/ads)
-if (window.top !== window) {
-  LOG("skip iframe", location.href);
-} else {
-  LOG("content boot", location.href);
-}
-
-// --- Overlay management (CSS-driven) -----------------------------------
-function ensureOverlay(message = "Blocked for today") {
-  let ov = document.getElementById("ft-overlay");
-  if (!ov) {
-    ov = document.createElement("div");
-    ov.id = "ft-overlay";
-    ov.innerHTML = `
-      <div class="ft-box">
-        <h1>FocusTube</h1>
-        <p id="ft-overlay-message">${message}</p>
-        <button id="ft-unlock">Temporary Unlock (dev)</button>
-      </div>
-    `;
-    document.body.appendChild(ov);
-    document.documentElement.style.overflow = "hidden";
-    
-    // Wire up unlock button
-    ov.querySelector("#ft-unlock")?.addEventListener("click", async () => {
-      await chrome.runtime.sendMessage({ type: "FT_TEMP_UNLOCK", minutes: 10 });
-      setTimeout(() => handleNavigation(), 150);
-    });
-  } else {
-    // Update message if overlay exists
-    const msgEl = ov.querySelector("#ft-overlay-message");
-    if (msgEl) msgEl.textContent = message;
-  }
-}
-
-function hideOverlay() {
-  const ov = document.getElementById("ft-overlay");
-  if (ov) {
-    ov.remove();
-    document.documentElement.style.overflow = "";
-  }
-}
-
-// --- Page type detection (very lightweight) -------------------------
+/**
+ * Detect what kind of YouTube page we're on.
+ * This function looks at the URL to classify:
+ *  - /shorts/...  → SHORTS
+ *  - /results?... → SEARCH
+ *  - /watch?...   → WATCH
+ *  - /            → HOME
+ *  - else         → OTHER
+ */
 function detectPageType() {
-  const url = location.href;
-  if (/youtube\.com\/shorts\//.test(url)) return "SHORTS";
-  if (/youtube\.com\/results\?search_query=/.test(url)) return "SEARCH";
-  if (/youtube\.com\/watch\?/.test(url)) return "WATCH";
-  if (/youtube\.com\/$/.test(url) || /youtube\.com\/\?/.test(url)) return "HOME";
+  const path = location.pathname;
+
+  if (path.startsWith("/shorts")) return "SHORTS";
+  if (path.startsWith("/results")) return "SEARCH";
+  if (path.startsWith("/watch")) return "WATCH";
+  if (path === "/") return "HOME";
+
   return "OTHER";
 }
 
-// --- Shorts enforcement ----------------------------------------------
-// Find the active Shorts <video> element and pause/mute it.
-// YouTube frequently replaces nodes, so keep an observer alive while on SHORTS.
-let shortsObserver = null;
+/**
+ * Simple overlay creator. Shown when user is blocked.
+ * It covers the screen, disables clicks, and explains why.
+ */
+function showOverlay(reason, scope) {
+  removeOverlay(); // ensure no duplicates
 
-function stopShortsObserver() {
-  if (shortsObserver) {
-    shortsObserver.disconnect();
-    shortsObserver = null;
-  }
+  const overlay = document.createElement("div");
+  overlay.id = "ft-overlay";
+
+  overlay.style.position = "fixed";
+  overlay.style.top = 0;
+  overlay.style.left = 0;
+  overlay.style.width = "100%";
+  overlay.style.height = "100%";
+  overlay.style.backgroundColor = "rgba(0, 0, 0, 0.9)";
+  overlay.style.zIndex = 999999;
+  overlay.style.display = "flex";
+  overlay.style.flexDirection = "column";
+  overlay.style.alignItems = "center";
+  overlay.style.justifyContent = "center";
+  overlay.style.color = "white";
+  overlay.style.fontSize = "20px";
+  overlay.style.fontFamily = "Arial, sans-serif";
+  overlay.style.textAlign = "center";
+  overlay.style.padding = "20px";
+
+  overlay.innerHTML = `
+    <h1>FocusTube Active</h1>
+    <p>You’re blocked from ${scope.toLowerCase()} content.</p>
+    <p><strong>Reason:</strong> ${reason}</p>
+    <button id="ft-temp-unlock" style="
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    ">
+      Temporary Unlock (Dev)
+    </button>
+  `;
+
+  // Dev-only: allow temp unlock for quick testing
+  overlay.querySelector("#ft-temp-unlock").addEventListener("click", async () => {
+    await chrome.runtime.sendMessage({ type: "FT_TEMP_UNLOCK", minutes: 1 });
+    alert("Temporary unlock granted for 1 minute. Reload to continue.");
+    removeOverlay();
+  });
+
+  document.body.appendChild(overlay);
 }
 
-function pauseShortsOnce() {
-  // Typical selector path for Shorts player
-  // ytd-reel-video-renderer hosts a <video> element
-  const video =
-    document.querySelector("ytd-reel-video-renderer video") ||
-    document.querySelector("ytd-reel-video-renderer #shorts-player video") ||
-    document.querySelector("ytd-reel-video-renderer ytd-player video");
-
-  if (video) {
-    try {
-      video.muted = true;          // silence first
-      video.pause?.();             // pause if playing
-      video.currentTime = video.currentTime; // nudge to stop buffering
-    } catch (_) { /* no-op */ }
-  }
+/** Removes the overlay if it exists */
+function removeOverlay() {
+  const el = document.getElementById("ft-overlay");
+  if (el) el.remove();
 }
 
-function enforceShortsBlocked() {
-  pauseShortsOnce(); // immediate attempt
-
-  // Keep pausing if YouTube swaps DOM nodes (common in SPA)
-  if (!shortsObserver) {
-    shortsObserver = new MutationObserver(() => pauseShortsOnce());
-    shortsObserver.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-    });
-  }
+/** Pauses any active video on the page */
+function pauseVideos() {
+  document.querySelectorAll("video").forEach(v => v.pause());
 }
 
-// --- Router: detect page, ask bg, act --------------------------------
-let lastPageType = null;
+// ─────────────────────────────────────────────────────────────
+// MAIN LOGIC
+// ─────────────────────────────────────────────────────────────
 
+/**
+ * Core navigation handler — runs whenever the page changes or refreshes.
+ * 1. Detects what kind of page we’re on
+ * 2. Sends message to background for decision
+ * 3. Applies result (block / allow)
+ */
 async function handleNavigation() {
   const pageType = detectPageType();
-  if (pageType === lastPageType) return; // avoid spam
-  lastPageType = pageType;
 
-  const resp = await FT_nav(pageType);
-  LOG("handleNavigation:", pageType, location.href, resp);
+  // Ask background for a decision
+  const resp = await chrome.runtime.sendMessage({
+    type: "FT_NAVIGATED",
+    pageType,
+    url: location.href
+  });
 
-  // Apply DOM actions based on decision
-  if (resp?.blocked && resp?.scope === "shorts" && pageType === "SHORTS") {
-    // Shorts blocked: pause/mute via MutationObserver
-    enforceShortsBlocked();
-    hideOverlay(); // Don't show overlay for shorts, just pause
-  } else if (resp?.blocked && resp?.scope === "search" && pageType === "SEARCH") {
-    // Search blocked: show overlay
-    stopShortsObserver(); // Not on shorts anymore
-    ensureOverlay("Search limit reached. Take a breather.");
+  console.log("[FT content] background response:", resp);
+
+  if (!resp?.ok) return;
+
+  if (resp.blocked) {
+    pauseVideos();
+
+    // Shorts-specific: redirect to home if blocked
+    if (resp.scope === "shorts") {
+      window.location.href = "https://www.youtube.com/";
+      return;
+    }
+
+    // Search or global: show overlay
+    if (resp.scope === "search" || resp.scope === "global") {
+      showOverlay(resp.reason, resp.scope);
+    }
   } else {
-    // Not blocked or other scope: hide overlay, stop shorts observer
-    hideOverlay();
-    stopShortsObserver();
+    removeOverlay(); // clear if allowed
   }
 }
 
-// --- Wire up SPA navigation hooks -----------------------------------
-// Run at load
-handleNavigation();
+// ─────────────────────────────────────────────────────────────
+// PAGE MONITORING (for YouTube’s dynamic navigation)
+// ─────────────────────────────────────────────────────────────
 
-// React to history pushes/replaces (YouTube SPA)
-(function patchHistory() {
-  const origPush = history.pushState;
-  const origReplace = history.replaceState;
-  history.pushState = function (...args) {
-    const ret = origPush.apply(this, args);
-    setTimeout(handleNavigation, 0);
-    return ret;
-  };
-  history.replaceState = function (...args) {
-    const ret = origReplace.apply(this, args);
-    setTimeout(handleNavigation, 0);
-    return ret;
-  };
-})();
+/**
+ * YouTube is a Single-Page App (SPA) — URLs change without full reload.
+ * This MutationObserver detects URL or title changes and reruns handleNavigation().
+ */
+let lastUrl = location.href;
 
-// Back/forward
-window.addEventListener("popstate", handleNavigation);
-
-// Also try when DOM becomes interactive (covers some lazy transitions)
-document.addEventListener("readystatechange", () => {
-  if (document.readyState === "interactive" || document.readyState === "complete") {
-    handleNavigation();
+const observer = new MutationObserver(() => {
+  if (location.href !== lastUrl) {
+    lastUrl = location.href;
+    handleNavigation().catch(console.error);
   }
 });
 
-// ---- FocusTube test helper: call background and log the decision
-async function FT_nav(pageType) {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage(
-      { type: "FT_NAVIGATED", pageType, url: location.href },
-      (resp) => {
-        if (chrome.runtime.lastError) {
-          LOG("FT_NAVIGATED error:", chrome.runtime.lastError);
-          resolve({ ok: false, error: chrome.runtime.lastError.message });
-        } else {
-          resolve(resp || { ok: false, error: "No response" });
-        }
-      }
-    );
-  });
-}
-window.FT_nav = FT_nav; // expose to DevTools console for manual testing
+observer.observe(document.body, { childList: true, subtree: true });
+
+// Initial run
+handleNavigation().catch(console.error);

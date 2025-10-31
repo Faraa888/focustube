@@ -3,7 +3,7 @@
   "name": "FocusTube (MVP)",
   "version": "0.1.0",
   "description": "Hide Shorts & recs and track YouTube navigation for focus.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "scripting"],
   "host_permissions": ["*://*.youtube.com/*"],
   "background": {
     "service_worker": "background/background.js",
