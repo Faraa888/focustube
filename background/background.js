@@ -47,6 +47,22 @@ async function countForPageType(pageType) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// MODE + PLAN SWITCH HANDLER (Dev/User toggle, Free/Pro plan)
+// ─────────────────────────────────────────────────────────────
+async function handleSetModePlan({ mode = "user", plan = "free" }) {
+  await ensureDefaults();
+  await resetCounters();            // reset all daily counters/state
+  await setPlan(plan);              // update plan in storage
+  await setLocal({ ft_mode: mode }); // store current mode
+  const tabs = await chrome.tabs.query({ url: "*://*.youtube.com/*" });
+  for (const t of tabs) {
+    chrome.tabs.sendMessage(t.id, { type: "FT_MODE_CHANGED", mode, plan });
+  }
+  LOG("Mode/Plan switched →", mode, plan);
+  return { ok: true, mode, plan };
+}
+
+// ─────────────────────────────────────────────────────────────
 // MESSAGE HANDLER: listens to content.js messages
 // ─────────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -60,6 +76,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       if (msg?.type === "FT_TEMP_UNLOCK") {
         const resp = await handleTempUnlock(msg);
+        sendResponse(resp);
+        return;
+      }
+
+      if (msg?.type === "FT_SET_MODE_PLAN") {
+        const resp = await handleSetModePlan(msg);
         sendResponse(resp);
         return;
       }

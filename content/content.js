@@ -90,6 +90,18 @@ function pauseVideos() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// MODE CHANGE HANDLER (Dev/User toggle listener)
+// ─────────────────────────────────────────────────────────────
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === "FT_MODE_CHANGED") {
+    console.log(`[FT content] Mode changed → ${msg.mode}, Plan → ${msg.plan}`);
+    // Clear overlays & force fresh navigation logic
+    removeOverlay();
+    scheduleNav(0);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
 // MAIN LOGIC
 // ─────────────────────────────────────────────────────────────
 
@@ -100,6 +112,11 @@ function pauseVideos() {
  * 3. Applies result (block / allow)
  */
 async function handleNavigation() {
+  // Guard: make sure Chrome APIs exist before continuing
+  if (!chrome?.runtime) {
+    console.warn("[FT] chrome.runtime unavailable — skipping navigation check.");
+  return;
+}
   const pageType = detectPageType();
 
   // Ask background for a decision
@@ -123,9 +140,10 @@ async function handleNavigation() {
     }
 
     // Search or global: show overlay
-    if (resp.scope === "search" || resp.scope === "global") {
-      showOverlay(resp.reason, resp.scope);
-    }
+    // Search or global: show overlay only if one doesn’t already exist
+  if ((resp.scope === "search" || resp.scope === "global") && !document.getElementById("ft-overlay")) {
+    showOverlay(resp.reason, resp.scope);
+}
   } else {
     removeOverlay(); // clear if allowed
   }
@@ -134,21 +152,33 @@ async function handleNavigation() {
 // ─────────────────────────────────────────────────────────────
 // PAGE MONITORING (for YouTube’s dynamic navigation)
 // ─────────────────────────────────────────────────────────────
-
+// Remove overlay when user navigates via browser back/forward
+window.addEventListener("popstate", removeOverlay);
 /**
  * YouTube is a Single-Page App (SPA) — URLs change without full reload.
  * This MutationObserver detects URL or title changes and reruns handleNavigation().
  */
+// Debounce helper: wait a short moment before running navigation logic.
+// This collapses multiple rapid DOM/URL changes into a single evaluation.
+let _ftNavTimer = null;
+function scheduleNav(delay = 150) {
+  if (_ftNavTimer) clearTimeout(_ftNavTimer);
+  _ftNavTimer = setTimeout(() => {
+    handleNavigation().catch(console.error);
+  }, delay);
+}
+
 let lastUrl = location.href;
 
 const observer = new MutationObserver(() => {
   if (location.href !== lastUrl) {
     lastUrl = location.href;
-    handleNavigation().catch(console.error);
+    scheduleNav(150); // debounce SPA navigations
   }
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
 
-// Initial run
+// Initial run (also debounced for consistency)
+scheduleNav(0);
 handleNavigation().catch(console.error);
