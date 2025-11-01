@@ -10,6 +10,7 @@ import {
   maybeRotateCounters,     // resets counters if day/week/month changed
   getLocal, setLocal,      // storage helpers
   bumpSearches, bumpShorts, bumpWatch, // counter helpers
+  incrementEngagedShorts,   // increment engaged Shorts counter
   getSnapshot,             // debug snapshot (optional)
   getPlanConfig,           // read plan + limits
   isTemporarilyUnlocked,
@@ -50,11 +51,12 @@ chrome.runtime.onStartup.addListener(() => boot().catch(console.error));
 // ─────────────────────────────────────────────────────────────
 // COUNTER UPDATER: bump the correct counter for page type
 // ─────────────────────────────────────────────────────────────
+// Note: Shorts counting is handled by content.js (scrolled + engaged tracking)
 async function countForPageType(pageType) {
   if (pageType === "SEARCH") await bumpSearches();
-  else if (pageType === "SHORTS") await bumpShorts();
+  // SHORTS handled by content.js via FT_BUMP_SHORTS message
   else if (pageType === "WATCH") await bumpWatch();
-  // HOME or OTHER don’t increment anything for now
+  // HOME or OTHER don't increment anything for now
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -116,6 +118,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return;
       }
 
+      if (msg?.type === "FT_BUMP_SHORTS") {
+        await bumpShorts();
+        sendResponse({ ok: true });
+        return;
+      }
+
+      if (msg?.type === "FT_INCREMENT_ENGAGED_SHORTS") {
+        const newCount = await incrementEngagedShorts();
+        sendResponse({ ok: true, engagedCount: newCount });
+        return;
+      }
+
       sendResponse({ ok: false, error: "unknown message type" });
     } catch (err) {
       console.error("Error in background listener:", err);
@@ -140,9 +154,12 @@ async function handleNavigated({ pageType = "OTHER", url = "" }) {
   const state = await getLocal([
     "ft_searches_today",
     "ft_short_visits_today",
+    "ft_shorts_engaged_today",
     "ft_watch_visits_today",
     "ft_watch_seconds_today",
+    "ft_shorts_seconds_today",
     "ft_blocked_today",
+    "ft_block_shorts_today",
     "ft_unlock_until_epoch"
   ]);
 
@@ -161,6 +178,7 @@ async function handleNavigated({ pageType = "OTHER", url = "" }) {
     searchesToday: Number(state.ft_searches_today || 0),
     watchSecondsToday: Number(state.ft_watch_seconds_today || 0),
     ft_blocked_today: state.ft_blocked_today || false,
+    ft_block_shorts_today: state.ft_block_shorts_today || false,
     unlocked,
     now
   };
@@ -183,7 +201,10 @@ async function handleNavigated({ pageType = "OTHER", url = "" }) {
     plan,
     counters: {
       searches: ctx.searchesToday,
-      watchSeconds: ctx.watchSecondsToday
+      watchSeconds: ctx.watchSecondsToday,
+      shortsVisits: Number(state.ft_short_visits_today || 0),
+      shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
+      shortsSeconds: Number(state.ft_shorts_seconds_today || 0)
     },
     unlocked
   };

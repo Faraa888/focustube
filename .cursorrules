@@ -1,0 +1,192 @@
+# FocusTube - Chrome MV3 Extension + Backend Rules
+
+## Product Vision
+FocusTube is a productivity-driven YouTube companion that reduces distraction. It consists of:
+1. **Chrome MV3 Extension** (`/extension`) - monitors YouTube activity and enforces rules
+2. **Backend Server** (`/server`) - handles auth, plans, AI classification via Supabase + Stripe + OpenAI
+
+## Core User Flow
+- User signs up (Supabase email/password) → chooses Free/Pro plan (Stripe for Pro) → downloads extension → logs in
+- Extension syncs plan and rules from backend
+- While browsing YouTube, FocusTube monitors activity and applies blocking logic
+
+## Plan Behavior
+
+### Free Plan
+- **Shorts** → Hard blocked instantly (redirect to YouTube home + overlay message)
+- **Searches** → Limited to 5/day (overlay after cap)
+- 30-min usage reminder banners
+- No AI content classification
+
+### Pro Plan
+- **Shorts** → Allowed but tracked:
+  - Live counter ("You've watched N Shorts today")
+  - Every 5 Shorts, popup asks: "Carry on or block for today?"
+- **Searches** → 15/day
+- **AI Filtering**:
+  - All searches and video titles sent to `/ai/classify`
+  - If marked **distracting**, user gets one daily allowance:
+    - Either 1 video **OR** 10 minutes of distracting content
+  - After allowance consumed, all distracting items blocked for the day
+- 30-min reminders stay active
+
+## Architecture Principles
+
+### Extension Structure (`/extension`)
+- **background/background.js**: Core logic, counters, API calls, plan fetching
+  - Uses MV3-safe message listener pattern (returns `true`, async IIFE inside)
+  - ONE message listener only - never create duplicates
+  - Calls `lib/rules.js` for decisions, `lib/state.js` for storage
+  - Handles messages: `FT_NAVIGATED`, `FT_TEMP_UNLOCK`, `FT_SET_MODE_PLAN`, `FT_TOGGLE_MODE`, `FT_TOGGLE_PLAN`, `FT_PING`
+
+- **content/content.js**: DOM manipulation and YouTube page detection only
+  - Detects page types via URL (SHORTS, SEARCH, WATCH, HOME, OTHER)
+  - Handles SPA navigation with MutationObserver (debounced)
+  - Applies DOM actions based on background decisions (show overlay, pause videos, redirect)
+  - NO blocking logic in content script - only UI enforcement
+
+- **lib/constants.js**: Plan limits, reasons, thresholds
+- **lib/state.js**: Storage helpers, counters, rotation, plan config, temporary unlocks, allowance tracking
+- **lib/rules.js**: Pure decision engine - no side effects, no chrome APIs, calls background for AI if needed
+
+### Backend Structure (`/server`)
+- **src/index.ts**: Express entrypoint
+- **src/aiClassify.ts**: Calls OpenAI; caches 24h per user/text
+- **src/stripeWebhook.ts**: Stripe → Supabase plan sync
+- **src/verify.ts**: Returns `{ plan }` for extension (reads from Supabase JWT)
+- **src/supabase.ts**: Supabase client
+
+### Supabase Tables
+- `users` (id, email, plan)
+- `preferences` (user_id, topics)
+- `subscriptions` (user_id, stripe_customer_id, plan, status)
+- `ai_logs` (user_id, text, category, confidence, created_at)
+
+### Backend Endpoints
+- `POST /webhook/stripe` → updates plan to "pro" in Supabase
+- `GET /license/verify` → returns `{ plan }` from Supabase JWT
+- `POST /ai/classify` → calls OpenAI, returns classification, caches result
+
+## Development Rules
+
+### 1. Work Incrementally
+- Each message = one isolated improvement (e.g., add a helper, fix overlay bug)
+- Explain **WHAT & WHY** (≤6 bullets) before code
+- Show minimal diff or file update
+- **Stop and wait for approval before continuing**
+
+### 2. Never Refactor Everything
+- Keep `rules.js` pure (no chrome APIs, no DOM)
+- Only `background.js` mutates counters or talks to APIs
+- `content.js` only enforces UI changes (pause, overlay, redirect)
+- `state.js` only manages chrome.storage logic
+
+### 3. Backend Safety
+- When AI or backend unavailable, return safe fallback (`{category:"neutral"}`) and log it — **no crashes**
+- Handle network errors gracefully in extension
+- Cache AI results for 24h per user/text
+
+### 4. Cross-Tab Consistency
+- Use `chrome.storage.onChanged` to sync state across tabs
+- Background service worker coordinates all decisions
+
+### 5. Daily Rotation
+- Reset counters, allowances at midnight local time
+- Use rotation keys (`ft_last_reset_key`) to detect day changes
+
+## AI Classification Logic
+- **Endpoint**: `POST /ai/classify`
+- **Input**: `{ user_id, text, context }`
+- **Output**: `{ category: "productive" | "neutral" | "distracting", confidence }`
+- **Caching**: 24h per user/text combination
+- **Fallback**: If OpenAI unavailable, return `{category:"neutral"}` and log
+- "Distracting" videos trigger block unless within daily allowance (1 video OR 10 minutes)
+
+## Non-Negotiable Rules
+
+### DO NOT:
+- Create duplicate message listeners (check for existing ones first)
+- Put blocking logic in `content.js` - only in `background.js` via `rules.js`
+- Use inline CSS for overlay - all styling goes in `styles/overlay.css`
+- Create duplicate `detectPageType()` functions
+- Mix concerns: state.js has NO DOM logic, rules.js has NO chrome APIs
+- Make changes without explaining WHAT & WHY first
+- Work on multiple files simultaneously without approval
+
+### DO:
+- Use ES modules (`type: "module"` in manifest)
+- Keep functions pure when possible (especially in `rules.js`)
+- Debounce SPA navigation detection (150ms default)
+- Gate debug logging with `DEBUG` flag
+- Add header comments explaining each file's purpose
+- Work ONE FILE at a time when making changes
+- Show diffs for review before proceeding to next file
+- Handle backend unavailability gracefully (fallback, no crashes)
+
+## MV3 Message Listener Pattern (REQUIRED)
+```javascript
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  (async () => {
+    try {
+      // handle message types, await helpers, then sendResponse(...)
+    } catch (err) {
+      sendResponse({ ok: false, error: String(err) });
+    }
+  })();
+  return true; // keeps message port open for async
+});
+```
+
+## Coding Conventions
+
+### Naming
+- Storage keys: prefixed with `ft_` (e.g., `ft_searches_today`, `ft_plan`)
+- Message types: `FT_NAVIGATED`, `FT_TEMP_UNLOCK`, etc. (prefixed with `FT_`)
+- Functions: camelCase (e.g., `detectPageType`, `handleNavigation`)
+- Constants: `PLAN_FREE`, `PAGE_SHORTS` (UPPER_SNAKE_CASE)
+
+### Error Handling
+- Always wrap async message handlers in try/catch
+- Send error responses: `{ ok: false, error: String(err) }`
+- Log errors to console (gated by DEBUG flag)
+- Backend errors: return safe fallback, never crash extension
+
+## Workflow
+
+1. **Read the goal or "step ticket"** I provide
+2. **Confirm understanding**
+3. **Explain what will change and why** (≤6 bullets)
+4. **Provide precise diff or full file update**
+5. **Stop — wait for review**
+6. After confirmation, continue with next step
+
+## Lesson Roadmap (Backlog)
+- Lesson 7F — Dev/User + Plan toggle ✅ (done)
+- Lesson 8 — Introduce backend (Supabase + Stripe setup, env linking)
+- Lesson 9 — Verify plan sync (`/license/verify`)
+- Lesson 10 — AI classifier endpoint & integration (stub → live)
+- Lesson 11 — Add allowance ledger logic
+- Lesson 12 — Connect AI rules (block/allow based on classification)
+- Lesson 13 — Add 30-min reminders
+- Lesson 14 — Polish overlays + Pro counters
+- Lesson 15 — Final polish + logging/analytics
+- Lesson 16 — Deployment (server + extension zip)
+
+## Acceptance Criteria Template
+- AC1: The described behavior occurs exactly as defined
+- AC2: Shorts redirect works instantly on Free plan
+- AC3: Counters reset correctly each day
+- AC4: No console errors in background/content
+- AC5: Tabs stay in sync
+- AC6: No unrelated files are touched
+
+## Common Pitfalls to Avoid
+- Adding second message listener in background.js
+- Putting `evaluateBlock()` logic in content.js
+- Creating inline styles instead of using overlay.css
+- Forgetting to call `ensureDefaults()` or `maybeRotateCounters()`
+- Duplicating page type detection logic
+- Breaking MV3 async message pattern (must return `true`)
+- Making backend calls without fallback handling
+- Working on multiple files without approval
+

@@ -51,3 +51,135 @@
   background: #ff6666;
 }
 
+/* Button styles for overlay actions */
+#ft-overlay .ft-button {
+  padding: 12px 24px;
+  font-size: 1em;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+  font-weight: 500;
+}
+
+#ft-overlay .ft-button:active {
+  transform: scale(0.98);
+}
+
+#ft-overlay .ft-button-primary {
+  background: #ff4444;
+  color: #fff;
+}
+
+#ft-overlay .ft-button-primary:hover {
+  background: #ff6666;
+}
+
+#ft-overlay .ft-button-secondary {
+  background: #333;
+  color: #fff;
+  border: 1px solid #555;
+}
+
+#ft-overlay .ft-button-secondary:hover {
+  background: #444;
+}
+
+/* Button container for multiple buttons */
+#ft-overlay .ft-button-container {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+/* Pro mode Shorts counter badge - prominent styling */
+#ft-shorts-counter {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 999998;
+  background: rgba(20, 20, 20, 0.92);
+  backdrop-filter: blur(12px);
+  color: #fff;
+  padding: 18px 28px;
+  border-radius: 12px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 68, 68, 0.2);
+  border: 2px solid rgba(255, 68, 68, 0.3);
+  user-select: none;
+  pointer-events: none;
+  min-width: 280px;
+}
+
+#ft-shorts-counter .ft-counter-text {
+  color: #fff;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+#ft-shorts-counter .ft-counter-highlight {
+  color: #ff6666;
+  font-weight: 700;
+  font-size: 22px;
+}
+
+/* Milestone popup modal */
+#ft-milestone-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  padding: 20px;
+}
+
+#ft-milestone-popup .ft-milestone-box {
+  max-width: 500px;
+  background: #121212;
+  padding: 32px;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+#ft-milestone-popup h2 {
+  font-size: 24px;
+  margin: 0 0 16px 0;
+  color: #ff6666;
+  line-height: 1.4;
+}
+
+#ft-milestone-popup .ft-milestone-intro {
+  font-size: 16px;
+  margin: 16px 0 12px 0;
+  color: #ccc;
+  font-weight: 500;
+}
+
+#ft-milestone-popup .ft-milestone-examples {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px 0;
+}
+
+#ft-milestone-popup .ft-milestone-examples li {
+  padding: 8px 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #e0e0e0;
+}
+
+#ft-milestone-popup .ft-milestone-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+

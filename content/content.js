@@ -28,8 +28,8 @@ function detectPageType() {
 }
 
 /**
- * Simple overlay creator. Shown when user is blocked.
- * It covers the screen, disables clicks, and explains why.
+ * Simple overlay creator. Shown when user is blocked (search/global scope).
+ * Uses CSS classes from overlay.css instead of inline styles.
  */
 function showOverlay(reason, scope) {
   removeOverlay(); // ensure no duplicates
@@ -37,35 +37,15 @@ function showOverlay(reason, scope) {
   const overlay = document.createElement("div");
   overlay.id = "ft-overlay";
 
-  overlay.style.position = "fixed";
-  overlay.style.top = 0;
-  overlay.style.left = 0;
-  overlay.style.width = "100%";
-  overlay.style.height = "100%";
-  overlay.style.backgroundColor = "rgba(0, 0, 0, 0.9)";
-  overlay.style.zIndex = 999999;
-  overlay.style.display = "flex";
-  overlay.style.flexDirection = "column";
-  overlay.style.alignItems = "center";
-  overlay.style.justifyContent = "center";
-  overlay.style.color = "white";
-  overlay.style.fontSize = "20px";
-  overlay.style.fontFamily = "Arial, sans-serif";
-  overlay.style.textAlign = "center";
-  overlay.style.padding = "20px";
-
   overlay.innerHTML = `
-    <h1>FocusTube Active</h1>
-    <p>You’re blocked from ${scope.toLowerCase()} content.</p>
-    <p><strong>Reason:</strong> ${reason}</p>
-    <button id="ft-temp-unlock" style="
-      margin-top: 20px;
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-    ">
-      Temporary Unlock (Dev)
-    </button>
+    <div class="ft-box">
+      <h1>FocusTube Active</h1>
+      <p id="ft-overlay-message">You're blocked from ${scope.toLowerCase()} content.</p>
+      <p><strong>Reason:</strong> ${reason}</p>
+      <button id="ft-temp-unlock" class="ft-button ft-button-primary">
+        Temporary Unlock (Dev)
+      </button>
+    </div>
   `;
 
   // Dev-only: allow temp unlock for quick testing
@@ -73,6 +53,45 @@ function showOverlay(reason, scope) {
     await chrome.runtime.sendMessage({ type: "FT_TEMP_UNLOCK", minutes: 1 });
     alert("Temporary unlock granted for 1 minute. Reload to continue.");
     removeOverlay();
+  });
+
+  document.body.appendChild(overlay);
+}
+
+/**
+ * Shows Shorts-specific blocking overlay for Free plan users.
+ * Displays explanation and two action buttons.
+ */
+function showShortsBlockedOverlay() {
+  removeOverlay(); // ensure no duplicates
+
+  const overlay = document.createElement("div");
+  overlay.id = "ft-overlay";
+
+  overlay.innerHTML = `
+    <div class="ft-box">
+      <h1>FocusTube Active</h1>
+      <p id="ft-overlay-message">
+        Shorts are blocked on the Free plan to help you stay focused.
+        Upgrade to Pro to watch Shorts with smart tracking and controls.
+      </p>
+      <div class="ft-button-container">
+        <button id="ft-back-home" class="ft-button ft-button-secondary">Back to Home Screen</button>
+        <button id="ft-upgrade-pro" class="ft-button ft-button-primary">Upgrade to Pro</button>
+      </div>
+    </div>
+  `;
+
+  // Back to Home button - just dismiss overlay (user already on home)
+  overlay.querySelector("#ft-back-home").addEventListener("click", () => {
+    removeOverlay();
+  });
+
+  // Upgrade to Pro button - placeholder for now (empty URL)
+  overlay.querySelector("#ft-upgrade-pro").addEventListener("click", () => {
+    // Placeholder: empty URL for now
+    // Will be updated later with actual upgrade URL
+    console.log("[FT] Upgrade to Pro clicked (placeholder)");
   });
 
   document.body.appendChild(overlay);
@@ -87,6 +106,388 @@ function removeOverlay() {
 /** Pauses any active video on the page */
 function pauseVideos() {
   document.querySelectorAll("video").forEach(v => v.pause());
+}
+
+// ─────────────────────────────────────────────────────────────
+// PRO MODE SHORTS COUNTER BADGE
+// ─────────────────────────────────────────────────────────────
+
+let shortsTimeTracker = null; // Interval timer for time tracking
+let shortsTimeStart = null; // When time tracking started
+let shortsEngagementTimer = null; // Timer to check if user stays > 5 seconds
+let shortsPageEntryTime = null; // When user entered current Shorts page
+let shortsCurrentVideoId = null; // Current Shorts video ID being tracked
+
+/**
+ * Extracts video ID from YouTube Shorts URL
+ * @param {string} pathname - Location pathname (e.g., "/shorts/ABC123")
+ * @returns {string|null} - Video ID or null if not a Shorts URL
+ */
+function getShortsVideoId(pathname = location.pathname) {
+  const match = pathname.match(/^\/shorts\/([^/?]+)/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Formats seconds into readable time (e.g., "5m 23s")
+ */
+function formatTime(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (remainingSeconds === 0) return `${minutes}m`;
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
+/**
+ * Formats seconds into minutes for milestone display
+ */
+function formatMinutes(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  if (minutes === 1) return "1 min";
+  return `${minutes} mins`;
+}
+
+/**
+ * Gets realistic productivity examples for 2, 5, 10, 15, and 20 minutes.
+ */
+function getProductivityExamples(totalMinutes) {
+  const buckets = [2, 5, 10, 15, 20];
+  const bucket = buckets.filter(b => totalMinutes >= b).pop() ?? 2;
+
+  const examplesByBucket = {
+    2: [
+      "☕ Grab a drink and look away from your screen",
+      "💨 Step outside for a minute of fresh air",
+      "🧘 Take two deep breaths and stretch your body",
+      "📱 Reply to that one message you’ve been ignoring",
+      "🧠 Think about one thing you actually want to get done today",
+    ],
+    5: [
+      "🚶 Take a short walk around your room or hallway",
+      "🧼 Tidy up your desk or clear some clutter",
+      "📖 Read a couple pages of a book",
+      "🍎 Grab a quick snack or drink some water",
+      "💬 Text a friend something positive",
+    ],
+    10: [
+      "🍳 Make a quick snack or coffee",
+      "🧘 Do a short stretch or light workout",
+      "🗒️ Plan the rest of your day on paper",
+      "📞 Call your mum or dad",
+      "📚 Read a short article or learn one new thing",
+    ],
+    15: [
+      "🏃 Go for a quick walk outside",
+      "📦 Do a small chore you’ve been putting off",
+      "🎧 Listen to a short podcast or playlist",
+      "👥 Make plans with a friend",
+      "📓 Write or journal for a few minutes",
+    ],
+    20: [
+      "🌳 Go outside and take a proper break from screens",
+      "🍝 Cook and eat something simple",
+      "📖 Read a full chapter of a book",
+      "💡 Sketch out an idea you’ve been thinking about",
+      "🧺 Start a small household task like laundry or dishes",
+    ],
+  };
+
+  return examplesByBucket[bucket];
+}
+ 
+/**
+ * Updates the Shorts counter badge text
+ * Format: "(X watched, Y skipped, Z mins online)"
+ */
+async function updateShortsBadge(shortsEngaged, shortsScrolled, shortsSeconds) {
+  const badge = document.getElementById("ft-shorts-counter");
+  if (!badge) return;
+
+  const skipped = Math.max(0, shortsScrolled - shortsEngaged);
+  const minutes = Math.floor(shortsSeconds / 60);
+  let timeText;
+  if (minutes === 0) {
+    timeText = "less than 1 min online";
+  } else if (minutes === 1) {
+    timeText = "1 min online";
+  } else {
+    timeText = `${minutes} mins online`;
+  }
+  
+  badge.innerHTML = `
+    <span class="ft-counter-text">
+      (<span class="ft-counter-highlight">${shortsEngaged}</span> watched, <span class="ft-counter-highlight">${skipped}</span> skipped, ${timeText})
+    </span>
+  `;
+}
+
+/**
+ * Removes the Shorts counter badge if it exists
+ */
+function removeShortsBadge() {
+  const badge = document.getElementById("ft-shorts-counter");
+  if (badge) badge.remove();
+  
+  // Stop time tracking
+  if (shortsTimeTracker) {
+    clearInterval(shortsTimeTracker);
+    shortsTimeTracker = null;
+  }
+  shortsTimeStart = null;
+  
+  // Stop engagement tracking
+  if (shortsEngagementTimer) {
+    clearTimeout(shortsEngagementTimer);
+    shortsEngagementTimer = null;
+  }
+  shortsPageEntryTime = null;
+  shortsCurrentVideoId = null; // Clear video ID tracking
+}
+
+/**
+ * Creates and shows the Pro Shorts counter badge
+ */
+async function showShortsBadge(shortsEngaged = 0, shortsScrolled = 0, shortsSeconds = 0) {
+  removeShortsBadge(); // ensure no duplicates
+
+  const badge = document.createElement("div");
+  badge.id = "ft-shorts-counter";
+  
+  // Initialize badge with current values
+  await updateShortsBadge(shortsEngaged, shortsScrolled, shortsSeconds);
+
+  document.body.appendChild(badge);
+}
+
+/**
+ * Starts tracking Shorts engagement (5-second timer)
+ * Immediately increments total scrolled, then checks if user stays > 5 seconds for engaged count
+ * Only starts new timer if video ID changed or no timer is running
+ */
+async function startShortsEngagementTracking() {
+  // Get current Shorts video ID
+  const currentVideoId = getShortsVideoId();
+  
+  // If we're already tracking this video, don't reset the timer
+  if (shortsCurrentVideoId === currentVideoId && shortsEngagementTimer !== null) {
+    return; // Already tracking this video, don't interfere with the timer
+  }
+  
+  // Clear any existing timer (video changed or new tracking)
+  if (shortsEngagementTimer) {
+    clearTimeout(shortsEngagementTimer);
+    shortsEngagementTimer = null;
+  }
+
+  // Update current video ID
+  shortsCurrentVideoId = currentVideoId;
+
+  // Immediately increment total scrolled (all Shorts page visits)
+  await chrome.runtime.sendMessage({ type: "FT_BUMP_SHORTS" });
+  
+  // Track entry time
+  shortsPageEntryTime = Date.now();
+  
+  // Set 5-second timer to check if user engaged (stayed > 5 seconds)
+  shortsEngagementTimer = setTimeout(async () => {
+    // Check if user is still on Shorts page and same video
+    const stillOnShorts = detectPageType() === "SHORTS";
+    const stillSameVideo = shortsCurrentVideoId === getShortsVideoId();
+    
+    if (shortsPageEntryTime && stillOnShorts && stillSameVideo) {
+      // User stayed > 5 seconds, increment engaged counter via message
+      const resp = await chrome.runtime.sendMessage({ type: "FT_INCREMENT_ENGAGED_SHORTS" });
+      
+      // Get updated count from response or storage
+      const engagedCount = resp?.engagedCount || Number((await chrome.storage.local.get(["ft_shorts_engaged_today"])).ft_shorts_engaged_today || 0);
+      
+      // Check if this is a milestone (10, 20, 30, etc.)
+      if (engagedCount % 10 === 0 && engagedCount > 0) {
+        await checkAndShowMilestone(engagedCount);
+      }
+    }
+    
+    // Clear tracking state
+    shortsEngagementTimer = null;
+    shortsPageEntryTime = null;
+    shortsCurrentVideoId = null;
+  }, 5000);
+}
+
+/**
+ * Checks if milestone reached and shows popup (if not already shown)
+ */
+async function checkAndShowMilestone(engagedCount) {
+  // Get last milestone shown
+  const { ft_last_shorts_milestone } = await chrome.storage.local.get(["ft_last_shorts_milestone"]);
+  const lastMilestone = Number(ft_last_shorts_milestone || 0);
+  
+  // Only show if this is a new milestone
+  if (engagedCount > lastMilestone) {
+    // Get all counters for popup display
+    const { ft_short_visits_today, ft_shorts_seconds_today } = await chrome.storage.local.get([
+      "ft_short_visits_today",
+      "ft_shorts_seconds_today"
+    ]);
+    const scrolled = Number(ft_short_visits_today || 0);
+    const totalSeconds = Number(ft_shorts_seconds_today || 0);
+    
+    // Show popup
+    await showShortsMilestonePopup(engagedCount, scrolled, totalSeconds);
+    
+    // Mark this milestone as shown
+    await chrome.storage.local.set({ ft_last_shorts_milestone: engagedCount });
+  }
+}
+
+/**
+ * Shows milestone popup with productivity examples
+ */
+async function showShortsMilestonePopup(engaged, scrolled, totalSeconds) {
+  // Remove any existing popup
+  const existingPopup = document.getElementById("ft-milestone-popup");
+  if (existingPopup) existingPopup.remove();
+  
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const examples = getProductivityExamples(totalMinutes);
+  
+  // Create popup
+  const popup = document.createElement("div");
+  popup.id = "ft-milestone-popup";
+  
+  // Determine emoji based on milestone
+  let emoji = "🎬";
+  if (engaged >= 50) emoji = "🎞️";
+  else if (engaged >= 40) emoji = "🎥";
+  else if (engaged >= 30) emoji = "📹";
+  else if (engaged >= 20) emoji = "📺";
+  
+  const timeText = formatMinutes(totalSeconds);
+  
+  popup.innerHTML = `
+    <div class="ft-milestone-box">
+      <h2>${emoji} You've watched ${engaged} Shorts (scrolled past ${scrolled}, for ${timeText})</h2>
+      <p class="ft-milestone-intro">Instead, you could have:</p>
+      <ul class="ft-milestone-examples">
+        ${examples.map(ex => `<li>${ex}</li>`).join('')}
+      </ul>
+      <div class="ft-milestone-buttons">
+        <button id="ft-milestone-continue" class="ft-button ft-button-secondary">Continue</button>
+        <button id="ft-milestone-block" class="ft-button ft-button-primary">Block Shorts for Today</button>
+      </div>
+    </div>
+  `;
+  
+  // Continue button - just dismiss
+  popup.querySelector("#ft-milestone-continue").addEventListener("click", () => {
+    popup.remove();
+  });
+  
+  // Block Shorts button - set flag and redirect
+  popup.querySelector("#ft-milestone-block").addEventListener("click", async () => {
+    // Clean up any active timers
+    if (shortsEngagementTimer) {
+      clearTimeout(shortsEngagementTimer);
+      shortsEngagementTimer = null;
+    }
+    if (shortsTimeTracker) {
+      await stopShortsTimeTracking();
+    }
+    
+    // Set block flag
+    await chrome.storage.local.set({ ft_block_shorts_today: true });
+    // Redirect to home
+    window.location.href = "https://www.youtube.com/";
+  });
+  
+  document.body.appendChild(popup);
+}
+
+/**
+ * Starts tracking time spent on Shorts (Pro plan only)
+ */
+async function startShortsTimeTracking() {
+  if (shortsTimeTracker) return; // Already tracking
+
+  // Get current time at start
+  const { ft_shorts_seconds_today } = await chrome.storage.local.get(["ft_shorts_seconds_today"]);
+  let baseSeconds = Number(ft_shorts_seconds_today || 0);
+  
+  shortsTimeStart = Date.now();
+  let lastSaveTime = Date.now();
+
+  // Update every second
+  shortsTimeTracker = setInterval(async () => {
+    if (!shortsTimeStart) return;
+
+    const elapsed = Math.floor((Date.now() - shortsTimeStart) / 1000);
+    const timeSinceLastSave = Math.floor((Date.now() - lastSaveTime) / 1000);
+    
+    // Re-read storage every 5 seconds to get latest saved value (in case another tab saved)
+    if (timeSinceLastSave >= 5) {
+      const { ft_shorts_seconds_today: latestSeconds } = await chrome.storage.local.get(["ft_shorts_seconds_today"]);
+      const latestBase = Number(latestSeconds || 0);
+      
+      // If another tab saved more time, adjust our base and reset start time
+      if (latestBase > baseSeconds) {
+        baseSeconds = latestBase;
+        shortsTimeStart = Date.now(); // Reset to continue from new base
+        lastSaveTime = Date.now();
+      } else {
+        // Update our saved value
+        baseSeconds = baseSeconds + elapsed;
+        await chrome.storage.local.set({ ft_shorts_seconds_today: baseSeconds });
+        shortsTimeStart = Date.now(); // Reset elapsed time counter
+        lastSaveTime = Date.now();
+      }
+    }
+
+    // Calculate current total (base + elapsed since last adjustment)
+    const elapsedSinceReset = Math.floor((Date.now() - shortsTimeStart) / 1000);
+    const newTotal = baseSeconds + elapsedSinceReset;
+    
+    // Update badge display every second with real-time values
+    const { ft_shorts_engaged_today, ft_short_visits_today } = await chrome.storage.local.get([
+      "ft_shorts_engaged_today",
+      "ft_short_visits_today"
+    ]);
+    const engaged = Number(ft_shorts_engaged_today || 0);
+    const scrolled = Number(ft_short_visits_today || 0);
+    await updateShortsBadge(engaged, scrolled, newTotal);
+  }, 1000);
+}
+
+/**
+ * Saves accumulated time to storage (used internally and on unload)
+ */
+async function saveAccumulatedShortsTime() {
+  if (!shortsTimeStart) return 0;
+
+  const elapsed = Math.floor((Date.now() - shortsTimeStart) / 1000);
+  if (elapsed > 0) {
+    const { ft_shorts_seconds_today } = await chrome.storage.local.get(["ft_shorts_seconds_today"]);
+    const currentSeconds = Number(ft_shorts_seconds_today || 0);
+    const newTotal = currentSeconds + elapsed;
+    await chrome.storage.local.set({ ft_shorts_seconds_today: newTotal });
+    return newTotal;
+  }
+  return 0;
+}
+
+/**
+ * Stops tracking time and saves final value
+ */
+async function stopShortsTimeTracking() {
+  if (!shortsTimeTracker || !shortsTimeStart) return;
+
+  clearInterval(shortsTimeTracker);
+  shortsTimeTracker = null;
+
+  // Save accumulated time
+  await saveAccumulatedShortsTime();
+  
+  shortsTimeStart = null;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -119,6 +520,18 @@ async function handleNavigation() {
 }
   const pageType = detectPageType();
 
+  // Check if we just redirected from Shorts (on home page)
+  if (pageType === "HOME") {
+    const { ft_redirected_from_shorts } = await chrome.storage.local.get(["ft_redirected_from_shorts"]);
+    if (ft_redirected_from_shorts) {
+      // Clear the flag
+      await chrome.storage.local.remove(["ft_redirected_from_shorts"]);
+      // Show Shorts blocking overlay
+      showShortsBlockedOverlay();
+      return; // Don't check with background for home page in this case
+    }
+  }
+
   // Ask background for a decision
   const resp = await chrome.runtime.sendMessage({
     type: "FT_NAVIGATED",
@@ -130,17 +543,50 @@ async function handleNavigation() {
 
   if (!resp?.ok) return;
 
+  // Handle Pro plan Shorts counter badge (only on Shorts pages, not blocked)
+  if (pageType === "SHORTS" && resp.plan === "pro" && !resp.blocked) {
+    // If we were already tracking, save accumulated time before updating badge
+    if (shortsTimeTracker) {
+      await stopShortsTimeTracking();
+      // Wait a moment to ensure save completes
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    // Re-read counters after save to get latest values
+    const { ft_shorts_engaged_today, ft_short_visits_today, ft_shorts_seconds_today } = await chrome.storage.local.get([
+      "ft_shorts_engaged_today",
+      "ft_short_visits_today",
+      "ft_shorts_seconds_today"
+    ]);
+    const latestEngaged = Number(ft_shorts_engaged_today || 0);
+    const latestScrolled = Number(ft_short_visits_today || 0);
+    const latestSeconds = Number(ft_shorts_seconds_today || 0);
+    
+    // Show badge with latest counters
+    await showShortsBadge(latestEngaged, latestScrolled, latestSeconds);
+    // Start tracking time (fresh start with latest counters)
+    await startShortsTimeTracking();
+    // Start engagement tracking (5-second timer for engaged count)
+    await startShortsEngagementTracking();
+  } else {
+    // Not on Shorts or not Pro plan - remove badge and stop tracking
+    removeShortsBadge();
+    await stopShortsTimeTracking();
+  }
+
   if (resp.blocked) {
     pauseVideos();
+    await stopShortsTimeTracking(); // Stop tracking if blocked
 
-    // Shorts-specific: redirect to home if blocked
+    // Shorts-specific: set redirect flag, then redirect to home if blocked
     if (resp.scope === "shorts") {
+      // Set flag so home page knows to show overlay
+      chrome.storage.local.set({ ft_redirected_from_shorts: true });
       window.location.href = "https://www.youtube.com/";
       return;
     }
 
     // Search or global: show overlay
-    // Search or global: show overlay only if one doesn’t already exist
+    // Search or global: show overlay only if one doesn't already exist
   if ((resp.scope === "search" || resp.scope === "global") && !document.getElementById("ft-overlay")) {
     showOverlay(resp.reason, resp.scope);
 }
@@ -227,10 +673,54 @@ if (document.readyState === "loading") {
 
 
 // ─────────────────────────────────────────────────────────────
-// PAGE MONITORING (for YouTube’s dynamic navigation)
+// STORAGE LISTENER (update badge when counters change)
+// ─────────────────────────────────────────────────────────────
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace !== "local") return;
+  
+  // Update badge if Shorts counters changed
+  if (changes.ft_shorts_engaged_today || changes.ft_short_visits_today || changes.ft_shorts_seconds_today) {
+    const badge = document.getElementById("ft-shorts-counter");
+    if (badge) {
+      // Badge exists - get current values and update
+      chrome.storage.local.get(["ft_shorts_engaged_today", "ft_short_visits_today", "ft_shorts_seconds_today"]).then(storage => {
+        const engaged = Number(storage.ft_shorts_engaged_today || 0);
+        const scrolled = Number(storage.ft_short_visits_today || 0);
+        const seconds = Number(storage.ft_shorts_seconds_today || 0);
+        updateShortsBadge(engaged, scrolled, seconds);
+      });
+    }
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// PAGE MONITORING (for YouTube's dynamic navigation)
 // ─────────────────────────────────────────────────────────────
 // Remove overlay when user navigates via browser back/forward
 window.addEventListener("popstate", removeOverlay);
+
+// Save accumulated Shorts time when page is about to close or becomes hidden
+window.addEventListener("beforeunload", () => {
+  if (shortsTimeStart) {
+    // Synchronous save before page closes
+    saveAccumulatedShortsTime().catch(console.error);
+  }
+});
+
+// pagehide is more reliable than beforeunload for async operations
+window.addEventListener("pagehide", () => {
+  if (shortsTimeStart) {
+    // Synchronous save when page is being unloaded
+    saveAccumulatedShortsTime().catch(console.error);
+  }
+});
+
+document.addEventListener("visibilitychange", () => {
+  // Save when page becomes hidden (tab switch, minimize, etc.)
+  if (document.hidden && shortsTimeStart) {
+    saveAccumulatedShortsTime().catch(console.error);
+  }
+});
 /**
  * YouTube is a Single-Page App (SPA) — URLs change without full reload.
  * This MutationObserver detects URL or title changes and reruns handleNavigation().
@@ -256,6 +746,5 @@ const observer = new MutationObserver(() => {
 
 observer.observe(document.body, { childList: true, subtree: true });
 
-// Initial run (also debounced for consistency)
+// Initial run (debounced for consistency)
 scheduleNav(0);
-handleNavigation().catch(console.error);

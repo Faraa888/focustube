@@ -77,3 +77,69 @@ Donation providers research, “proof” capture (receipt URL/reference), manual
 
 Total (without Safari/AI): ~16–18h
 With Safari + AI + Payments/Charity: +11–13h
+
+
+
+
+
+
+
+
+
+
+
+
+
+Things worth Noting:
+⚙️ TECHNICAL REALITY — What You Can & Can’t Control
+
+✅ You fully control
+	•	Enforcing limits while the extension is active (block, redirect, overlay).
+	•	Tracking and storing user actions (shorts watched, search count, etc.).
+	•	Resetting counters daily / weekly.
+	•	Forcing login and checking a plan tier from your backend.
+	•	Resetting or switching plans instantly when changed.
+	•	Detecting and downgrading Dev/Unpacked installs.
+	•	Encrypting or minifying code before publishing.
+
+⚙️ Partial control
+	•	Detecting extension disable / reload and requiring re-auth.
+	•	Limiting devices per account (via backend).
+	•	Detecting developer mode.
+	•	Using signed tokens for pro features.
+
+❌ Not in your control
+	•	Preventing uninstall.
+	•	Blocking usage in other browsers.
+	•	Preventing local file editing or bypass scripts.
+	•	Stopping people who simply browse in incognito or another profile.
+
+⸻
+
+💡 COMMERCIAL STRATEGY SNAPSHOT
+
+Free version
+	•	Purpose: friction + habit reflection.
+	•	Block Shorts & heavy search use.
+	•	Serve light guilt / reflection overlays.
+	•	Keeps users in ecosystem.
+
+Pro version
+	•	Purpose: empowerment & insight.
+	•	AI-driven reflection (“you could’ve done X instead”).
+	•	Customizable rules.
+	•	Cloud sync, analytics, counters, and smart reminders.
+
+Conversion driver:
+Free feels restrictive but helpful → Pro unlocks freedom + intelligence.
+
+⸻
+
+🧭 MVP FOCUS
+	1.	Reliable tracking & blocking. (No visual bugs, works across tabs.)
+	2.	Backend link for auth, plan, and data persistence.
+	3.	AI insight prompts — simple OpenAI call with habit reflection.
+	4.	Stripe payments + plan update.
+	5.	Analytics log (for user + internal metrics).
+
+That’s a shippable MVP.
