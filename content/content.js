@@ -108,6 +108,54 @@ function pauseVideos() {
   document.querySelectorAll("video").forEach(v => v.pause());
 }
 
+/** Stores original video state for restoration */
+let savedVideoStates = null;
+
+/**
+ * Pauses and mutes all videos on the page, storing their original state
+ * @returns {Array} Array of video states [{video, wasPaused, wasMuted}, ...]
+ */
+function pauseAndMuteVideo() {
+  const videos = document.querySelectorAll("video");
+  savedVideoStates = [];
+  
+  videos.forEach(video => {
+    const state = {
+      video: video,
+      wasPaused: video.paused,
+      wasMuted: video.muted
+    };
+    savedVideoStates.push(state);
+    
+    // Pause and mute the video
+    video.pause();
+    video.muted = true;
+  });
+  
+  return savedVideoStates;
+}
+
+/**
+ * Restores original video muted state (does not auto-play)
+ * This restores muted state but keeps videos paused - user must manually resume
+ */
+function restoreVideoState() {
+  if (!savedVideoStates) return;
+  
+  savedVideoStates.forEach(({ video, wasMuted }) => {
+    // Restore muted state (but don't auto-play - YouTube best practice)
+    if (video && !video.paused) {
+      // If video somehow started playing, restore muted state
+      video.muted = wasMuted;
+    } else {
+      // Video is paused, just restore muted state
+      video.muted = wasMuted;
+    }
+  });
+  
+  savedVideoStates = null;
+}
+
 // ─────────────────────────────────────────────────────────────
 // PRO MODE SHORTS COUNTER BADGE
 // ─────────────────────────────────────────────────────────────
@@ -198,27 +246,22 @@ function getProductivityExamples(totalMinutes) {
  
 /**
  * Updates the Shorts counter badge text
- * Format: "(X watched, Y skipped, Z mins online)"
+ * Format: Two lines - "Total Shorts Watched X (Y Skipped)" and "Total Time on Shorts 5m 20s"
  */
 async function updateShortsBadge(shortsEngaged, shortsScrolled, shortsSeconds) {
   const badge = document.getElementById("ft-shorts-counter");
   if (!badge) return;
 
   const skipped = Math.max(0, shortsScrolled - shortsEngaged);
-  const minutes = Math.floor(shortsSeconds / 60);
-  let timeText;
-  if (minutes === 0) {
-    timeText = "less than 1 min online";
-  } else if (minutes === 1) {
-    timeText = "1 min online";
-  } else {
-    timeText = `${minutes} mins online`;
-  }
+  const timeText = formatTime(shortsSeconds);
   
   badge.innerHTML = `
-    <span class="ft-counter-text">
-      (<span class="ft-counter-highlight">${shortsEngaged}</span> watched, <span class="ft-counter-highlight">${skipped}</span> skipped, ${timeText})
-    </span>
+    <div class="ft-counter-line">
+      Total Shorts Watched <span class="ft-counter-highlight">${shortsEngaged}</span>${skipped > 0 ? ` (<span class="ft-counter-highlight">${skipped}</span> Skipped)` : ''}
+    </div>
+    <div class="ft-counter-line ft-counter-time">
+      Total Time on Shorts <span class="ft-counter-highlight">${timeText}</span>
+    </div>
   `;
 }
 
@@ -254,10 +297,11 @@ async function showShortsBadge(shortsEngaged = 0, shortsScrolled = 0, shortsSeco
   const badge = document.createElement("div");
   badge.id = "ft-shorts-counter";
   
+  // Append badge to DOM first so updateShortsBadge() can find it
+  document.body.appendChild(badge);
+  
   // Initialize badge with current values
   await updateShortsBadge(shortsEngaged, shortsScrolled, shortsSeconds);
-
-  document.body.appendChild(badge);
 }
 
 /**
@@ -297,15 +341,7 @@ async function startShortsEngagementTracking() {
     
     if (shortsPageEntryTime && stillOnShorts && stillSameVideo) {
       // User stayed > 5 seconds, increment engaged counter via message
-      const resp = await chrome.runtime.sendMessage({ type: "FT_INCREMENT_ENGAGED_SHORTS" });
-      
-      // Get updated count from response or storage
-      const engagedCount = resp?.engagedCount || Number((await chrome.storage.local.get(["ft_shorts_engaged_today"])).ft_shorts_engaged_today || 0);
-      
-      // Check if this is a milestone (10, 20, 30, etc.)
-      if (engagedCount % 10 === 0 && engagedCount > 0) {
-        await checkAndShowMilestone(engagedCount);
-      }
+      await chrome.runtime.sendMessage({ type: "FT_INCREMENT_ENGAGED_SHORTS" });
     }
     
     // Clear tracking state
@@ -316,28 +352,37 @@ async function startShortsEngagementTracking() {
 }
 
 /**
- * Checks if milestone reached and shows popup (if not already shown)
+ * Checks if time-based milestone reached and shows popup (if not already shown)
+ * Milestones: 2 min (120s), 5 min (300s), 10 min (600s), 15 min (900s), 20 min (1200s)
  */
-async function checkAndShowMilestone(engagedCount) {
-  // Get last milestone shown
-  const { ft_last_shorts_milestone } = await chrome.storage.local.get(["ft_last_shorts_milestone"]);
-  const lastMilestone = Number(ft_last_shorts_milestone || 0);
+async function checkAndShowTimeMilestone(totalSeconds) {
+  const MILESTONES = [120, 300, 600, 900, 1200]; // 2, 5, 10, 15, 20 minutes in seconds
   
-  // Only show if this is a new milestone
-  if (engagedCount > lastMilestone) {
-    // Get all counters for popup display
-    const { ft_short_visits_today, ft_shorts_seconds_today } = await chrome.storage.local.get([
-      "ft_short_visits_today",
-      "ft_shorts_seconds_today"
-    ]);
-    const scrolled = Number(ft_short_visits_today || 0);
-    const totalSeconds = Number(ft_shorts_seconds_today || 0);
-    
-    // Show popup
-    await showShortsMilestonePopup(engagedCount, scrolled, totalSeconds);
-    
-    // Mark this milestone as shown
-    await chrome.storage.local.set({ ft_last_shorts_milestone: engagedCount });
+  // Get last milestone threshold shown
+  const { ft_last_time_milestone } = await chrome.storage.local.get(["ft_last_time_milestone"]);
+  const lastMilestone = Number(ft_last_time_milestone || 0);
+  
+  // Find which milestone we've crossed (if any)
+  for (const milestoneSeconds of MILESTONES) {
+    // Check if we've crossed this milestone and haven't shown it yet
+    if (totalSeconds >= milestoneSeconds && milestoneSeconds > lastMilestone) {
+      // Get all counters for popup display
+      const { ft_shorts_engaged_today, ft_short_visits_today } = await chrome.storage.local.get([
+        "ft_shorts_engaged_today",
+        "ft_short_visits_today"
+      ]);
+      const engaged = Number(ft_shorts_engaged_today || 0);
+      const scrolled = Number(ft_short_visits_today || 0);
+      
+      // Show popup
+      await showShortsMilestonePopup(engaged, scrolled, totalSeconds);
+      
+      // Mark this milestone threshold as shown
+      await chrome.storage.local.set({ ft_last_time_milestone: milestoneSeconds });
+      
+      // Only show one milestone at a time, break after first match
+      break;
+    }
   }
 }
 
@@ -348,6 +393,9 @@ async function showShortsMilestonePopup(engaged, scrolled, totalSeconds) {
   // Remove any existing popup
   const existingPopup = document.getElementById("ft-milestone-popup");
   if (existingPopup) existingPopup.remove();
+  
+  // Pause and mute video before showing popup
+  pauseAndMuteVideo();
   
   const totalMinutes = Math.floor(totalSeconds / 60);
   const examples = getProductivityExamples(totalMinutes);
@@ -379,9 +427,10 @@ async function showShortsMilestonePopup(engaged, scrolled, totalSeconds) {
     </div>
   `;
   
-  // Continue button - just dismiss
+  // Continue button - dismiss and restore video state
   popup.querySelector("#ft-milestone-continue").addEventListener("click", () => {
     popup.remove();
+    restoreVideoState(); // Restore original muted state (but don't auto-play)
   });
   
   // Block Shorts button - set flag and redirect
@@ -394,6 +443,9 @@ async function showShortsMilestonePopup(engaged, scrolled, totalSeconds) {
     if (shortsTimeTracker) {
       await stopShortsTimeTracking();
     }
+    
+    // Clean up saved video state (redirect will happen anyway)
+    savedVideoStates = null;
     
     // Set block flag
     await chrome.storage.local.set({ ft_block_shorts_today: true });
@@ -446,6 +498,9 @@ async function startShortsTimeTracking() {
     // Calculate current total (base + elapsed since last adjustment)
     const elapsedSinceReset = Math.floor((Date.now() - shortsTimeStart) / 1000);
     const newTotal = baseSeconds + elapsedSinceReset;
+    
+    // Check for time-based milestones (2min, 5min, 10min, 15min, 20min)
+    await checkAndShowTimeMilestone(newTotal);
     
     // Update badge display every second with real-time values
     const { ft_shorts_engaged_today, ft_short_visits_today } = await chrome.storage.local.get([

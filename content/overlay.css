@@ -120,6 +120,21 @@
   font-weight: 600;
 }
 
+#ft-shorts-counter .ft-counter-line {
+  color: #fff;
+  line-height: 1.6;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+#ft-shorts-counter .ft-counter-line:last-child {
+  margin-bottom: 0;
+}
+
+#ft-shorts-counter .ft-counter-line.ft-counter-time {
+  margin-top: 4px;
+}
+
 #ft-shorts-counter .ft-counter-highlight {
   color: #ff6666;
   font-weight: 700;
