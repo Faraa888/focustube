@@ -149,6 +149,83 @@ async function handleNavigation() {
   }
 }
 
+async function updateDevPanelStatus(panel) {
+  try {
+    const { ft_mode, ft_plan } = await chrome.storage.local.get(["ft_mode", "ft_plan"]);
+    const statusEl = panel.querySelector("#ft-status");
+    if (statusEl) {
+      statusEl.textContent = `Mode: ${ft_mode || "user"} | Plan: ${ft_plan || "free"}`;
+    }
+  } catch (err) {
+    console.warn("[FT content] Could not update dev panel status:", err);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// DEV TOGGLE PANEL
+// ─────────────────────────────────────────────────────────────
+function injectDevToggle() {
+  // Avoid duplicates
+  if (document.getElementById("ft-dev-toggle")) return;
+
+  const panel = document.createElement("div");
+  panel.id = "ft-dev-toggle";
+  panel.style.position = "fixed";
+  panel.style.bottom = "15px";
+  panel.style.right = "15px";
+  panel.style.zIndex = "999999";
+  panel.style.background = "rgba(20,20,20,0.85)";
+  panel.style.color = "white";
+  panel.style.padding = "10px 14px";
+  panel.style.borderRadius = "10px";
+  panel.style.fontFamily = "Arial, sans-serif";
+  panel.style.fontSize = "14px";
+  panel.style.display = "flex";
+  panel.style.flexDirection = "column";
+  panel.style.gap = "6px";
+  panel.style.cursor = "pointer";
+  panel.style.userSelect = "none";
+  panel.innerHTML = `
+  <strong>FocusTube Dev</strong>
+  <button id="ft-toggle-mode">Toggle Mode (Dev/User)</button>
+  <button id="ft-toggle-plan">Toggle Plan (Free/Pro)</button>
+  <div id="ft-status" style="margin-top:6px;font-size:12px;opacity:0.8;"></div>
+`;
+
+  // Click handlers — these send messages to background.js
+  panel.querySelector("#ft-toggle-mode").onclick = async () => {
+    try {
+      await chrome.runtime.sendMessage({ type: "FT_TOGGLE_MODE" });
+      await updateDevPanelStatus(panel);
+      console.log("[FT content] Mode toggled successfully");
+    } catch (err) {     
+      console.error("[FT content] Error toggling mode:", err);
+    }
+  };
+  panel.querySelector("#ft-toggle-plan").onclick = async () => {
+    try {
+      await chrome.runtime.sendMessage({ type: "FT_TOGGLE_PLAN" });
+      await updateDevPanelStatus(panel);
+      console.log("[FT content] Plan toggled successfully");
+    } catch (err) {
+      console.error("[FT content] Error toggling plan:", err);
+    }
+  };
+
+  document.body.appendChild(panel);
+  updateDevPanelStatus(panel);
+}
+
+// Run once DOM is ready
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", injectDevToggle);
+} else {
+  injectDevToggle();
+}
+
+
+
+
 // ─────────────────────────────────────────────────────────────
 // PAGE MONITORING (for YouTube’s dynamic navigation)
 // ─────────────────────────────────────────────────────────────

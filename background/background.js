@@ -12,7 +12,10 @@ import {
   bumpSearches, bumpShorts, bumpWatch, // counter helpers
   getSnapshot,             // debug snapshot (optional)
   getPlanConfig,           // read plan + limits
-  isTemporarilyUnlocked    // check temporary unlock state
+  isTemporarilyUnlocked,
+  resetCounters,
+  setPlan,
+  // check temporary unlock state
 } from "../lib/state.js";
 
 import { evaluateBlock } from "../lib/rules.js";
@@ -21,8 +24,16 @@ import { evaluateBlock } from "../lib/rules.js";
 // DEBUG MODE (set false when you ship)
 // ─────────────────────────────────────────────────────────────
 const DEBUG = true;
-const LOG = (...a) => DEBUG && console.log("[FocusTube BG]", ...a);
-
+async function LOG(...a) {
+  if (!DEBUG) return;
+  const { ft_mode = "user", ft_plan = "free" } = await chrome.storage.local.get(["ft_mode", "ft_plan"]);
+  console.log(
+    `%c[FocusTube BG]%c [${ft_mode.toUpperCase()} | ${ft_plan.toUpperCase()}]`,
+    "color: #0ff; font-weight: bold;",
+    "color: #ff0; font-weight: bold;",
+    ...a
+  );
+}
 // ─────────────────────────────────────────────────────────────
 // BOOT: Called on install or startup
 // ─────────────────────────────────────────────────────────────
@@ -82,6 +93,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       if (msg?.type === "FT_SET_MODE_PLAN") {
         const resp = await handleSetModePlan(msg);
+        sendResponse(resp);
+        return;
+      }
+
+            // Allow content.js toggle buttons to call the same handler
+      if (msg?.type === "FT_TOGGLE_MODE" || msg?.type === "FT_TOGGLE_PLAN") {
+        const current = await getLocal(["ft_mode", "ft_plan"]);
+        const newMode = msg?.type === "FT_TOGGLE_MODE"
+          ? (current.ft_mode === "dev" ? "user" : "dev")
+          : current.ft_mode;
+        const newPlan = msg?.type === "FT_TOGGLE_PLAN"
+          ? (current.ft_plan === "free" ? "pro" : "free")
+          : current.ft_plan;
+        const resp = await handleSetModePlan({ mode: newMode, plan: newPlan });
         sendResponse(resp);
         return;
       }
