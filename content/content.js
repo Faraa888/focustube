@@ -225,6 +225,11 @@ let shortsPageEntryTime = null; // When user entered current Shorts page
 let shortsCurrentVideoId = null; // Current Shorts video ID being tracked
 let lastKnownBadgeValues = { engaged: 0, scrolled: 0, seconds: 0 }; // Last known badge values (prevents false 0,0 display)
 
+// Global time tracking (all YouTube pages)
+let globalTimeTracker = null; // Interval timer for global time tracking
+let globalTimeStart = null; // When global time tracking started
+let lastGlobalSaveTime = null; // Last time we saved global time
+
 /**
  * Extracts video ID from YouTube Shorts URL
  * @param {string} pathname - Location pathname (e.g., "/shorts/ABC123")
@@ -482,6 +487,88 @@ function removeSearchCounter() {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// GLOBAL WATCH TIME COUNTER
+// ─────────────────────────────────────────────────────────────
+
+let globalTimeCounterBadge = null;
+let isFullscreen = false;
+
+/**
+ * Shows or updates the global watch time counter
+ * Shows total time watched today on all pages
+ */
+async function showGlobalTimeCounter(watchSecondsToday) {
+  // Remove existing badge if present
+  const existing = document.getElementById("ft-global-time-counter");
+  if (existing) existing.remove();
+
+  const badge = document.createElement("div");
+  badge.id = "ft-global-time-counter";
+  badge.className = "ft-global-time-counter";
+  
+  // Format time
+  const timeText = formatTimeLong(watchSecondsToday);
+  
+  // Update badge content based on fullscreen state
+  updateGlobalTimeCounterContent(badge, timeText, isFullscreen);
+  
+  document.body.appendChild(badge);
+  globalTimeCounterBadge = badge;
+}
+
+/**
+ * Formats seconds into long format (e.g., "1h 15m" or "45m")
+ */
+function formatTimeLong(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (remainingMinutes === 0) return `${hours}h`;
+  return `${hours}h ${remainingMinutes}m`;
+}
+
+/**
+ * Updates the global counter badge content
+ */
+function updateGlobalTimeCounterContent(badge, timeText, minimal = false) {
+  if (!badge) return;
+  
+  if (minimal) {
+    // Minimal format for fullscreen - just time
+    badge.innerHTML = `<span class="ft-global-time-text-minimal">${timeText}</span>`;
+    badge.classList.add("ft-global-time-minimal");
+  } else {
+    // Full format - "Total time: 1h 15m"
+    badge.innerHTML = `<span class="ft-global-time-text">Total time: <strong>${timeText}</strong></span>`;
+    badge.classList.remove("ft-global-time-minimal");
+  }
+}
+
+/**
+ * Updates the global counter badge text
+ */
+function updateGlobalTimeCounter(watchSecondsToday) {
+  const badge = document.getElementById("ft-global-time-counter");
+  if (!badge) return;
+  
+  const timeText = formatTimeLong(watchSecondsToday);
+  updateGlobalTimeCounterContent(badge, timeText, isFullscreen);
+}
+
+/**
+ * Removes the global counter badge
+ */
+function removeGlobalTimeCounter() {
+  const badge = document.getElementById("ft-global-time-counter");
+  if (badge) {
+    badge.remove();
+    globalTimeCounterBadge = null;
+  }
+}
+
 /**
  * Checks and shows warning at threshold - 2 and threshold - 1
  */
@@ -536,6 +623,111 @@ function showSearchWarning(remaining, message) {
       warning.remove();
     }
   }, 5000);
+}
+
+/**
+ * Shows global time limit overlay with daily summary
+ * Big visual overlay with bounce animation on lock icon
+ */
+async function showGlobalLimitOverlay(plan, counters) {
+  removeOverlay(); // ensure no duplicates
+
+  const overlay = document.createElement("div");
+  overlay.id = "ft-overlay";
+  overlay.className = "ft-global-limit-overlay";
+
+  // Format time watched
+  const watchSeconds = counters.watchSeconds || 0;
+  const watchMinutes = Math.floor(watchSeconds / 60);
+  const timeText = watchMinutes >= 60 
+    ? `${Math.floor(watchMinutes / 60)}h ${watchMinutes % 60}m`
+    : `${watchMinutes}m`;
+
+  // Get counters
+  const shortsViewed = counters.shortsEngaged || 0;
+  const searchesMade = counters.searches || 0;
+
+  // Check if tab can be closed (only works if extension opened the tab)
+  // For now, try to close - if it doesn't work, user can manually close
+  const canCloseTab = true; // We'll try closing anyway
+
+  // Get button HTML based on plan
+  let buttonsHTML = '';
+  if (plan === "pro") {
+    buttonsHTML = `
+      <button id="ft-take-break" class="ft-button ft-button-primary">Take a Break 🧘</button>
+      <button id="ft-temp-unlock-pro" class="ft-button ft-button-secondary">Temporary Unlock (Pro) 🔓</button>
+    `;
+  } else {
+    // Free plan: only show "Take a Break" if tab can be closed
+    if (canCloseTab) {
+      buttonsHTML = `
+        <button id="ft-take-break" class="ft-button ft-button-primary">Take a Break 🧘</button>
+      `;
+    }
+    // If tab can't be closed, show no button (user can manually close)
+  }
+
+  overlay.innerHTML = `
+    <div class="ft-box ft-global-limit-box">
+      <div class="ft-global-limit-header">
+        <div class="ft-global-limit-lock">🔒</div>
+        <h1>FocusTube Limit Reached</h1>
+      </div>
+      <div class="ft-global-limit-body">
+        <p class="ft-global-limit-intro">You've reached your daily limit for YouTube use.</p>
+        <div class="ft-global-limit-stats">
+          <div class="ft-global-limit-stat">
+            <strong>Time watched today:</strong> ${timeText}
+          </div>
+          <div class="ft-global-limit-stat">
+            <strong>Shorts viewed:</strong> ${shortsViewed}
+          </div>
+          <div class="ft-global-limit-stat">
+            <strong>Searches made:</strong> ${searchesMade}
+          </div>
+        </div>
+        <p class="ft-global-limit-message">💬 "You've had your fun. Time to step back!"</p>
+        ${buttonsHTML ? `<div class="ft-button-container">${buttonsHTML}</div>` : ''}
+      </div>
+    </div>
+  `;
+
+  // Add button handlers
+  const takeBreakBtn = overlay.querySelector("#ft-take-break");
+  if (takeBreakBtn) {
+    takeBreakBtn.addEventListener("click", () => {
+      // Try to close tab
+      window.close();
+      // If tab doesn't close (e.g., not opened by extension), user can manually close
+    });
+  }
+
+  const unlockBtn = overlay.querySelector("#ft-temp-unlock-pro");
+  if (unlockBtn) {
+    unlockBtn.addEventListener("click", async () => {
+      try {
+        if (!isChromeContextValid()) {
+          console.warn("[FT] Cannot unlock - extension context invalidated");
+          return;
+        }
+        await chrome.runtime.sendMessage({ type: "FT_TEMP_UNLOCK", minutes: 10 });
+        if (chrome.runtime.lastError) {
+          console.warn("[FT] Failed to unlock:", chrome.runtime.lastError.message);
+          alert("Failed to unlock: " + chrome.runtime.lastError.message);
+          return;
+        }
+        removeOverlay();
+        // Reload page to continue
+        window.location.reload();
+      } catch (e) {
+        console.warn("[FT] Error unlocking:", e.message);
+        alert("Error unlocking: " + e.message);
+      }
+    });
+  }
+
+  document.body.appendChild(overlay);
 }
 
 /**
@@ -1010,6 +1202,175 @@ async function stopShortsTimeTracking() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// GLOBAL TIME TRACKING (all YouTube pages)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Starts tracking time spent on ANY YouTube page
+ * Similar to Shorts tracking, but applies to all pages
+ */
+async function startGlobalTimeTracking() {
+  if (globalTimeTracker) return; // Already tracking
+
+  if (!isChromeContextValid()) return;
+
+  // Get current time at start
+  let baseSeconds = 0;
+  try {
+    const { ft_watch_seconds_today } = await chrome.storage.local.get(["ft_watch_seconds_today"]);
+    if (chrome.runtime.lastError) {
+      console.warn("[FT] Failed to get initial global time:", chrome.runtime.lastError.message);
+      baseSeconds = 0;
+    } else {
+      baseSeconds = Number(ft_watch_seconds_today || 0);
+    }
+  } catch (e) {
+    console.warn("[FT] Error getting initial global time:", e.message);
+    baseSeconds = 0;
+  }
+  
+  globalTimeStart = Date.now();
+  lastGlobalSaveTime = Date.now();
+
+  // Update every second
+  globalTimeTracker = setInterval(async () => {
+    // Check if Chrome context is still valid
+    if (!isChromeContextValid()) {
+      clearInterval(globalTimeTracker);
+      globalTimeTracker = null;
+      globalTimeStart = null;
+      lastGlobalSaveTime = null;
+      return;
+    }
+    
+    if (!globalTimeStart) return;
+
+    const elapsed = Math.floor((Date.now() - globalTimeStart) / 1000);
+    const timeSinceLastSave = Math.floor((Date.now() - lastGlobalSaveTime) / 1000);
+    
+    // Re-read storage every 5 seconds to get latest saved value (in case another tab saved)
+    if (timeSinceLastSave >= 5) {
+      try {
+        const { ft_watch_seconds_today: latestSeconds } = await chrome.storage.local.get(["ft_watch_seconds_today"]);
+        if (chrome.runtime.lastError) {
+          // Context invalidated or error - stop interval
+          if (!isChromeContextValid()) {
+            clearInterval(globalTimeTracker);
+            globalTimeTracker = null;
+            globalTimeStart = null;
+            lastGlobalSaveTime = null;
+            return;
+          }
+          console.warn("[FT] Failed to get latest global time:", chrome.runtime.lastError.message);
+          // Continue with current baseSeconds
+        } else {
+          const latestBase = Number(latestSeconds || 0);
+          
+          // If another tab saved more time, adjust our base and reset start time
+          if (latestBase > baseSeconds) {
+            baseSeconds = latestBase;
+            globalTimeStart = Date.now(); // Reset to continue from new base
+            lastGlobalSaveTime = Date.now();
+          } else {
+            // Update our saved value
+            baseSeconds = baseSeconds + elapsed;
+            try {
+              await chrome.storage.local.set({ ft_watch_seconds_today: baseSeconds });
+              if (chrome.runtime.lastError) {
+                if (!isChromeContextValid()) {
+                  clearInterval(globalTimeTracker);
+                  globalTimeTracker = null;
+                  globalTimeStart = null;
+                  lastGlobalSaveTime = null;
+                  return;
+                }
+                console.warn("[FT] Failed to save global time:", chrome.runtime.lastError.message);
+              }
+            } catch (e) {
+              if (!isChromeContextValid()) {
+                clearInterval(globalTimeTracker);
+                globalTimeTracker = null;
+                globalTimeStart = null;
+                lastGlobalSaveTime = null;
+                return;
+              }
+              console.warn("[FT] Error saving global time:", e.message);
+            }
+            globalTimeStart = Date.now(); // Reset elapsed time counter
+            lastGlobalSaveTime = Date.now();
+          }
+        }
+      } catch (e) {
+        // Context invalidated - stop interval
+        if (!isChromeContextValid()) {
+          clearInterval(globalTimeTracker);
+          globalTimeTracker = null;
+          globalTimeStart = null;
+          lastGlobalSaveTime = null;
+          return;
+        }
+        console.warn("[FT] Error in global time tracking:", e.message);
+      }
+    }
+  }, 1000);
+}
+
+/**
+ * Saves accumulated global time to storage (used internally and on unload)
+ */
+async function saveAccumulatedGlobalTime() {
+  if (!globalTimeStart) return 0;
+  
+  if (!isChromeContextValid()) {
+    globalTimeStart = null;
+    lastGlobalSaveTime = null;
+    return 0;
+  }
+
+  const elapsed = Math.floor((Date.now() - globalTimeStart) / 1000);
+  if (elapsed > 0) {
+    try {
+      const { ft_watch_seconds_today } = await chrome.storage.local.get(["ft_watch_seconds_today"]);
+      if (chrome.runtime.lastError) {
+        console.warn("[FT] Failed to get global time for save:", chrome.runtime.lastError.message);
+        return 0;
+      }
+      const currentSeconds = Number(ft_watch_seconds_today || 0);
+      const newTotal = currentSeconds + elapsed;
+      await chrome.storage.local.set({ ft_watch_seconds_today: newTotal });
+      if (chrome.runtime.lastError) {
+        console.warn("[FT] Failed to save accumulated global time:", chrome.runtime.lastError.message);
+        return currentSeconds; // Return old value if save failed
+      }
+      // Reset start time after successful save
+      globalTimeStart = Date.now();
+      lastGlobalSaveTime = Date.now();
+      return newTotal;
+    } catch (e) {
+      console.warn("[FT] Error saving accumulated global time:", e.message);
+      return 0;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Stops tracking global time and saves final value
+ */
+async function stopGlobalTimeTracking() {
+  if (!globalTimeTracker || !globalTimeStart) return;
+
+  clearInterval(globalTimeTracker);
+  globalTimeTracker = null;
+
+  // Save accumulated time
+  await saveAccumulatedGlobalTime();
+  
+  globalTimeStart = null;
+  lastGlobalSaveTime = null;
+}
+
+// ─────────────────────────────────────────────────────────────
 // MODE CHANGE HANDLER (Dev/User toggle listener)
 // ─────────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg) => {
@@ -1099,6 +1460,10 @@ async function handleNavigation() {
   console.log("[FT content] background response:", resp);
 
   if (!resp?.ok) return;
+
+  // Handle global watch time counter (show on all pages)
+  const watchSecondsToday = resp.counters?.watchSeconds || 0;
+  await showGlobalTimeCounter(watchSecondsToday);
 
   // Handle search counter badge (show on all search pages)
   if (pageType === "SEARCH") {
@@ -1199,9 +1564,9 @@ async function handleNavigation() {
         await showSearchBlockOverlay(resp.plan || "free");
       }
     } 
-    // Global blocking: show generic overlay
+    // Global blocking: show global limit overlay with daily summary
     else if (resp.scope === "global" && !document.getElementById("ft-overlay")) {
-      showOverlay(resp.reason, resp.scope);
+      await showGlobalLimitOverlay(resp.plan || "free", resp.counters || {});
     }
   } else {
     removeOverlay(); // clear if allowed
@@ -1314,17 +1679,39 @@ function setupFullscreenDetection() {
   
   fullscreenEvents.forEach(eventName => {
     document.addEventListener(eventName, () => {
-      const isFullscreen = !!(document.fullscreenElement || 
-                              document.webkitFullscreenElement || 
-                              document.mozFullScreenElement || 
-                              document.msFullscreenElement);
+      isFullscreen = !!(document.fullscreenElement || 
+                        document.webkitFullscreenElement || 
+                        document.mozFullScreenElement || 
+                        document.msFullscreenElement);
       
+      // Hide search counter in fullscreen
       const searchCounter = document.getElementById("ft-search-counter");
       if (searchCounter) {
         if (isFullscreen) {
           searchCounter.style.display = 'none';
         } else {
           searchCounter.style.display = '';
+        }
+      }
+      
+      // Switch global time counter to minimal format in fullscreen
+      const globalCounter = document.getElementById("ft-global-time-counter");
+      if (globalCounter) {
+        try {
+          if (!isChromeContextValid()) return;
+          
+          chrome.storage.local.get(["ft_watch_seconds_today"]).then(storage => {
+            if (chrome.runtime.lastError) {
+              console.warn("[FT] Failed to get watch time for fullscreen update:", chrome.runtime.lastError.message);
+              return;
+            }
+            const watchSeconds = Number(storage.ft_watch_seconds_today || 0);
+            updateGlobalTimeCounter(watchSeconds);
+          }).catch(e => {
+            console.warn("[FT] Error updating global counter for fullscreen:", e.message);
+          });
+        } catch (e) {
+          console.warn("[FT] Error in fullscreen detection for global counter:", e.message);
         }
       }
     });
@@ -1342,6 +1729,25 @@ setupFullscreenDetection();
 // ─────────────────────────────────────────────────────────────
 chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace !== "local") return;
+  
+  // Update global time counter if watch time changed
+  if (changes.ft_watch_seconds_today) {
+    const badge = document.getElementById("ft-global-time-counter");
+    if (badge) {
+      if (!isChromeContextValid()) return;
+      
+      chrome.storage.local.get(["ft_watch_seconds_today"]).then(storage => {
+        if (chrome.runtime.lastError) {
+          console.warn("[FT] Failed to get watch time in listener:", chrome.runtime.lastError.message);
+          return;
+        }
+        const watchSeconds = Number(storage.ft_watch_seconds_today || 0);
+        updateGlobalTimeCounter(watchSeconds);
+      }).catch(e => {
+        console.warn("[FT] Error in global counter listener:", e.message);
+      });
+    }
+  }
   
   // Update search counter if searches changed
   if (changes.ft_searches_today) {
@@ -1409,11 +1815,14 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
 // Remove overlay when user navigates via browser back/forward
 window.addEventListener("popstate", removeOverlay);
 
-// Save accumulated Shorts time when page is about to close or becomes hidden
+// Save accumulated time when page is about to close or becomes hidden
 window.addEventListener("beforeunload", () => {
   if (shortsTimeStart) {
     // Synchronous save before page closes
     saveAccumulatedShortsTime().catch(console.error);
+  }
+  if (globalTimeStart) {
+    saveAccumulatedGlobalTime().catch(console.error);
   }
 });
 
@@ -1423,12 +1832,18 @@ window.addEventListener("pagehide", () => {
     // Synchronous save when page is being unloaded
     saveAccumulatedShortsTime().catch(console.error);
   }
+  if (globalTimeStart) {
+    saveAccumulatedGlobalTime().catch(console.error);
+  }
 });
 
 document.addEventListener("visibilitychange", () => {
   // Save when page becomes hidden (tab switch, minimize, etc.)
   if (document.hidden && shortsTimeStart) {
     saveAccumulatedShortsTime().catch(console.error);
+  }
+  if (document.hidden && globalTimeStart) {
+    saveAccumulatedGlobalTime().catch(console.error);
   }
 });
 /**
@@ -1455,6 +1870,10 @@ const observer = new MutationObserver(() => {
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
+
+// Initialize global time tracking (tracks time on all YouTube pages)
+// Start tracking immediately when script loads
+startGlobalTimeTracking().catch(console.error);
 
 // Initial run (debounced for consistency)
 scheduleNav(0);
