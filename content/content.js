@@ -97,6 +97,37 @@ function showShortsBlockedOverlay() {
   document.body.appendChild(overlay);
 }
 
+/**
+ * Shows Shorts blocking overlay for Pro plan users who manually blocked Shorts.
+ * Displays encouraging message about choosing discipline.
+ */
+function showProManualBlockOverlay() {
+  removeOverlay(); // ensure no duplicates
+
+  const overlay = document.createElement("div");
+  overlay.id = "ft-overlay";
+
+  overlay.innerHTML = `
+    <div class="ft-box">
+      <h1>🎯 Shorts Blocked!</h1>
+      <p id="ft-overlay-message">
+        You have chosen to block Shorts for today and have chosen discipline.
+        This decision will help you stay focused and productive.
+      </p>
+      <div class="ft-button-container">
+        <button id="ft-continue" class="ft-button ft-button-primary">Continue</button>
+      </div>
+    </div>
+  `;
+
+  // Continue button - dismiss overlay (user already on home)
+  overlay.querySelector("#ft-continue").addEventListener("click", () => {
+    removeOverlay();
+  });
+
+  document.body.appendChild(overlay);
+}
+
 /** Removes the overlay if it exists */
 function removeOverlay() {
   const el = document.getElementById("ft-overlay");
@@ -447,8 +478,13 @@ async function showShortsMilestonePopup(engaged, scrolled, totalSeconds) {
     // Clean up saved video state (redirect will happen anyway)
     savedVideoStates = null;
     
-    // Set block flag
-    await chrome.storage.local.set({ ft_block_shorts_today: true });
+    // Set block flag and mark as Pro manual block
+    await chrome.storage.local.set({ 
+      ft_block_shorts_today: true,
+      ft_pro_manual_block_shorts: true  // Flag to show different overlay
+    });
+    // Set redirect flag for overlay
+    await chrome.storage.local.set({ ft_redirected_from_shorts: true });
     // Redirect to home
     window.location.href = "https://www.youtube.com/";
   });
@@ -577,12 +613,24 @@ async function handleNavigation() {
 
   // Check if we just redirected from Shorts (on home page)
   if (pageType === "HOME") {
-    const { ft_redirected_from_shorts } = await chrome.storage.local.get(["ft_redirected_from_shorts"]);
+    const { ft_redirected_from_shorts, ft_pro_manual_block_shorts, ft_plan } = await chrome.storage.local.get([
+      "ft_redirected_from_shorts",
+      "ft_pro_manual_block_shorts",
+      "ft_plan"
+    ]);
     if (ft_redirected_from_shorts) {
-      // Clear the flag
+      // Clear the redirect flag
       await chrome.storage.local.remove(["ft_redirected_from_shorts"]);
-      // Show Shorts blocking overlay
-      showShortsBlockedOverlay();
+      
+      // Check if this is a Pro manual block or Free plan block
+      if (ft_pro_manual_block_shorts && ft_plan === "pro") {
+        // Show Pro manual block overlay (encouraging message)
+        // Keep ft_pro_manual_block_shorts flag set so it persists for all redirects
+        showProManualBlockOverlay();
+      } else {
+        // Show Free plan blocking overlay
+        showShortsBlockedOverlay();
+      }
       return; // Don't check with background for home page in this case
     }
   }
