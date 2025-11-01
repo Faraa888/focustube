@@ -110,7 +110,7 @@
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 68, 68, 0.2);
   border: 2px solid rgba(255, 68, 68, 0.3);
   user-select: none;
-  pointer-events: none;
+  pointer-events: auto;
   min-width: 280px;
 }
 
@@ -139,6 +139,96 @@
   color: #ff6666;
   font-weight: 700;
   font-size: 22px;
+}
+
+/* Badge block button */
+#ft-shorts-counter .ft-badge-block-btn {
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px 16px;
+  background: #ff4444;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+  box-shadow: 0 2px 8px rgba(255, 68, 68, 0.3);
+}
+
+#ft-shorts-counter .ft-badge-block-btn:hover {
+  background: #ff3333;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 68, 68, 0.4);
+}
+
+#ft-shorts-counter .ft-badge-block-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(255, 68, 68, 0.3);
+}
+
+/* Search counter badge */
+#ft-search-counter {
+  position: fixed;
+  top: 80px;
+  left: 70%;
+  z-index: 999997;
+  background: rgba(255, 68, 68, 0.95);
+  backdrop-filter: blur(12px);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(255, 68, 68, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  user-select: none;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+#ft-search-counter .ft-search-counter-text {
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Search warning toast */
+#ft-search-warning {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999998;
+  pointer-events: none;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+#ft-search-warning .ft-search-warning-content {
+  background: rgba(255, 193, 7, 0.95);
+  backdrop-filter: blur(8px);
+  color: #000;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 152, 0, 0.5);
+  white-space: nowrap;
 }
 
 /* Milestone popup modal */

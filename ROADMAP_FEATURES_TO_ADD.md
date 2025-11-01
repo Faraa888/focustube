@@ -12,8 +12,92 @@ Other FA Ideas:
 
 
 
+
+# 🚀 FocusTube Build Roadmap
+
+A clear, priority-ordered plan from current state → launchable v1 → polished v2.  
+Each step is isolated and testable.
+
+---
+
+## ✅ Phase 1 — Core to Chargeable MVP (v1 Launch)
+
+| # | Action | Outcome | Est. Time | Target Day |
+|:-:|:--|:--|:--|:--|
+| [ ] **1. Stabilise Core Extension** | Shorts/Search blocking and overlays fully stable (no delay, no reload issues). | 5h | Day 1 |
+| [ ] **2. Finalise Dev/User Toggle Panel** | Switch between Dev/User + Free/Pro instantly, counters reset cleanly. | 3h | Day 1 |
+| [ ] **3. Refine Shorts Milestone Popups** | Accurate tracking and motivational messages every few minutes watched. | 4h | Day 2 |
+| [ ] **4. Add Global Watch Timer + 30-min Reminders** | Tracks total YouTube time across tabs, shows gentle “take a break” overlay. | 6h | Day 3 |
+| [ ] **5. Integrate AI “Focus Relevance” Filter** | OpenAI endpoint checks if search/video is off-topic; blocks or warns user. | 10h | Day 4–5 |
+| [ ] **6. Add Supabase Backend (Auth + Data)** | Email/Google login; store plans & usage data in database. | 8h | Day 6 |
+| [ ] **7. Connect Stripe Payments + Webhooks** | Stripe Checkout upgrades user → webhook updates plan in Supabase. | 8h | Day 7 |
+| [ ] **8. Sync Plan with Extension** | Background fetches plan at startup and after payment success. | 3h | Day 8 |
+| [ ] **9. QA: Multi-Tab, Incognito & Edge Cases** | Validate counters, redirects, and AI logic across sessions. | 5h | Day 9 |
+| [ ] **10. Launch Prep (Chrome Store)** | Final ZIP, privacy policy, logos, screenshots, short demo. | 3h | Day 10 |
+
+### 🟩 **LAUNCH v1 (Chargeable MVP)**
+- Fully functional Chrome extension  
+- AI-powered relevance filter  
+- Stripe payments + Supabase sync  
+- End-to-end monetisable and testable
+
+---
+
+## 🔧 Phase 2 — From MVP to Full Product (v2)
+
+| # | Action | Outcome | Est. Time | Target Day |
+|:-:|:--|:--|:--|:--|
+| [ ] **11. Add Analytics & Event Logging** | Capture usage metrics in Supabase for insights and reports. | 4h | Day 11 |
+| [ ] **12. UI / UX Polish** | Improve overlays, add themes, smooth animations, mobile responsiveness. | 6h | Day 12 |
+| [ ] **13. Chrome Store Optimisation & Reviews** | Final polish for listing, marketing copy, screenshots, support email. | 5h | Day 13 |
+
+### 🟦 **MVP v2**
+- Stable, trackable, and visually refined  
+- Ready for scale, users, and marketing push
+
+---
+
+⏱ **Total Time:**  
+- **v1 (Launchable)** → ~60–65 hours (~10 days @ 5–6h/day)  
+- **v2 (Polished MVP)** → +20 hours (~3–4 days)
+
+---
+
+### 💡 Notes
+- Each step should be committed and tested before moving to the next.  
+- Cursor should be run in **“Explain before apply”** mode to avoid regressions.  
+- `state.js`, `background.js`, and `content.js` remain single-source-of-truth for logic.
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ChatGPT Suggestions:
 Added:
+
 
 
 

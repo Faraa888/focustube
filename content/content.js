@@ -50,9 +50,23 @@ function showOverlay(reason, scope) {
 
   // Dev-only: allow temp unlock for quick testing
   overlay.querySelector("#ft-temp-unlock").addEventListener("click", async () => {
-    await chrome.runtime.sendMessage({ type: "FT_TEMP_UNLOCK", minutes: 1 });
-    alert("Temporary unlock granted for 1 minute. Reload to continue.");
-    removeOverlay();
+    try {
+      if (!isChromeContextValid()) {
+        console.warn("[FT] Cannot unlock - extension context invalidated");
+        return;
+      }
+      await chrome.runtime.sendMessage({ type: "FT_TEMP_UNLOCK", minutes: 1 });
+      if (chrome.runtime.lastError) {
+        console.warn("[FT] Failed to unlock:", chrome.runtime.lastError.message);
+        alert("Failed to unlock: " + chrome.runtime.lastError.message);
+        return;
+      }
+      alert("Temporary unlock granted for 1 minute. Reload to continue.");
+      removeOverlay();
+    } catch (e) {
+      console.warn("[FT] Error unlocking:", e.message);
+      alert("Error unlocking: " + e.message);
+    }
   });
 
   document.body.appendChild(overlay);
@@ -139,6 +153,19 @@ function pauseVideos() {
   document.querySelectorAll("video").forEach(v => v.pause());
 }
 
+/**
+ * Checks if Chrome runtime is still valid
+ * Returns true if context is valid, false if invalidated
+ */
+function isChromeContextValid() {
+  try {
+    // Check if chrome.runtime exists and hasn't been invalidated
+    return chrome && chrome.runtime && chrome.runtime.id !== undefined;
+  } catch (e) {
+    return false;
+  }
+}
+
 /** Stores original video state for restoration */
 let savedVideoStates = null;
 
@@ -196,6 +223,7 @@ let shortsTimeStart = null; // When time tracking started
 let shortsEngagementTimer = null; // Timer to check if user stays > 5 seconds
 let shortsPageEntryTime = null; // When user entered current Shorts page
 let shortsCurrentVideoId = null; // Current Shorts video ID being tracked
+let lastKnownBadgeValues = { engaged: 0, scrolled: 0, seconds: 0 }; // Last known badge values (prevents false 0,0 display)
 
 /**
  * Extracts video ID from YouTube Shorts URL
@@ -278,22 +306,82 @@ function getProductivityExamples(totalMinutes) {
 /**
  * Updates the Shorts counter badge text
  * Format: Two lines - "Total Shorts Watched X (Y Skipped)" and "Total Time on Shorts 5m 20s"
+ * Uses lastKnownBadgeValues as fallback if new values are invalid
  */
 async function updateShortsBadge(shortsEngaged, shortsScrolled, shortsSeconds) {
   const badge = document.getElementById("ft-shorts-counter");
   if (!badge) return;
 
-  const skipped = Math.max(0, shortsScrolled - shortsEngaged);
-  const timeText = formatTime(shortsSeconds);
+  // Use last known values as fallback if new values are invalid/undefined
+  const engaged = (shortsEngaged !== undefined && shortsEngaged !== null) ? shortsEngaged : lastKnownBadgeValues.engaged;
+  const scrolled = (shortsScrolled !== undefined && shortsScrolled !== null) ? shortsScrolled : lastKnownBadgeValues.scrolled;
+  const seconds = (shortsSeconds !== undefined && shortsSeconds !== null) ? shortsSeconds : lastKnownBadgeValues.seconds;
+
+  // Update lastKnownBadgeValues only if we got valid new values
+  if (shortsEngaged !== undefined && shortsEngaged !== null) {
+    lastKnownBadgeValues.engaged = engaged;
+  }
+  if (shortsScrolled !== undefined && shortsScrolled !== null) {
+    lastKnownBadgeValues.scrolled = scrolled;
+  }
+  if (shortsSeconds !== undefined && shortsSeconds !== null) {
+    lastKnownBadgeValues.seconds = seconds;
+  }
+
+  const skipped = Math.max(0, scrolled - engaged);
+  const timeText = formatTime(seconds);
   
   badge.innerHTML = `
     <div class="ft-counter-line">
-      Total Shorts Watched <span class="ft-counter-highlight">${shortsEngaged}</span>${skipped > 0 ? ` (<span class="ft-counter-highlight">${skipped}</span> Skipped)` : ''}
+      Total Shorts Watched <span class="ft-counter-highlight">${engaged}</span>${skipped > 0 ? ` (<span class="ft-counter-highlight">${skipped}</span> Skipped)` : ''}
     </div>
     <div class="ft-counter-line ft-counter-time">
       Total Time on Shorts <span class="ft-counter-highlight">${timeText}</span>
     </div>
+    <button id="ft-badge-block-btn" class="ft-badge-block-btn">Block for Today</button>
   `;
+  
+  // Add click handler for Block button
+  const blockBtn = badge.querySelector("#ft-badge-block-btn");
+  if (blockBtn) {
+    blockBtn.addEventListener("click", async () => {
+      // Clean up active timers
+      if (shortsEngagementTimer) {
+        clearTimeout(shortsEngagementTimer);
+        shortsEngagementTimer = null;
+      }
+      if (shortsTimeTracker) {
+        await stopShortsTimeTracking();
+      }
+      
+      // Clean up saved video state (redirect will happen anyway)
+      savedVideoStates = null;
+      
+      // Set block flag and mark as Pro manual block
+      try {
+        await chrome.storage.local.set({ 
+          ft_block_shorts_today: true,
+          ft_pro_manual_block_shorts: true  // Flag to show different overlay
+        });
+        if (chrome.runtime.lastError) {
+          console.error("[FT] Failed to set block flags:", chrome.runtime.lastError.message);
+          // Still redirect even if storage fails
+        }
+        
+        // Set redirect flag for overlay
+        await chrome.storage.local.set({ ft_redirected_from_shorts: true });
+        if (chrome.runtime.lastError) {
+          console.warn("[FT] Failed to set redirect flag:", chrome.runtime.lastError.message);
+        }
+      } catch (e) {
+        console.error("[FT] Error setting block flags:", e.message);
+        // Still redirect even if storage fails - blocking will work on next load
+      }
+      
+      // Redirect to home page
+      window.location.href = "https://www.youtube.com/";
+    });
+  }
 }
 
 /**
@@ -321,6 +409,7 @@ function removeShortsBadge() {
 
 /**
  * Creates and shows the Pro Shorts counter badge
+ * Uses last known values as fallback if provided values are 0 and we have stored values
  */
 async function showShortsBadge(shortsEngaged = 0, shortsScrolled = 0, shortsSeconds = 0) {
   removeShortsBadge(); // ensure no duplicates
@@ -331,8 +420,173 @@ async function showShortsBadge(shortsEngaged = 0, shortsScrolled = 0, shortsSeco
   // Append badge to DOM first so updateShortsBadge() can find it
   document.body.appendChild(badge);
   
-  // Initialize badge with current values
-  await updateShortsBadge(shortsEngaged, shortsScrolled, shortsSeconds);
+  // If all values are 0 and we have last known values, use those instead (prevents false 0,0 display)
+  const useEngaged = (shortsEngaged === 0 && lastKnownBadgeValues.engaged > 0) ? lastKnownBadgeValues.engaged : shortsEngaged;
+  const useScrolled = (shortsScrolled === 0 && lastKnownBadgeValues.scrolled > 0) ? lastKnownBadgeValues.scrolled : shortsScrolled;
+  const useSeconds = (shortsSeconds === 0 && lastKnownBadgeValues.seconds > 0) ? lastKnownBadgeValues.seconds : shortsSeconds;
+  
+  // Initialize badge with values (updateShortsBadge will handle fallback logic too)
+  await updateShortsBadge(useEngaged, useScrolled, useSeconds);
+}
+
+// ─────────────────────────────────────────────────────────────
+// SEARCH COUNTER BADGE
+// ─────────────────────────────────────────────────────────────
+
+let searchCounterBadge = null;
+let lastSearchWarningAtMinus2 = false; // Track if warning shown for threshold - 2
+let lastSearchWarningAtMinus1 = false; // Track if warning shown for threshold - 1
+
+/**
+ * Shows or updates the search counter badge
+ * Displays "X/5 searches today" or "X/15 searches today" based on plan
+ */
+async function showSearchCounter(searchesToday, searchLimit, plan) {
+  // Remove existing badge if present
+  const existing = document.getElementById("ft-search-counter");
+  if (existing) existing.remove();
+
+  // Don't show if not on search page
+  if (detectPageType() !== "SEARCH") return;
+
+  const badge = document.createElement("div");
+  badge.id = "ft-search-counter";
+  badge.className = "ft-search-counter";
+  badge.innerHTML = `<span class="ft-search-counter-text">${searchesToday}/${searchLimit} searches today</span>`;
+  
+  document.body.appendChild(badge);
+  searchCounterBadge = badge;
+}
+
+/**
+ * Updates the search counter badge text
+ */
+function updateSearchCounter(searchesToday, searchLimit) {
+  const badge = document.getElementById("ft-search-counter");
+  if (!badge) return;
+  
+  const textEl = badge.querySelector(".ft-search-counter-text");
+  if (textEl) {
+    textEl.textContent = `${searchesToday}/${searchLimit} searches today`;
+  }
+}
+
+/**
+ * Removes the search counter badge
+ */
+function removeSearchCounter() {
+  const badge = document.getElementById("ft-search-counter");
+  if (badge) {
+    badge.remove();
+    searchCounterBadge = null;
+  }
+}
+
+/**
+ * Checks and shows warning at threshold - 2 and threshold - 1
+ */
+async function checkAndShowSearchWarning(searchesToday, searchLimit) {
+  const thresholdMinusTwo = searchLimit - 2;
+  const thresholdMinusOne = searchLimit - 1;
+  
+  // Show warning at threshold - 2, only once
+  if (searchesToday === thresholdMinusTwo && !lastSearchWarningAtMinus2) {
+    lastSearchWarningAtMinus2 = true;
+    showSearchWarning(2, "You have 2 searches remaining today - make them count!");
+  }
+  
+  // Show warning at threshold - 1, only once
+  if (searchesToday === thresholdMinusOne && !lastSearchWarningAtMinus1) {
+    lastSearchWarningAtMinus1 = true;
+    showSearchWarning(1, "You have 1 search remaining today - use it wisely!");
+  }
+  
+  // Reset warning flags if user is below threshold - 2
+  if (searchesToday < thresholdMinusTwo) {
+    lastSearchWarningAtMinus2 = false;
+    lastSearchWarningAtMinus1 = false;
+  } else if (searchesToday < thresholdMinusOne) {
+    // Reset only minus 1 flag if between threshold - 2 and threshold - 1
+    lastSearchWarningAtMinus1 = false;
+  }
+}
+
+/**
+ * Shows warning toast notification
+ */
+function showSearchWarning(remaining, message) {
+  // Remove any existing warning
+  const existing = document.getElementById("ft-search-warning");
+  if (existing) existing.remove();
+
+  const warning = document.createElement("div");
+  warning.id = "ft-search-warning";
+  warning.className = "ft-search-warning";
+  warning.innerHTML = `
+    <div class="ft-search-warning-content">
+      <span>⚠️ ${message}</span>
+    </div>
+  `;
+  
+  document.body.appendChild(warning);
+  
+  // Auto-dismiss after 5 seconds
+  setTimeout(() => {
+    if (warning && warning.parentNode) {
+      warning.remove();
+    }
+  }, 5000);
+}
+
+/**
+ * Shows search block overlay with plan-specific buttons
+ */
+async function showSearchBlockOverlay(plan) {
+  removeOverlay(); // ensure no duplicates
+
+  const overlay = document.createElement("div");
+  overlay.id = "ft-overlay";
+
+  // Get button HTML based on plan
+  let buttonsHTML = '';
+  if (plan === "free") {
+    buttonsHTML = `
+      <button id="ft-upgrade-pro" class="ft-button ft-button-primary">Upgrade to Pro for Smart Search</button>
+      <button id="ft-return-yt" class="ft-button ft-button-secondary">Return to YouTube</button>
+    `;
+  } else {
+    buttonsHTML = `
+      <button id="ft-return-yt" class="ft-button ft-button-primary">Return to YouTube</button>
+    `;
+  }
+
+  overlay.innerHTML = `
+    <div class="ft-box">
+      <h1>FocusTube Active</h1>
+      <p id="ft-overlay-message">That's enough searching for today - go and get your dreams</p>
+      <div class="ft-button-container">
+        ${buttonsHTML}
+      </div>
+    </div>
+  `;
+
+  // Add button handlers
+  const returnBtn = overlay.querySelector("#ft-return-yt");
+  if (returnBtn) {
+    returnBtn.addEventListener("click", () => {
+      window.location.href = "https://www.youtube.com/";
+    });
+  }
+
+  const upgradeBtn = overlay.querySelector("#ft-upgrade-pro");
+  if (upgradeBtn) {
+    upgradeBtn.addEventListener("click", () => {
+      // Placeholder - no URL for now
+      console.log("[FT] Upgrade to Pro clicked (placeholder)");
+    });
+  }
+
+  document.body.appendChild(overlay);
 }
 
 /**
@@ -359,20 +613,45 @@ async function startShortsEngagementTracking() {
   shortsCurrentVideoId = currentVideoId;
 
   // Immediately increment total scrolled (all Shorts page visits)
-  await chrome.runtime.sendMessage({ type: "FT_BUMP_SHORTS" });
+  try {
+    await chrome.runtime.sendMessage({ type: "FT_BUMP_SHORTS" });
+  } catch (e) {
+    // Extension context invalidated - ignore, tracking will stop naturally
+    if (!isChromeContextValid()) return;
+    console.warn("[FT] Failed to bump Shorts counter:", e.message);
+  }
   
   // Track entry time
   shortsPageEntryTime = Date.now();
   
   // Set 5-second timer to check if user engaged (stayed > 5 seconds)
   shortsEngagementTimer = setTimeout(async () => {
+    // Check if Chrome context is still valid
+    if (!isChromeContextValid()) {
+      shortsEngagementTimer = null;
+      shortsPageEntryTime = null;
+      shortsCurrentVideoId = null;
+      return;
+    }
+    
     // Check if user is still on Shorts page and same video
     const stillOnShorts = detectPageType() === "SHORTS";
     const stillSameVideo = shortsCurrentVideoId === getShortsVideoId();
     
     if (shortsPageEntryTime && stillOnShorts && stillSameVideo) {
       // User stayed > 5 seconds, increment engaged counter via message
-      await chrome.runtime.sendMessage({ type: "FT_INCREMENT_ENGAGED_SHORTS" });
+      try {
+        await chrome.runtime.sendMessage({ type: "FT_INCREMENT_ENGAGED_SHORTS" });
+      } catch (e) {
+        // Extension context invalidated - ignore
+        if (!isChromeContextValid()) {
+          shortsEngagementTimer = null;
+          shortsPageEntryTime = null;
+          shortsCurrentVideoId = null;
+          return;
+        }
+        console.warn("[FT] Failed to increment engaged Shorts:", e.message);
+      }
     }
     
     // Clear tracking state
@@ -387,33 +666,63 @@ async function startShortsEngagementTracking() {
  * Milestones: 2 min (120s), 5 min (300s), 10 min (600s), 15 min (900s), 20 min (1200s)
  */
 async function checkAndShowTimeMilestone(totalSeconds) {
+  if (!isChromeContextValid()) return;
+  
   const MILESTONES = [120, 300, 600, 900, 1200]; // 2, 5, 10, 15, 20 minutes in seconds
   
-  // Get last milestone threshold shown
-  const { ft_last_time_milestone } = await chrome.storage.local.get(["ft_last_time_milestone"]);
-  const lastMilestone = Number(ft_last_time_milestone || 0);
-  
-  // Find which milestone we've crossed (if any)
-  for (const milestoneSeconds of MILESTONES) {
-    // Check if we've crossed this milestone and haven't shown it yet
-    if (totalSeconds >= milestoneSeconds && milestoneSeconds > lastMilestone) {
-      // Get all counters for popup display
-      const { ft_shorts_engaged_today, ft_short_visits_today } = await chrome.storage.local.get([
-        "ft_shorts_engaged_today",
-        "ft_short_visits_today"
-      ]);
-      const engaged = Number(ft_shorts_engaged_today || 0);
-      const scrolled = Number(ft_short_visits_today || 0);
-      
-      // Show popup
-      await showShortsMilestonePopup(engaged, scrolled, totalSeconds);
-      
-      // Mark this milestone threshold as shown
-      await chrome.storage.local.set({ ft_last_time_milestone: milestoneSeconds });
-      
-      // Only show one milestone at a time, break after first match
-      break;
+  try {
+    // Get last milestone threshold shown
+    const { ft_last_time_milestone } = await chrome.storage.local.get(["ft_last_time_milestone"]);
+    if (chrome.runtime.lastError) {
+      console.warn("[FT] Failed to get milestone:", chrome.runtime.lastError.message);
+      return;
     }
+    const lastMilestone = Number(ft_last_time_milestone || 0);
+    
+    // Find which milestone we've crossed (if any)
+    for (const milestoneSeconds of MILESTONES) {
+      // Check if we've crossed this milestone and haven't shown it yet
+      if (totalSeconds >= milestoneSeconds && milestoneSeconds > lastMilestone) {
+        // Get all counters for popup display
+        let engaged = 0, scrolled = 0;
+        try {
+          const counters = await chrome.storage.local.get([
+            "ft_shorts_engaged_today",
+            "ft_short_visits_today"
+          ]);
+          if (chrome.runtime.lastError) {
+            console.warn("[FT] Failed to get counters:", chrome.runtime.lastError.message);
+            // Use defaults (0, 0)
+          } else {
+            engaged = Number(counters.ft_shorts_engaged_today || 0);
+            scrolled = Number(counters.ft_short_visits_today || 0);
+          }
+        } catch (e) {
+          console.warn("[FT] Error getting counters for milestone:", e.message);
+          // Use defaults (0, 0)
+        }
+        
+        // Show popup
+        await showShortsMilestonePopup(engaged, scrolled, totalSeconds);
+        
+        // Mark this milestone threshold as shown
+        try {
+          await chrome.storage.local.set({ ft_last_time_milestone: milestoneSeconds });
+          if (chrome.runtime.lastError) {
+            console.warn("[FT] Failed to save milestone:", chrome.runtime.lastError.message);
+          }
+        } catch (e) {
+          console.warn("[FT] Error saving milestone:", e.message);
+        }
+        
+        // Only show one milestone at a time, break after first match
+        break;
+      }
+    }
+  } catch (e) {
+    // Extension context invalidated or other error
+    if (!isChromeContextValid()) return;
+    console.warn("[FT] Error checking milestone:", e.message);
   }
 }
 
@@ -479,12 +788,26 @@ async function showShortsMilestonePopup(engaged, scrolled, totalSeconds) {
     savedVideoStates = null;
     
     // Set block flag and mark as Pro manual block
-    await chrome.storage.local.set({ 
-      ft_block_shorts_today: true,
-      ft_pro_manual_block_shorts: true  // Flag to show different overlay
-    });
-    // Set redirect flag for overlay
-    await chrome.storage.local.set({ ft_redirected_from_shorts: true });
+    try {
+      await chrome.storage.local.set({ 
+        ft_block_shorts_today: true,
+        ft_pro_manual_block_shorts: true  // Flag to show different overlay
+      });
+      if (chrome.runtime.lastError) {
+        console.error("[FT] Failed to set block flags:", chrome.runtime.lastError.message);
+        // Still redirect even if storage fails
+      }
+      
+      // Set redirect flag for overlay
+      await chrome.storage.local.set({ ft_redirected_from_shorts: true });
+      if (chrome.runtime.lastError) {
+        console.warn("[FT] Failed to set redirect flag:", chrome.runtime.lastError.message);
+      }
+    } catch (e) {
+      console.error("[FT] Error setting block flags:", e.message);
+      // Still redirect even if storage fails - blocking will work on next load
+    }
+    
     // Redirect to home
     window.location.href = "https://www.youtube.com/";
   });
@@ -498,15 +821,36 @@ async function showShortsMilestonePopup(engaged, scrolled, totalSeconds) {
 async function startShortsTimeTracking() {
   if (shortsTimeTracker) return; // Already tracking
 
+  if (!isChromeContextValid()) return;
+
   // Get current time at start
-  const { ft_shorts_seconds_today } = await chrome.storage.local.get(["ft_shorts_seconds_today"]);
-  let baseSeconds = Number(ft_shorts_seconds_today || 0);
+  let baseSeconds = 0;
+  try {
+    const { ft_shorts_seconds_today } = await chrome.storage.local.get(["ft_shorts_seconds_today"]);
+    if (chrome.runtime.lastError) {
+      console.warn("[FT] Failed to get initial time:", chrome.runtime.lastError.message);
+      baseSeconds = 0;
+    } else {
+      baseSeconds = Number(ft_shorts_seconds_today || 0);
+    }
+  } catch (e) {
+    console.warn("[FT] Error getting initial time:", e.message);
+    baseSeconds = 0;
+  }
   
   shortsTimeStart = Date.now();
   let lastSaveTime = Date.now();
 
   // Update every second
   shortsTimeTracker = setInterval(async () => {
+    // Check if Chrome context is still valid
+    if (!isChromeContextValid()) {
+      clearInterval(shortsTimeTracker);
+      shortsTimeTracker = null;
+      shortsTimeStart = null;
+      return;
+    }
+    
     if (!shortsTimeStart) return;
 
     const elapsed = Math.floor((Date.now() - shortsTimeStart) / 1000);
@@ -514,20 +858,62 @@ async function startShortsTimeTracking() {
     
     // Re-read storage every 5 seconds to get latest saved value (in case another tab saved)
     if (timeSinceLastSave >= 5) {
-      const { ft_shorts_seconds_today: latestSeconds } = await chrome.storage.local.get(["ft_shorts_seconds_today"]);
-      const latestBase = Number(latestSeconds || 0);
-      
-      // If another tab saved more time, adjust our base and reset start time
-      if (latestBase > baseSeconds) {
-        baseSeconds = latestBase;
-        shortsTimeStart = Date.now(); // Reset to continue from new base
-        lastSaveTime = Date.now();
-      } else {
-        // Update our saved value
-        baseSeconds = baseSeconds + elapsed;
-        await chrome.storage.local.set({ ft_shorts_seconds_today: baseSeconds });
-        shortsTimeStart = Date.now(); // Reset elapsed time counter
-        lastSaveTime = Date.now();
+      try {
+        const { ft_shorts_seconds_today: latestSeconds } = await chrome.storage.local.get(["ft_shorts_seconds_today"]);
+        if (chrome.runtime.lastError) {
+          // Context invalidated or error - stop interval
+          if (!isChromeContextValid()) {
+            clearInterval(shortsTimeTracker);
+            shortsTimeTracker = null;
+            shortsTimeStart = null;
+            return;
+          }
+          console.warn("[FT] Failed to get latest time:", chrome.runtime.lastError.message);
+          // Continue with current baseSeconds
+        } else {
+          const latestBase = Number(latestSeconds || 0);
+          
+          // If another tab saved more time, adjust our base and reset start time
+          if (latestBase > baseSeconds) {
+            baseSeconds = latestBase;
+            shortsTimeStart = Date.now(); // Reset to continue from new base
+            lastSaveTime = Date.now();
+          } else {
+            // Update our saved value
+            baseSeconds = baseSeconds + elapsed;
+            try {
+              await chrome.storage.local.set({ ft_shorts_seconds_today: baseSeconds });
+              if (chrome.runtime.lastError) {
+                if (!isChromeContextValid()) {
+                  clearInterval(shortsTimeTracker);
+                  shortsTimeTracker = null;
+                  shortsTimeStart = null;
+                  return;
+                }
+                console.warn("[FT] Failed to save time:", chrome.runtime.lastError.message);
+              }
+            } catch (e) {
+              if (!isChromeContextValid()) {
+                clearInterval(shortsTimeTracker);
+                shortsTimeTracker = null;
+                shortsTimeStart = null;
+                return;
+              }
+              console.warn("[FT] Error saving time:", e.message);
+            }
+            shortsTimeStart = Date.now(); // Reset elapsed time counter
+            lastSaveTime = Date.now();
+          }
+        }
+      } catch (e) {
+        // Context invalidated - stop interval
+        if (!isChromeContextValid()) {
+          clearInterval(shortsTimeTracker);
+          shortsTimeTracker = null;
+          shortsTimeStart = null;
+          return;
+        }
+        console.warn("[FT] Error in time tracking:", e.message);
       }
     }
 
@@ -539,13 +925,37 @@ async function startShortsTimeTracking() {
     await checkAndShowTimeMilestone(newTotal);
     
     // Update badge display every second with real-time values
-    const { ft_shorts_engaged_today, ft_short_visits_today } = await chrome.storage.local.get([
-      "ft_shorts_engaged_today",
-      "ft_short_visits_today"
-    ]);
-    const engaged = Number(ft_shorts_engaged_today || 0);
-    const scrolled = Number(ft_short_visits_today || 0);
-    await updateShortsBadge(engaged, scrolled, newTotal);
+    try {
+      const { ft_shorts_engaged_today, ft_short_visits_today } = await chrome.storage.local.get([
+        "ft_shorts_engaged_today",
+        "ft_short_visits_today"
+      ]);
+      if (chrome.runtime.lastError) {
+        if (!isChromeContextValid()) {
+          clearInterval(shortsTimeTracker);
+          shortsTimeTracker = null;
+          shortsTimeStart = null;
+          return;
+        }
+        console.warn("[FT] Failed to get badge counters:", chrome.runtime.lastError.message);
+        // Use defaults
+        await updateShortsBadge(0, 0, newTotal);
+      } else {
+        const engaged = Number(ft_shorts_engaged_today || 0);
+        const scrolled = Number(ft_short_visits_today || 0);
+        await updateShortsBadge(engaged, scrolled, newTotal);
+      }
+    } catch (e) {
+      if (!isChromeContextValid()) {
+        clearInterval(shortsTimeTracker);
+        shortsTimeTracker = null;
+        shortsTimeStart = null;
+        return;
+      }
+      console.warn("[FT] Error updating badge:", e.message);
+      // Use defaults on error
+      await updateShortsBadge(0, 0, newTotal);
+    }
   }, 1000);
 }
 
@@ -554,14 +964,32 @@ async function startShortsTimeTracking() {
  */
 async function saveAccumulatedShortsTime() {
   if (!shortsTimeStart) return 0;
+  
+  if (!isChromeContextValid()) {
+    shortsTimeStart = null;
+    return 0;
+  }
 
   const elapsed = Math.floor((Date.now() - shortsTimeStart) / 1000);
   if (elapsed > 0) {
-    const { ft_shorts_seconds_today } = await chrome.storage.local.get(["ft_shorts_seconds_today"]);
-    const currentSeconds = Number(ft_shorts_seconds_today || 0);
-    const newTotal = currentSeconds + elapsed;
-    await chrome.storage.local.set({ ft_shorts_seconds_today: newTotal });
-    return newTotal;
+    try {
+      const { ft_shorts_seconds_today } = await chrome.storage.local.get(["ft_shorts_seconds_today"]);
+      if (chrome.runtime.lastError) {
+        console.warn("[FT] Failed to get time for save:", chrome.runtime.lastError.message);
+        return 0;
+      }
+      const currentSeconds = Number(ft_shorts_seconds_today || 0);
+      const newTotal = currentSeconds + elapsed;
+      await chrome.storage.local.set({ ft_shorts_seconds_today: newTotal });
+      if (chrome.runtime.lastError) {
+        console.warn("[FT] Failed to save accumulated time:", chrome.runtime.lastError.message);
+        return currentSeconds; // Return old value if save failed
+      }
+      return newTotal;
+    } catch (e) {
+      console.warn("[FT] Error saving accumulated time:", e.message);
+      return 0;
+    }
   }
   return 0;
 }
@@ -613,38 +1041,85 @@ async function handleNavigation() {
 
   // Check if we just redirected from Shorts (on home page)
   if (pageType === "HOME") {
-    const { ft_redirected_from_shorts, ft_pro_manual_block_shorts, ft_plan } = await chrome.storage.local.get([
-      "ft_redirected_from_shorts",
-      "ft_pro_manual_block_shorts",
-      "ft_plan"
-    ]);
-    if (ft_redirected_from_shorts) {
-      // Clear the redirect flag
-      await chrome.storage.local.remove(["ft_redirected_from_shorts"]);
-      
-      // Check if this is a Pro manual block or Free plan block
-      if (ft_pro_manual_block_shorts && ft_plan === "pro") {
-        // Show Pro manual block overlay (encouraging message)
-        // Keep ft_pro_manual_block_shorts flag set so it persists for all redirects
-        showProManualBlockOverlay();
-      } else {
-        // Show Free plan blocking overlay
-        showShortsBlockedOverlay();
+    try {
+      const { ft_redirected_from_shorts, ft_pro_manual_block_shorts, ft_plan } = await chrome.storage.local.get([
+        "ft_redirected_from_shorts",
+        "ft_pro_manual_block_shorts",
+        "ft_plan"
+      ]);
+      if (chrome.runtime.lastError) {
+        console.warn("[FT] Failed to check redirect flags:", chrome.runtime.lastError.message);
+        // Continue with normal navigation check
+      } else if (ft_redirected_from_shorts) {
+        // Clear the redirect flag
+        try {
+          await chrome.storage.local.remove(["ft_redirected_from_shorts"]);
+          if (chrome.runtime.lastError) {
+            console.warn("[FT] Failed to clear redirect flag:", chrome.runtime.lastError.message);
+          }
+        } catch (e) {
+          console.warn("[FT] Error clearing redirect flag:", e.message);
+        }
+        
+        // Check if this is a Pro manual block or Free plan block
+        if (ft_pro_manual_block_shorts && ft_plan === "pro") {
+          // Show Pro manual block overlay (encouraging message)
+          // Keep ft_pro_manual_block_shorts flag set so it persists for all redirects
+          showProManualBlockOverlay();
+        } else {
+          // Show Free plan blocking overlay
+          showShortsBlockedOverlay();
+        }
+        return; // Don't check with background for home page in this case
       }
-      return; // Don't check with background for home page in this case
+    } catch (e) {
+      console.warn("[FT] Error checking redirect flags:", e.message);
+      // Continue with normal navigation check
     }
   }
 
   // Ask background for a decision
-  const resp = await chrome.runtime.sendMessage({
-    type: "FT_NAVIGATED",
-    pageType,
-    url: location.href
-  });
+  let resp;
+  try {
+    resp = await chrome.runtime.sendMessage({
+      type: "FT_NAVIGATED",
+      pageType,
+      url: location.href
+    });
+    
+    if (chrome.runtime.lastError) {
+      console.warn("[FT] Failed to get navigation decision:", chrome.runtime.lastError.message);
+      return;
+    }
+  } catch (e) {
+    console.warn("[FT] Error sending navigation message:", e.message);
+    return;
+  }
 
   console.log("[FT content] background response:", resp);
 
   if (!resp?.ok) return;
+
+  // Handle search counter badge (show on all search pages)
+  if (pageType === "SEARCH") {
+    // Get search limit from plan config (Free: 5, Pro: 15)
+    const searchLimit = resp.plan === "pro" ? 15 : 5;
+    const searchesToday = resp.counters?.searches || 0;
+    
+    // Show or update search counter
+    await showSearchCounter(searchesToday, searchLimit, resp.plan);
+    
+    // Check for warning at threshold - 2
+    await checkAndShowSearchWarning(searchesToday, searchLimit);
+    
+    // Remove search counter if blocked (will be replaced by overlay)
+    if (resp.blocked) {
+      removeSearchCounter();
+    }
+  } else {
+    // Remove search counter when not on search page
+    removeSearchCounter();
+  }
 
   // Handle Pro plan Shorts counter badge (only on Shorts pages, not blocked)
   if (pageType === "SHORTS" && resp.plan === "pro" && !resp.blocked) {
@@ -655,14 +1130,36 @@ async function handleNavigation() {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     // Re-read counters after save to get latest values
-    const { ft_shorts_engaged_today, ft_short_visits_today, ft_shorts_seconds_today } = await chrome.storage.local.get([
-      "ft_shorts_engaged_today",
-      "ft_short_visits_today",
-      "ft_shorts_seconds_today"
-    ]);
-    const latestEngaged = Number(ft_shorts_engaged_today || 0);
-    const latestScrolled = Number(ft_short_visits_today || 0);
-    const latestSeconds = Number(ft_shorts_seconds_today || 0);
+    let latestEngaged, latestScrolled, latestSeconds;
+    try {
+      const { ft_shorts_engaged_today, ft_short_visits_today, ft_shorts_seconds_today } = await chrome.storage.local.get([
+        "ft_shorts_engaged_today",
+        "ft_short_visits_today",
+        "ft_shorts_seconds_today"
+      ]);
+      if (chrome.runtime.lastError) {
+        console.warn("[FT] Failed to get badge counters:", chrome.runtime.lastError.message);
+        // Use last known values instead of (0, 0, 0) to prevent false display
+        latestEngaged = lastKnownBadgeValues.engaged;
+        latestScrolled = lastKnownBadgeValues.scrolled;
+        latestSeconds = lastKnownBadgeValues.seconds;
+      } else {
+        // Storage read succeeded - update last known values
+        latestEngaged = Number(ft_shorts_engaged_today || 0);
+        latestScrolled = Number(ft_short_visits_today || 0);
+        latestSeconds = Number(ft_shorts_seconds_today || 0);
+        // Update last known values only when storage read succeeds
+        lastKnownBadgeValues.engaged = latestEngaged;
+        lastKnownBadgeValues.scrolled = latestScrolled;
+        lastKnownBadgeValues.seconds = latestSeconds;
+      }
+    } catch (e) {
+      console.warn("[FT] Error getting badge counters:", e.message);
+      // Use last known values instead of (0, 0, 0) to prevent false display
+      latestEngaged = lastKnownBadgeValues.engaged;
+      latestScrolled = lastKnownBadgeValues.scrolled;
+      latestSeconds = lastKnownBadgeValues.seconds;
+    }
     
     // Show badge with latest counters
     await showShortsBadge(latestEngaged, latestScrolled, latestSeconds);
@@ -683,16 +1180,29 @@ async function handleNavigation() {
     // Shorts-specific: set redirect flag, then redirect to home if blocked
     if (resp.scope === "shorts") {
       // Set flag so home page knows to show overlay
-      chrome.storage.local.set({ ft_redirected_from_shorts: true });
+      try {
+        chrome.storage.local.set({ ft_redirected_from_shorts: true }, () => {
+          if (chrome.runtime.lastError) {
+            console.warn("[FT] Failed to set redirect flag:", chrome.runtime.lastError.message);
+          }
+        });
+      } catch (e) {
+        console.warn("[FT] Error setting redirect flag:", e.message);
+      }
       window.location.href = "https://www.youtube.com/";
       return;
     }
 
-    // Search or global: show overlay
-    // Search or global: show overlay only if one doesn't already exist
-  if ((resp.scope === "search" || resp.scope === "global") && !document.getElementById("ft-overlay")) {
-    showOverlay(resp.reason, resp.scope);
-}
+    // Search blocking: show search-specific overlay with plan-specific buttons
+    if (resp.scope === "search") {
+      if (!document.getElementById("ft-overlay")) {
+        await showSearchBlockOverlay(resp.plan || "free");
+      }
+    } 
+    // Global blocking: show generic overlay
+    else if (resp.scope === "global" && !document.getElementById("ft-overlay")) {
+      showOverlay(resp.reason, resp.scope);
+    }
   } else {
     removeOverlay(); // clear if allowed
   }
@@ -700,7 +1210,14 @@ async function handleNavigation() {
 
 async function updateDevPanelStatus(panel) {
   try {
+    if (!isChromeContextValid()) return;
+    
     const { ft_mode, ft_plan } = await chrome.storage.local.get(["ft_mode", "ft_plan"]);
+    if (chrome.runtime.lastError) {
+      console.warn("[FT] Failed to get dev panel status:", chrome.runtime.lastError.message);
+      return;
+    }
+    
     const statusEl = panel.querySelector("#ft-status");
     if (statusEl) {
       statusEl.textContent = `Mode: ${ft_mode || "user"} | Plan: ${ft_plan || "free"}`;
@@ -744,20 +1261,36 @@ function injectDevToggle() {
   // Click handlers — these send messages to background.js
   panel.querySelector("#ft-toggle-mode").onclick = async () => {
     try {
+      if (!isChromeContextValid()) {
+        console.warn("[FT] Cannot toggle mode - extension context invalidated");
+        return;
+      }
       await chrome.runtime.sendMessage({ type: "FT_TOGGLE_MODE" });
+      if (chrome.runtime.lastError) {
+        console.warn("[FT] Failed to toggle mode:", chrome.runtime.lastError.message);
+        return;
+      }
       await updateDevPanelStatus(panel);
       console.log("[FT content] Mode toggled successfully");
-    } catch (err) {     
-      console.error("[FT content] Error toggling mode:", err);
+    } catch (err) {
+      console.warn("[FT content] Error toggling mode:", err);
     }
   };
   panel.querySelector("#ft-toggle-plan").onclick = async () => {
     try {
+      if (!isChromeContextValid()) {
+        console.warn("[FT] Cannot toggle plan - extension context invalidated");
+        return;
+      }
       await chrome.runtime.sendMessage({ type: "FT_TOGGLE_PLAN" });
+      if (chrome.runtime.lastError) {
+        console.warn("[FT] Failed to toggle plan:", chrome.runtime.lastError.message);
+        return;
+      }
       await updateDevPanelStatus(panel);
       console.log("[FT content] Plan toggled successfully");
     } catch (err) {
-      console.error("[FT content] Error toggling plan:", err);
+      console.warn("[FT content] Error toggling plan:", err);
     }
   };
 
@@ -772,6 +1305,35 @@ if (document.readyState === "loading") {
   injectDevToggle();
 }
 
+// ─────────────────────────────────────────────────────────────
+// FULLSCREEN DETECTION (hide search counter in fullscreen)
+// ─────────────────────────────────────────────────────────────
+function setupFullscreenDetection() {
+  // Listen for fullscreen changes (multiple event names for browser compatibility)
+  const fullscreenEvents = ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'];
+  
+  fullscreenEvents.forEach(eventName => {
+    document.addEventListener(eventName, () => {
+      const isFullscreen = !!(document.fullscreenElement || 
+                              document.webkitFullscreenElement || 
+                              document.mozFullScreenElement || 
+                              document.msFullscreenElement);
+      
+      const searchCounter = document.getElementById("ft-search-counter");
+      if (searchCounter) {
+        if (isFullscreen) {
+          searchCounter.style.display = 'none';
+        } else {
+          searchCounter.style.display = '';
+        }
+      }
+    });
+  });
+}
+
+// Initialize fullscreen detection
+setupFullscreenDetection();
+
 
 
 
@@ -781,17 +1343,62 @@ if (document.readyState === "loading") {
 chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace !== "local") return;
   
+  // Update search counter if searches changed
+  if (changes.ft_searches_today) {
+    const badge = document.getElementById("ft-search-counter");
+    if (badge && detectPageType() === "SEARCH") {
+      if (!isChromeContextValid()) return;
+      
+      chrome.storage.local.get(["ft_searches_today", "ft_plan"]).then(storage => {
+        if (chrome.runtime.lastError) {
+          console.warn("[FT] Failed to get search counter in listener:", chrome.runtime.lastError.message);
+          return;
+        }
+        const searchesToday = Number(storage.ft_searches_today || 0);
+        const plan = storage.ft_plan || "free";
+        const searchLimit = plan === "pro" ? 15 : 5;
+        
+        updateSearchCounter(searchesToday, searchLimit);
+        
+        // Check for warning at threshold - 2 and threshold - 1
+        checkAndShowSearchWarning(searchesToday, searchLimit);
+      }).catch(e => {
+        console.warn("[FT] Error in search counter listener:", e.message);
+      });
+    }
+  }
+  
   // Update badge if Shorts counters changed
   if (changes.ft_shorts_engaged_today || changes.ft_short_visits_today || changes.ft_shorts_seconds_today) {
     const badge = document.getElementById("ft-shorts-counter");
     if (badge) {
       // Badge exists - get current values and update
-      chrome.storage.local.get(["ft_shorts_engaged_today", "ft_short_visits_today", "ft_shorts_seconds_today"]).then(storage => {
-        const engaged = Number(storage.ft_shorts_engaged_today || 0);
-        const scrolled = Number(storage.ft_short_visits_today || 0);
-        const seconds = Number(storage.ft_shorts_seconds_today || 0);
-        updateShortsBadge(engaged, scrolled, seconds);
-      });
+      try {
+        if (!isChromeContextValid()) return;
+        
+        chrome.storage.local.get(["ft_shorts_engaged_today", "ft_short_visits_today", "ft_shorts_seconds_today"]).then(storage => {
+          if (chrome.runtime.lastError) {
+            console.warn("[FT] Failed to get badge counters in listener:", chrome.runtime.lastError.message);
+            // Use last known values instead of leaving badge unchanged
+            updateShortsBadge(lastKnownBadgeValues.engaged, lastKnownBadgeValues.scrolled, lastKnownBadgeValues.seconds);
+            return;
+          }
+          const engaged = Number(storage.ft_shorts_engaged_today || 0);
+          const scrolled = Number(storage.ft_short_visits_today || 0);
+          const seconds = Number(storage.ft_shorts_seconds_today || 0);
+          // Update last known values when storage read succeeds
+          lastKnownBadgeValues.engaged = engaged;
+          lastKnownBadgeValues.scrolled = scrolled;
+          lastKnownBadgeValues.seconds = seconds;
+          updateShortsBadge(engaged, scrolled, seconds);
+        }).catch(e => {
+          console.warn("[FT] Error in storage listener:", e.message);
+          // Use last known values as fallback
+          updateShortsBadge(lastKnownBadgeValues.engaged, lastKnownBadgeValues.scrolled, lastKnownBadgeValues.seconds);
+        });
+      } catch (e) {
+        console.warn("[FT] Error in storage listener:", e.message);
+      }
     }
   }
 });
