@@ -521,7 +521,7 @@ async function showGlobalTimeCounter(watchSecondsToday) {
  * Formats seconds into long format (e.g., "1h 15m" or "45m")
  */
 function formatTimeLong(seconds) {
-  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 60) return "<1m";
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
@@ -639,34 +639,34 @@ async function showGlobalLimitOverlay(plan, counters) {
   // Format time watched
   const watchSeconds = counters.watchSeconds || 0;
   const watchMinutes = Math.floor(watchSeconds / 60);
-  const timeText = watchMinutes >= 60 
+  const timeText = watchMinutes < 1
+    ? "<1m"
+    : watchMinutes >= 60 
     ? `${Math.floor(watchMinutes / 60)}h ${watchMinutes % 60}m`
     : `${watchMinutes}m`;
 
   // Get counters
   const shortsViewed = counters.shortsEngaged || 0;
   const searchesMade = counters.searches || 0;
-
-  // Check if tab can be closed (only works if extension opened the tab)
-  // For now, try to close - if it doesn't work, user can manually close
-  const canCloseTab = true; // We'll try closing anyway
+  const longFormVideos = counters.watchVisits || 0;
 
   // Get button HTML based on plan
   let buttonsHTML = '';
   if (plan === "pro") {
     buttonsHTML = `
-      <button id="ft-take-break" class="ft-button ft-button-primary">Take a Break 🧘</button>
+      <button id="ft-check-usage" class="ft-button ft-button-primary">Check Your Usage! 📊</button>
       <button id="ft-temp-unlock-pro" class="ft-button ft-button-secondary">Temporary Unlock (Pro) 🔓</button>
     `;
   } else {
-    // Free plan: only show "Take a Break" if tab can be closed
-    if (canCloseTab) {
-      buttonsHTML = `
-        <button id="ft-take-break" class="ft-button ft-button-primary">Take a Break 🧘</button>
-      `;
-    }
-    // If tab can't be closed, show no button (user can manually close)
+    buttonsHTML = `
+      <button id="ft-check-usage" class="ft-button ft-button-primary">Check Your Usage! 📊</button>
+    `;
   }
+
+  // Add Reset button (always visible for testing - will be removed before launch)
+  buttonsHTML += `
+    <button id="ft-reset" class="ft-button ft-button-secondary" style="background: #ff6b6b; color: white;">Reset</button>
+  `;
 
   overlay.innerHTML = `
     <div class="ft-box ft-global-limit-box">
@@ -684,6 +684,9 @@ async function showGlobalLimitOverlay(plan, counters) {
             <strong>Shorts viewed:</strong> ${shortsViewed}
           </div>
           <div class="ft-global-limit-stat">
+            <strong>Long form videos watched:</strong> ${longFormVideos}
+          </div>
+          <div class="ft-global-limit-stat">
             <strong>Searches made:</strong> ${searchesMade}
           </div>
         </div>
@@ -694,12 +697,47 @@ async function showGlobalLimitOverlay(plan, counters) {
   `;
 
   // Add button handlers
-  const takeBreakBtn = overlay.querySelector("#ft-take-break");
-  if (takeBreakBtn) {
-    takeBreakBtn.addEventListener("click", () => {
-      // Try to close tab
-      window.close();
-      // If tab doesn't close (e.g., not opened by extension), user can manually close
+  const checkUsageBtn = overlay.querySelector("#ft-check-usage");
+  if (checkUsageBtn) {
+    checkUsageBtn.addEventListener("click", () => {
+      // Redirect to dashboard
+      window.location.href = "https://focustube.app/dashboard";
+    });
+  }
+
+  const resetBtn = overlay.querySelector("#ft-reset");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", async () => {
+      try {
+        if (!isChromeContextValid()) {
+          console.warn("[FT] Cannot reset - extension context invalidated");
+          return;
+        }
+        // Reset all counters to zero
+        await chrome.storage.local.set({
+          ft_searches_today: 0,
+          ft_short_visits_today: 0,
+          ft_shorts_engaged_today: 0,
+          ft_watch_visits_today: 0,
+          ft_watch_seconds_today: 0,
+          ft_shorts_seconds_today: 0,
+          ft_blocked_today: false,
+          ft_block_shorts_today: false,
+          ft_pro_manual_block_shorts: false,
+          ft_last_shorts_milestone: 0,
+          ft_last_time_milestone: 0
+        });
+        if (chrome.runtime.lastError) {
+          console.warn("[FT] Failed to reset counters:", chrome.runtime.lastError.message);
+          alert("Failed to reset: " + chrome.runtime.lastError.message);
+          return;
+        }
+        // Reload page to clear overlay and refresh counters
+        window.location.reload();
+      } catch (e) {
+        console.warn("[FT] Error resetting counters:", e.message);
+        alert("Error resetting: " + e.message);
+      }
     });
   }
 
@@ -1248,6 +1286,79 @@ async function startGlobalTimeTracking() {
     const elapsed = Math.floor((Date.now() - globalTimeStart) / 1000);
     const timeSinceLastSave = Math.floor((Date.now() - lastGlobalSaveTime) / 1000);
     
+    // Calculate current total watch time
+    const currentTotalSeconds = baseSeconds + elapsed;
+    
+    // Check global time limit every second
+    try {
+      // Get plan and config limits
+      const { ft_plan } = await chrome.storage.local.get(["ft_plan"]);
+      if (chrome.runtime.lastError) {
+        if (!isChromeContextValid()) {
+          clearInterval(globalTimeTracker);
+          globalTimeTracker = null;
+          globalTimeStart = null;
+          lastGlobalSaveTime = null;
+          return;
+        }
+        console.warn("[FT] Failed to get plan for limit check:", chrome.runtime.lastError.message);
+      } else {
+        const plan = ft_plan || "free";
+        // Get limit from config (2 mins Free = 120s, 3 mins Pro = 180s)
+        const limitSeconds = plan === "pro" ? 180 : 120;
+        
+        // Check if limit reached
+        if (currentTotalSeconds >= limitSeconds) {
+          // Check if overlay already exists (don't show duplicate)
+          if (!document.getElementById("ft-overlay")) {
+            // Get counters from storage
+            const { 
+              ft_shorts_engaged_today, 
+              ft_searches_today,
+              ft_watch_visits_today
+            } = await chrome.storage.local.get([
+              "ft_shorts_engaged_today",
+              "ft_searches_today",
+              "ft_watch_visits_today"
+            ]);
+            
+            if (chrome.runtime.lastError && !isChromeContextValid()) {
+              clearInterval(globalTimeTracker);
+              globalTimeTracker = null;
+              globalTimeStart = null;
+              lastGlobalSaveTime = null;
+              return;
+            }
+            
+            const counters = {
+              watchSeconds: currentTotalSeconds,
+              watchVisits: Number(ft_watch_visits_today || 0),
+              shortsEngaged: Number(ft_shorts_engaged_today || 0),
+              searches: Number(ft_searches_today || 0)
+            };
+            
+            // Pause videos
+            pauseVideos();
+            
+            // Show global limit overlay
+            await showGlobalLimitOverlay(plan, counters);
+            
+            // Stop time tracking when overlay is shown (optional - or keep tracking)
+            // For now, we'll keep tracking but overlay will block interaction
+          }
+        }
+      }
+    } catch (e) {
+      if (!isChromeContextValid()) {
+        clearInterval(globalTimeTracker);
+        globalTimeTracker = null;
+        globalTimeStart = null;
+        lastGlobalSaveTime = null;
+        return;
+      }
+      console.warn("[FT] Error checking global limit:", e.message);
+    }
+    
     // Re-read storage every 5 seconds to get latest saved value (in case another tab saved)
     if (timeSinceLastSave >= 5) {
       try {
@@ -1604,7 +1715,8 @@ function injectDevToggle() {
   panel.style.position = "fixed";
   panel.style.bottom = "15px";
   panel.style.right = "15px";
-  panel.style.zIndex = "999999";
+  panel.style.zIndex = "2147483648";
+  panel.style.pointerEvents = "auto";
   panel.style.background = "rgba(20,20,20,0.85)";
   panel.style.color = "white";
   panel.style.padding = "10px 14px";

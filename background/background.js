@@ -202,6 +202,7 @@ async function handleNavigated({ pageType = "OTHER", url = "" }) {
     counters: {
       searches: ctx.searchesToday,
       watchSeconds: ctx.watchSecondsToday,
+      watchVisits: Number(state.ft_watch_visits_today || 0),
       shortsVisits: Number(state.ft_short_visits_today || 0),
       shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
       shortsSeconds: Number(state.ft_shorts_seconds_today || 0)
