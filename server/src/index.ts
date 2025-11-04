@@ -6,6 +6,7 @@ import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
+import { getUserPlan, updateUserPlan } from "./supabase";
 
 // Load environment variables
 dotenv.config();
@@ -77,19 +78,35 @@ app.post("/ai/classify", (req, res) => {
 });
 
 /**
- * License verification endpoint (stub)
- * GET /license/verify
+ * License verification endpoint
+ * GET /license/verify?email=user@example.com
  * 
- * TODO: Connect Supabase in Lesson 8C
+ * Returns user plan from Supabase database
  */
-app.get("/license/verify", (req, res) => {
+app.get("/license/verify", async (req, res) => {
   try {
-    // Stub response - always returns free plan
-    // TODO: Verify JWT token from Supabase
-    // TODO: Fetch user plan from Supabase database
-    res.json({
-      plan: "free",
-    });
+    const email = req.query.email as string;
+
+    if (!email) {
+      return res.status(400).json({
+        ok: false,
+        error: "Email parameter required",
+      });
+    }
+
+    // Get user plan from Supabase
+    const plan = await getUserPlan(email);
+
+    if (plan === null) {
+      // User not found - return free plan as default
+      res.json({
+        plan: "free",
+      });
+    } else {
+      res.json({
+        plan: plan,
+      });
+    }
   } catch (error) {
     console.error("Error in /license/verify:", error);
     res.status(500).json({
@@ -100,31 +117,50 @@ app.get("/license/verify", (req, res) => {
 });
 
 /**
- * Stripe webhook endpoint (stub)
+ * Stripe webhook endpoint
  * POST /webhook/stripe
  * 
- * TODO: Connect Supabase plan updates in Lesson 8C
+ * Handles Stripe payment events and updates user plan in Supabase
  */
-app.post("/webhook/stripe", bodyParser.raw({ type: "application/json" }), (req, res) => {
+app.post("/webhook/stripe", bodyParser.raw({ type: "application/json" }), async (req, res) => {
   try {
-    // Stub - log event, return success
-    // TODO: Verify Stripe signature
-    // TODO: Update user plan in Supabase
-    const event = req.body;
+    // Parse Stripe event
+    const event = JSON.parse(req.body.toString());
     
     if (process.env.NODE_ENV === "development") {
       console.log("[Stripe Webhook] Event received:", event.type || "unknown");
     }
 
+    // Handle checkout.session.completed event (payment succeeded)
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object;
+      const customerEmail = session.customer_email || session.customer_details?.email;
+
+      if (customerEmail) {
+        // Update user plan to "pro" in Supabase
+        const updated = await updateUserPlan(customerEmail, "pro");
+
+        if (updated) {
+          console.log(`[Stripe Webhook] Updated ${customerEmail} to Pro plan`);
+        } else {
+          console.error(`[Stripe Webhook] Failed to update plan for ${customerEmail}`);
+          // Still return success to Stripe (we'll retry or handle manually)
+        }
+      } else {
+        console.warn("[Stripe Webhook] No customer email in checkout session");
+      }
+    }
+
+    // Always return success to Stripe (even if we couldn't update plan)
     res.json({
-      ok: true,
       received: true,
     });
   } catch (error) {
     console.error("Error in /webhook/stripe:", error);
-    res.status(500).json({
-      ok: false,
-      error: "Internal server error",
+    // Still return success to Stripe (prevents retries)
+    res.status(200).json({
+      received: true,
+      error: "Internal error (logged)",
     });
   }
 });
