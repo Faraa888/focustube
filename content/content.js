@@ -1,7 +1,14 @@
 // content/content.js
 // ROLE: The "eyes and hands" of FocusTube.
-// Watches YouTube pages, tells the background what’s happening,
+// Watches YouTube pages, tells the background what's happening,
 // and enforces the decision (pause, overlay, redirect).
+
+// ─────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────
+
+// Stripe Checkout URL (placeholder - replace with actual Stripe Checkout URL from Stripe dashboard)
+const STRIPE_CHECKOUT_URL = "https://buy.stripe.com/test_xxxxxxxxxxxxx";
 
 // ─────────────────────────────────────────────────────────────
 // BASIC HELPERS
@@ -101,11 +108,16 @@ function showShortsBlockedOverlay() {
     removeOverlay();
   });
 
-  // Upgrade to Pro button - placeholder for now (empty URL)
+  // Upgrade to Pro button - opens Stripe Checkout
   overlay.querySelector("#ft-upgrade-pro").addEventListener("click", () => {
-    // Placeholder: empty URL for now
-    // Will be updated later with actual upgrade URL
-    console.log("[FT] Upgrade to Pro clicked (placeholder)");
+    try {
+      // Open Stripe Checkout in new tab
+      window.open(STRIPE_CHECKOUT_URL, "_blank");
+    } catch (e) {
+      console.warn("[FT] Error opening Stripe Checkout:", e.message);
+      // Fallback: try opening in same tab if popup blocked
+      window.location.href = STRIPE_CHECKOUT_URL;
+    }
   });
 
   document.body.appendChild(overlay);
@@ -811,8 +823,14 @@ async function showSearchBlockOverlay(plan) {
   const upgradeBtn = overlay.querySelector("#ft-upgrade-pro");
   if (upgradeBtn) {
     upgradeBtn.addEventListener("click", () => {
-      // Placeholder - no URL for now
-      console.log("[FT] Upgrade to Pro clicked (placeholder)");
+      try {
+        // Open Stripe Checkout in new tab
+        window.open(STRIPE_CHECKOUT_URL, "_blank");
+      } catch (e) {
+        console.warn("[FT] Error opening Stripe Checkout:", e.message);
+        // Fallback: try opening in same tab if popup blocked
+        window.location.href = STRIPE_CHECKOUT_URL;
+      }
     });
   }
 
@@ -1553,6 +1571,11 @@ async function handleNavigation() {
   // Ask background for a decision
   let resp;
   try {
+    if (!isChromeContextValid()) {
+      // Extension context invalidated - silently return, no need to log
+      return;
+    }
+    
     resp = await chrome.runtime.sendMessage({
       type: "FT_NAVIGATED",
       pageType,
@@ -1560,11 +1583,24 @@ async function handleNavigation() {
     });
     
     if (chrome.runtime.lastError) {
+      if (!isChromeContextValid()) {
+        // Extension context invalidated - silently return
+        return;
+      }
       console.warn("[FT] Failed to get navigation decision:", chrome.runtime.lastError.message);
       return;
     }
   } catch (e) {
-    console.warn("[FT] Error sending navigation message:", e.message);
+    if (!isChromeContextValid()) {
+      // Extension context invalidated - silently return, no need to log
+      return;
+    }
+    // Only log non-context-invalidation errors
+    const isContextError = e.message?.includes("Extension context invalidated") || 
+                          e.message?.includes("context invalidated");
+    if (!isContextError) {
+      console.warn("[FT] Error sending navigation message:", e.message);
+    }
     return;
   }
 
@@ -1968,7 +2004,18 @@ let _ftNavTimer = null;
 function scheduleNav(delay = 150) {
   if (_ftNavTimer) clearTimeout(_ftNavTimer);
   _ftNavTimer = setTimeout(() => {
-    handleNavigation().catch(console.error);
+    // Check if context is still valid before calling handleNavigation
+    if (!isChromeContextValid()) {
+      // Extension context invalidated - clear timer and return
+      _ftNavTimer = null;
+      return;
+    }
+    handleNavigation().catch((e) => {
+      // Only log if context is still valid (don't log context invalidation errors)
+      if (isChromeContextValid()) {
+        console.error("[FT] Error in handleNavigation:", e);
+      }
+    });
   }, delay);
 }
 
