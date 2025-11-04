@@ -2,14 +2,14 @@
 // Express backend server for FocusTube
 // Handles AI classification, license verification, Stripe webhooks
 
+// Load environment variables FIRST (before any imports that use them)
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
-import dotenv from "dotenv";
 import { getUserPlan, updateUserPlan } from "./supabase";
-
-// Load environment variables
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;

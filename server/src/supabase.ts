@@ -51,7 +51,13 @@ export async function getUserPlan(email: string): Promise<string | null> {
       return null;
     }
 
-    return data?.plan || "free";
+    // Normalize plan to lowercase (Supabase might return "Pro", "PRO", etc.)
+    const plan = data?.plan;
+    if (typeof plan === "string") {
+      return plan.toLowerCase();
+    }
+
+    return "free";
   } catch (error) {
     console.error("[Supabase] Exception getting user plan:", error);
     return null;
