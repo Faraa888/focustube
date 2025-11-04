@@ -23,17 +23,22 @@ import { CONFIG_BY_PLAN } from "./rules.js";
 const DEFAULTS = {
   // Plan and rotation setup
   ft_plan: "free",                // free | pro | test
+  ft_user_email: "",              // user email for server sync
   ft_reset_period: "daily",       // daily | weekly | monthly
   ft_last_reset_key: "",          // stores last date/week/month key
 
   // Activity counters
   ft_blocked_today: false,        // true = globally blocked
   ft_searches_today: 0,           // number of searches
-  ft_short_visits_today: 0,       // number of shorts viewed
+  ft_short_visits_today: 0,       // number of shorts viewed (total scrolled)
+  ft_shorts_engaged_today: 0,      // number of shorts engaged (>5 seconds watched)
   ft_watch_visits_today: 0,       // number of normal videos viewed
   ft_watch_seconds_today: 0,      // total watch time in seconds
+  ft_shorts_seconds_today: 0,      // time spent on Shorts in seconds (Pro plan tracking)
+  ft_block_shorts_today: false,    // true = hard block Shorts for today (Pro plan self-block)
+  ft_pro_manual_block_shorts: false, // true = Pro user manually blocked Shorts (shows Pro overlay on redirects)
 
-  // Unlock feature (used for “pay to unlock”)
+  // Unlock feature (used for "pay to unlock")
   ft_unlock_until_epoch: 0        // timestamp when temporary unlock expires
 };
 
@@ -154,6 +159,24 @@ export const bumpSearches = () => bump("ft_searches_today");
 export const bumpShorts  = () => bump("ft_short_visits_today");
 export const bumpWatch   = () => bump("ft_watch_visits_today");
 
+// Helper to increment engaged Shorts (watched > 5 seconds)
+export async function incrementEngagedShorts() {
+  const cur = await getLocal(["ft_shorts_engaged_today"]);
+  const current = Number(cur.ft_shorts_engaged_today || 0);
+  const next = current + 1;
+  await setLocal({ ft_shorts_engaged_today: next });
+  return next;
+}
+
+// Helper to increment Shorts watch time (in seconds)
+export async function incrementShortsSeconds(seconds = 1) {
+  const cur = await getLocal(["ft_shorts_seconds_today"]);
+  const current = Number(cur.ft_shorts_seconds_today || 0);
+  const next = current + seconds;
+  await setLocal({ ft_shorts_seconds_today: next });
+  return next;
+}
+
 // ─────────────────────────────────────────────────────────────
 // GET AND RESET PERIOD
 // ─────────────────────────────────────────────────────────────
@@ -190,6 +213,100 @@ export async function setPlan(plan) {
     PLAN_FREE;
   await setLocal({ ft_plan: valid });
   return valid;
+}
+
+// ─────────────────────────────────────────────────────────────
+// SERVER SYNC (fetch plan from Express server)
+// ─────────────────────────────────────────────────────────────
+
+// Server URL (development)
+const SERVER_URL = "http://localhost:3000";
+
+// Debounce: only sync once per 30 seconds
+let lastSyncTime = 0;
+const SYNC_DEBOUNCE_MS = 30 * 1000; // 30 seconds
+
+/**
+ * Fetch user plan from server
+ * @param email - User email
+ * @returns User plan ("free" | "pro") or null if error
+ */
+export async function fetchUserPlanFromServer(email) {
+  if (!email || email.trim() === "") {
+    console.warn("[FT] No email provided, cannot sync plan");
+    return null;
+  }
+
+  try {
+    const url = `${SERVER_URL}/license/verify?email=${encodeURIComponent(email)}`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(`[FT] Server error: ${response.status} ${response.statusText}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const planRaw = data?.plan;
+
+    // Normalize plan to lowercase (handle "Pro", "PRO", etc.)
+    const plan = typeof planRaw === "string" ? planRaw.toLowerCase() : null;
+
+    if (plan === "free" || plan === "pro" || plan === "test") {
+      return plan;
+    }
+
+    console.warn("[FT] Invalid plan from server:", planRaw);
+    return null;
+  } catch (error) {
+    console.warn("[FT] Failed to fetch plan from server:", error.message);
+    return null;
+  }
+}
+
+/**
+ * Sync plan from server (debounced)
+ * Fetches plan from server and saves to Chrome storage
+ * @param force - Force sync even if debounced (default: false)
+ * @returns true if synced, false if skipped or failed
+ */
+export async function syncPlanFromServer(force = false) {
+  const now = Date.now();
+
+  // Debounce: only sync once per 30 seconds (unless forced)
+  if (!force && now - lastSyncTime < SYNC_DEBOUNCE_MS) {
+    console.log("[FT] Plan sync skipped (debounced)");
+    return false;
+  }
+
+  // Get user email from storage
+  const { ft_user_email } = await getLocal(["ft_user_email"]);
+
+  if (!ft_user_email || ft_user_email.trim() === "") {
+    console.log("[FT] No email set, skipping plan sync");
+    return false;
+  }
+
+  // Fetch plan from server
+  const plan = await fetchUserPlanFromServer(ft_user_email);
+
+  if (plan === null) {
+    // Server error - use cached plan (don't crash)
+    console.warn("[FT] Server unavailable, using cached plan");
+    return false;
+  }
+
+  // Save plan to storage
+  await setPlan(plan);
+  lastSyncTime = now;
+
+  console.log(`[FT] Plan synced from server: ${plan}`);
+  return true;
 }
 
 // ─────────────────────────────────────────────────────────────

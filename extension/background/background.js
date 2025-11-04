@@ -10,9 +10,14 @@ import {
   maybeRotateCounters,     // resets counters if day/week/month changed
   getLocal, setLocal,      // storage helpers
   bumpSearches, bumpShorts, bumpWatch, // counter helpers
+  incrementEngagedShorts,   // increment engaged Shorts counter
   getSnapshot,             // debug snapshot (optional)
   getPlanConfig,           // read plan + limits
-  isTemporarilyUnlocked    // check temporary unlock state
+  isTemporarilyUnlocked,
+  resetCounters,
+  setPlan,
+  syncPlanFromServer,      // sync plan from server
+  // check temporary unlock state
 } from "../lib/state.js";
 
 import { evaluateBlock } from "../lib/rules.js";
@@ -21,14 +26,28 @@ import { evaluateBlock } from "../lib/rules.js";
 // DEBUG MODE (set false when you ship)
 // ─────────────────────────────────────────────────────────────
 const DEBUG = true;
-const LOG = (...a) => DEBUG && console.log("[FocusTube BG]", ...a);
-
+async function LOG(...a) {
+  if (!DEBUG) return;
+  const { ft_mode = "user", ft_plan = "free" } = await chrome.storage.local.get(["ft_mode", "ft_plan"]);
+  console.log(
+    `%c[FocusTube BG]%c [${ft_mode.toUpperCase()} | ${ft_plan.toUpperCase()}]`,
+    "color: #0ff; font-weight: bold;",
+    "color: #ff0; font-weight: bold;",
+    ...a
+  );
+}
 // ─────────────────────────────────────────────────────────────
 // BOOT: Called on install or startup
 // ─────────────────────────────────────────────────────────────
 async function boot() {
   await ensureDefaults();
   await maybeRotateCounters();
+  
+  // Sync plan from server on startup
+  await syncPlanFromServer(true).catch((err) => {
+    console.warn("[FT] Failed to sync plan on startup:", err);
+  });
+  
   const snap = await getSnapshot();
   LOG("boot complete:", snap);
 }
@@ -37,13 +56,39 @@ chrome.runtime.onInstalled.addListener(() => boot().catch(console.error));
 chrome.runtime.onStartup.addListener(() => boot().catch(console.error));
 
 // ─────────────────────────────────────────────────────────────
+// BACKGROUND SYNC: Sync plan every 10 minutes
+// ─────────────────────────────────────────────────────────────
+setInterval(() => {
+  syncPlanFromServer().catch((err) => {
+    console.warn("[FT] Background plan sync failed:", err);
+  });
+}, 10 * 60 * 1000); // 10 minutes
+
+// ─────────────────────────────────────────────────────────────
 // COUNTER UPDATER: bump the correct counter for page type
 // ─────────────────────────────────────────────────────────────
+// Note: Shorts counting is handled by content.js (scrolled + engaged tracking)
 async function countForPageType(pageType) {
   if (pageType === "SEARCH") await bumpSearches();
-  else if (pageType === "SHORTS") await bumpShorts();
+  // SHORTS handled by content.js via FT_BUMP_SHORTS message
   else if (pageType === "WATCH") await bumpWatch();
-  // HOME or OTHER don’t increment anything for now
+  // HOME or OTHER don't increment anything for now
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODE + PLAN SWITCH HANDLER (Dev/User toggle, Free/Pro plan)
+// ─────────────────────────────────────────────────────────────
+async function handleSetModePlan({ mode = "user", plan = "free" }) {
+  await ensureDefaults();
+  await resetCounters();            // reset all daily counters/state
+  await setPlan(plan);              // update plan in storage
+  await setLocal({ ft_mode: mode }); // store current mode
+  const tabs = await chrome.tabs.query({ url: "*://*.youtube.com/*" });
+  for (const t of tabs) {
+    chrome.tabs.sendMessage(t.id, { type: "FT_MODE_CHANGED", mode, plan });
+  }
+  LOG("Mode/Plan switched →", mode, plan);
+  return { ok: true, mode, plan };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -64,8 +109,40 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return;
       }
 
+      if (msg?.type === "FT_SET_MODE_PLAN") {
+        const resp = await handleSetModePlan(msg);
+        sendResponse(resp);
+        return;
+      }
+
+            // Allow content.js toggle buttons to call the same handler
+      if (msg?.type === "FT_TOGGLE_MODE" || msg?.type === "FT_TOGGLE_PLAN") {
+        const current = await getLocal(["ft_mode", "ft_plan"]);
+        const newMode = msg?.type === "FT_TOGGLE_MODE"
+          ? (current.ft_mode === "dev" ? "user" : "dev")
+          : current.ft_mode;
+        const newPlan = msg?.type === "FT_TOGGLE_PLAN"
+          ? (current.ft_plan === "free" ? "pro" : "free")
+          : current.ft_plan;
+        const resp = await handleSetModePlan({ mode: newMode, plan: newPlan });
+        sendResponse(resp);
+        return;
+      }
+
       if (msg?.type === "FT_PING") {
         sendResponse({ ok: true, from: "background" });
+        return;
+      }
+
+      if (msg?.type === "FT_BUMP_SHORTS") {
+        await bumpShorts();
+        sendResponse({ ok: true });
+        return;
+      }
+
+      if (msg?.type === "FT_INCREMENT_ENGAGED_SHORTS") {
+        const newCount = await incrementEngagedShorts();
+        sendResponse({ ok: true, engagedCount: newCount });
         return;
       }
 
@@ -86,16 +163,24 @@ async function handleNavigated({ pageType = "OTHER", url = "" }) {
   await ensureDefaults();
   await maybeRotateCounters();
 
-  // 2. Count the page view
+  // 2. Sync plan from server (debounced to once per 30 seconds)
+  syncPlanFromServer().catch((err) => {
+    console.warn("[FT] Plan sync failed on navigation:", err);
+  });
+
+  // 3. Count the page view
   await countForPageType(pageType);
 
-  // 3. Get current counters and unlock info
+  // 4. Get current counters and unlock info
   const state = await getLocal([
     "ft_searches_today",
     "ft_short_visits_today",
+    "ft_shorts_engaged_today",
     "ft_watch_visits_today",
     "ft_watch_seconds_today",
+    "ft_shorts_seconds_today",
     "ft_blocked_today",
+    "ft_block_shorts_today",
     "ft_unlock_until_epoch"
   ]);
 
@@ -114,6 +199,7 @@ async function handleNavigated({ pageType = "OTHER", url = "" }) {
     searchesToday: Number(state.ft_searches_today || 0),
     watchSecondsToday: Number(state.ft_watch_seconds_today || 0),
     ft_blocked_today: state.ft_blocked_today || false,
+    ft_block_shorts_today: state.ft_block_shorts_today || false,
     unlocked,
     now
   };
@@ -136,7 +222,11 @@ async function handleNavigated({ pageType = "OTHER", url = "" }) {
     plan,
     counters: {
       searches: ctx.searchesToday,
-      watchSeconds: ctx.watchSecondsToday
+      watchSeconds: ctx.watchSecondsToday,
+      watchVisits: Number(state.ft_watch_visits_today || 0),
+      shortsVisits: Number(state.ft_short_visits_today || 0),
+      shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
+      shortsSeconds: Number(state.ft_shorts_seconds_today || 0)
     },
     unlocked
   };

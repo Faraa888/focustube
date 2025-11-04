@@ -16,12 +16,12 @@ export const CONFIG_BY_PLAN = Object.freeze({
   [PLAN_FREE]: Object.freeze({
     strict_shorts: true,   // Block Shorts immediately
     search_threshold: 5,   // Block Search after 5 searches today
-    daily_watch_minutes_limit: 0 // 0 = disabled (can enable later)
+    daily_watch_minutes_limit: 2 // 2 mins for testing (final: 60 mins)
   }),
   [PLAN_PRO]: Object.freeze({
     strict_shorts: false,  // Allow Shorts (you can still warn via UI if you want)
     search_threshold: 15,  // More generous
-    daily_watch_minutes_limit: 0
+    daily_watch_minutes_limit: 3 // 3 mins for testing (final: customizable 15-120 mins)
   }),
   [PLAN_TEST]: Object.freeze({
     strict_shorts: false,
@@ -87,9 +87,16 @@ export function evaluateBlock(ctx) {
     return { blocked: true, scope: "global", reason: REASONS.TIME_LIMIT };
   }
 
-  // Shorts policy (strict on FREE)
-  if (pageType === "SHORTS" && config?.strict_shorts) {
-    return { blocked: true, scope: "shorts", reason: REASONS.STRICT_SHORTS };
+  // Shorts policy (strict on FREE, or hard blocked for today)
+  if (pageType === "SHORTS") {
+    // Check if user hard blocked Shorts for today (Pro plan self-block)
+    if (ctx.ft_block_shorts_today) {
+      return { blocked: true, scope: "shorts", reason: REASONS.STRICT_SHORTS };
+    }
+    // Free plan blocks Shorts
+    if (config?.strict_shorts) {
+      return { blocked: true, scope: "shorts", reason: REASONS.STRICT_SHORTS };
+    }
   }
 
   // Search threshold (block search page after N searches)
