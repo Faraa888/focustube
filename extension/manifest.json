@@ -2,22 +2,26 @@
   "manifest_version": 3,
   "name": "FocusTube (MVP)",
   "version": "0.1.0",
-  "description": "Hide Shorts & recs and track YouTube navigation for focus.",
-  "permissions": ["storage", "scripting"],
+  "description": "Blocks Shorts, limits search binges, and tracks YouTube usage for focus.",
+  
+  "permissions": ["storage"], 
+
   "host_permissions": ["*://*.youtube.com/*"],
+
   "background": {
     "service_worker": "background/background.js",
     "type": "module"
   },
+
   "content_scripts": [
     {
       "matches": ["*://*.youtube.com/*"],
       "js": ["content/content.js"],
       "css": ["content/overlay.css"],
-      "run_at": "document_end",
-      "all_frames": false
+      "run_at": "document_idle"
     }
   ],
+
   "action": {
     "default_title": "FocusTube"
   }

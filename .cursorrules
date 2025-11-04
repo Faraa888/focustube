@@ -1,0 +1,173 @@
+# 🧭 FocusTube - Chrome MV3 Extension + Backend + AI Build Plan
+
+## Product Vision
+FocusTube is a productivity-driven YouTube companion that reduces distraction and restores intentional viewing.
+
+It has two main components:
+1. **Chrome MV3 Extension** (`/extension`) — Monitors YouTube activity and enforces rules.
+2. **Backend Server** (`/server`) — Handles authentication, plan management, and AI classification via Supabase + Stripe + OpenAI.
+
+---
+
+## Core User Flow
+- User signs up (Supabase email/password)
+- Chooses Free or Pro plan (via Stripe checkout)
+- Downloads extension → logs in
+- Extension syncs plan + rules from backend
+- While browsing YouTube, FocusTube monitors behavior and enforces blocking/allowance logic
+
+---
+
+## Plan Behavior
+
+### Free Plan
+- **Shorts:** Hard blocked instantly (redirect to YouTube home + overlay message)
+- **Searches:** 5/day limit, overlay after cap
+- **Reminders:** 30-min usage banners
+- **AI:** None (neutral fallback always)
+
+### Pro Plan
+- **Shorts:** Allowed but tracked  
+  - Live counter: “You’ve watched N Shorts today”  
+  - Every 5 Shorts → popup: “Carry on or block for today?”
+- **Searches:** 15/day  
+- **AI Filtering:**  
+  - All searches/titles sent to `/ai/classify`
+  - If marked *distracting* → daily allowance (1 video **or** 10 minutes)
+  - After allowance → block distracting content for rest of day  
+- **Reminders:** 30-min usage alerts remain active
+
+---
+
+## 🏗️ Build Roadmap (7-Day MVP Sprint)
+
+### ⚙️ Day 1 — Core Server Setup
+- Create `/server` (Express + TypeScript)
+- Endpoints: `/health`, `/license/verify`, `/ai/classify` (stub)
+- Allow CORS for extension
+- Background fetches plan + calls classifier (returns neutral for now)  
+✅ Server runs locally; extension logs “plan: free”
+
+---
+
+### 🗄️ Day 2 — Supabase Integration
+- Create `users` and `ai_logs` tables  
+- `/license/verify?email=` returns `{ plan }`
+- Background updates plan on boot/daily rotation  
+✅ Plan syncs with Supabase; safe fallback if offline
+
+---
+
+### 💳 Day 3 — Stripe Checkout
+- `POST /stripe/create-checkout` → returns Stripe URL
+- Manual plan change in Supabase after payment
+- Optional `/webhook/stripe` for auto plan sync  
+✅ Users can pay → plan switches to Pro
+
+---
+
+### 🧠 Day 4 — AI Classifier v1
+- `/ai/classify` calls OpenAI and caches results 24h per user/text
+- Returns `{ category: "productive"|"neutral"|"distracting" }`
+- On failure → fallback `{ category:"neutral" }`
+- Extension invokes classifier for search/watch (Pro only)  
+✅ AI classifies content safely; fallback works offline
+
+---
+
+### 🎯 Day 5 — Allowance Logic
+- Add `ft_allowance_videos_left` or `ft_allowance_seconds_left`
+- If “distracting” and allowance empty → block; else decrement  
+✅ Daily distraction cap working for Pro users
+
+---
+
+### 💅 Day 6 — UI & Overlay Polish
+- Add counter overlays (Free: 5/5 | Pro: 15/15)
+- Refine milestone popups + badges  
+✅ Clear overlays, no console errors
+
+---
+
+### 🚀 Day 7 — Ship Chargeable MVP
+- Offline-safe fallback logic
+- Stripe → Supabase → extension sync confirmed
+- Deploy server (Railway / Render)
+- Zip and publish extension build  
+✅ MVP ready for real users + Stripe payments
+
+---
+
+## 🧩 Architecture Principles
+
+### Extension (`/extension`)
+- **background/background.js:** Core logic, counters, backend communication  
+- **content/content.js:** DOM detection + overlays only  
+- **lib/constants.js:** Thresholds and limits  
+- **lib/state.js:** Chrome storage and reset logic  
+- **lib/rules.js:** Pure logic (no APIs or DOM)
+
+### Backend (`/server`)
+- **src/index.ts:** Express entrypoint  
+- **src/supabase.ts:** Supabase client  
+- **src/verify.ts:** Returns `{ plan }`  
+- **src/stripeWebhook.ts:** Stripe → Supabase sync  
+- **src/aiClassify.ts:** OpenAI call + caching  
+
+### Supabase Tables
+- `users (id, email, plan)`
+- `ai_logs (user_id, text, category, confidence, created_at)`
+- `subscriptions (optional, for Stripe linking)`
+- `preferences (optional, user goals)`
+
+---
+
+## 🔌 API Endpoints
+| Endpoint | Purpose |
+|-----------|----------|
+| `GET /license/verify?email=` | Returns `{ plan }` |
+| `POST /ai/classify` | Classifies text with OpenAI |
+| `POST /stripe/create-checkout` | Returns hosted checkout URL |
+| `POST /webhook/stripe` | Updates plan after payment |
+
+---
+
+## 🧱 Core Development Rules
+- **One MV3 listener only** — return `true` for async  
+- **rules.js** stays pure (no APIs or DOM)
+- **background.js** manages counters + API calls
+- **content.js** enforces UI only
+- Always handle backend/AI failure safely (`category:"neutral"`)
+- Use ES modules and debounced navigation detection (150ms)
+- Reset counters/allowances daily (`ft_last_reset_key`)
+- Cross-tab sync via `chrome.storage.onChanged`
+
+---
+
+## 🧠 AI Classification Logic
+- **Endpoint:** `/ai/classify`
+- **Input:** `{ user_id, text, context }`
+- **Output:** `{ category: "productive"|"neutral"|"distracting", confidence }`
+- **Caching:** 24h/user/text
+- **Fallback:** Returns neutral + logs on failure  
+“Distracting” triggers block unless within daily allowance.
+
+---
+
+## ✅ MVP Launch Criteria
+- **Free:** Shorts blocked, 5 searches/day, reminders working  
+- **Pro:** AI filtering live, 1 daily allowance, functioning Stripe  
+- **Backend:** Supabase + Stripe + OpenAI live, caching stable  
+- **Quality:** No console errors, tabs sync, safe fallbacks  
+
+---
+
+## 🚀 Post-MVP Roadmap (AI & Insights)
+- **Goal-linked AI:** Users set weekly goals → AI adapts recommendations  
+- **Dashboard:** Shows viewing patterns, productive/distracting ratios  
+- **Reflection nudges:** “You spent 80% of time learning — what will you apply?”  
+- **Multi-site support:** Block Reddit/TikTok for Pro+  
+- **AI Mentor Mode:** Personalized feedback loop & goal refinement  
+*(Phased rollout — once MVP stable and users onboarded)*
+
+---
