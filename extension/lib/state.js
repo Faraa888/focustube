@@ -39,7 +39,11 @@ const DEFAULTS = {
   ft_pro_manual_block_shorts: false, // true = Pro user manually blocked Shorts (shows Pro overlay on redirects)
 
   // Unlock feature (used for "pay to unlock")
-  ft_unlock_until_epoch: 0        // timestamp when temporary unlock expires
+  ft_unlock_until_epoch: 0,        // timestamp when temporary unlock expires
+
+  // AI Allowance (Pro users only - daily allowance for distracting content)
+  ft_allowance_videos_left: 1,     // daily allowance for distracting videos (default: 1)
+  ft_allowance_seconds_left: 600   // daily allowance for distracting content in seconds (default: 10 minutes = 600 seconds)
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -102,10 +106,16 @@ function resetShape() {
   return {
     ft_searches_today: 0,
     ft_short_visits_today: 0,
+    ft_shorts_engaged_today: 0,
+    ft_shorts_seconds_today: 0,
     ft_watch_visits_today: 0,
     ft_watch_seconds_today: 0,
     ft_blocked_today: false,
-    ft_unlock_until_epoch: 0
+    ft_block_shorts_today: false,
+    ft_pro_manual_block_shorts: false,
+    ft_unlock_until_epoch: 0,
+    ft_allowance_videos_left: 1,      // Reset to default: 1 video
+    ft_allowance_seconds_left: 600     // Reset to default: 10 minutes (600 seconds)
   };
 }
 

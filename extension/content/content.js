@@ -7,8 +7,8 @@
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────
 
-// Stripe Checkout URL (placeholder - replace with actual Stripe Checkout URL from Stripe dashboard)
-const STRIPE_CHECKOUT_URL = "https://buy.stripe.com/test_xxxxxxxxxxxxx";
+// Server URL (development)
+const SERVER_URL = "http://localhost:3000";
 
 // ─────────────────────────────────────────────────────────────
 // BASIC HELPERS
@@ -49,34 +49,78 @@ function showOverlay(reason, scope) {
       <h1>FocusTube Active</h1>
       <p id="ft-overlay-message">You're blocked from ${scope.toLowerCase()} content.</p>
       <p><strong>Reason:</strong> ${reason}</p>
-      <button id="ft-temp-unlock" class="ft-button ft-button-primary">
-        Temporary Unlock (Dev)
-      </button>
     </div>
   `;
 
-  // Dev-only: allow temp unlock for quick testing
-  overlay.querySelector("#ft-temp-unlock").addEventListener("click", async () => {
-    try {
-      if (!isChromeContextValid()) {
-        console.warn("[FT] Cannot unlock - extension context invalidated");
-        return;
-      }
-      await chrome.runtime.sendMessage({ type: "FT_TEMP_UNLOCK", minutes: 1 });
-      if (chrome.runtime.lastError) {
-        console.warn("[FT] Failed to unlock:", chrome.runtime.lastError.message);
-        alert("Failed to unlock: " + chrome.runtime.lastError.message);
-        return;
-      }
-      alert("Temporary unlock granted for 1 minute. Reload to continue.");
-      removeOverlay();
-    } catch (e) {
-      console.warn("[FT] Error unlocking:", e.message);
-      alert("Error unlocking: " + e.message);
-    }
-  });
-
   document.body.appendChild(overlay);
+}
+
+/**
+ * Opens Stripe Checkout by calling server endpoint
+ * Gets user email from storage and creates checkout session
+ * @param planType - "monthly", "annual", or "lifetime" (defaults to "monthly")
+ */
+async function openStripeCheckout(planType = "monthly") {
+  try {
+    // Get user email from storage
+    const storage = await chrome.storage.local.get(["ft_user_email"]);
+    const email = storage.ft_user_email;
+
+    if (!email || email.trim() === "") {
+      alert("Email not set.\n\nPlease set your email using the dev panel (bottom right corner) or extension settings.\n\nAfter setting your email, try upgrading again.");
+      return;
+    }
+
+    // Call server to create checkout session
+    const response = await fetch(`${SERVER_URL}/stripe/create-checkout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: email.trim(),
+        planType: planType,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || "Failed to create checkout session");
+    }
+
+    const data = await response.json();
+
+    if (!data.ok || !data.checkoutUrl) {
+      throw new Error("Invalid response from server");
+    }
+
+    // Open checkout URL in new tab
+    try {
+      window.open(data.checkoutUrl, "_blank");
+    } catch (e) {
+      console.warn("[FT] Error opening Stripe Checkout:", e.message);
+      // Fallback: try opening in same tab if popup blocked
+      window.location.href = data.checkoutUrl;
+    }
+  } catch (error) {
+    console.error("[FT] Error creating Stripe checkout:", error);
+    let errorMsg = "Failed to create checkout session";
+    
+    // Safely extract error message
+    if (error && typeof error === "object") {
+      if (error.message) {
+        errorMsg = error.message;
+      } else if (error.error) {
+        errorMsg = error.error;
+      } else if (typeof error.toString === "function") {
+        errorMsg = error.toString();
+      }
+    } else if (typeof error === "string") {
+      errorMsg = error;
+    }
+    
+    alert(`Failed to open checkout: ${errorMsg}\n\nPlease try again. If the problem persists:\n1. Check your email is set (dev panel bottom right)\n2. Ensure server is running (localhost:3000)\n3. Contact support if issue continues.`);
+  }
 }
 
 /**
@@ -110,14 +154,9 @@ function showShortsBlockedOverlay() {
 
   // Upgrade to Pro button - opens Stripe Checkout
   overlay.querySelector("#ft-upgrade-pro").addEventListener("click", () => {
-    try {
-      // Open Stripe Checkout in new tab
-      window.open(STRIPE_CHECKOUT_URL, "_blank");
-    } catch (e) {
-      console.warn("[FT] Error opening Stripe Checkout:", e.message);
-      // Fallback: try opening in same tab if popup blocked
-      window.location.href = STRIPE_CHECKOUT_URL;
-    }
+    openStripeCheckout("monthly").catch((err) => {
+      console.error("[FT] Checkout error:", err);
+    });
   });
 
   document.body.appendChild(overlay);
@@ -664,19 +703,8 @@ async function showGlobalLimitOverlay(plan, counters) {
 
   // Get button HTML based on plan
   let buttonsHTML = '';
-  if (plan === "pro") {
-    buttonsHTML = `
-      <button id="ft-check-usage" class="ft-button ft-button-primary">Check Your Usage! 📊</button>
-      <button id="ft-temp-unlock-pro" class="ft-button ft-button-secondary">Temporary Unlock (Pro) 🔓</button>
-    `;
-  } else {
-    buttonsHTML = `
-      <button id="ft-check-usage" class="ft-button ft-button-primary">Check Your Usage! 📊</button>
-    `;
-  }
-
-  // Add Reset button (always visible for testing - will be removed before launch)
-  buttonsHTML += `
+  buttonsHTML = `
+    <button id="ft-check-usage" class="ft-button ft-button-primary">Check Your Usage! 📊</button>
     <button id="ft-reset" class="ft-button ft-button-secondary" style="background: #ff6b6b; color: white;">Reset</button>
   `;
 
@@ -725,54 +753,23 @@ async function showGlobalLimitOverlay(plan, counters) {
           console.warn("[FT] Cannot reset - extension context invalidated");
           return;
         }
-        // Reset all counters to zero
-        await chrome.storage.local.set({
-          ft_searches_today: 0,
-          ft_short_visits_today: 0,
-          ft_shorts_engaged_today: 0,
-          ft_watch_visits_today: 0,
-          ft_watch_seconds_today: 0,
-          ft_shorts_seconds_today: 0,
-          ft_blocked_today: false,
-          ft_block_shorts_today: false,
-          ft_pro_manual_block_shorts: false,
-          ft_last_shorts_milestone: 0,
-          ft_last_time_milestone: 0
-        });
+        
+        const response = await chrome.runtime.sendMessage({ type: "FT_RESET_COUNTERS" });
         if (chrome.runtime.lastError) {
           console.warn("[FT] Failed to reset counters:", chrome.runtime.lastError.message);
           alert("Failed to reset: " + chrome.runtime.lastError.message);
           return;
         }
-        // Reload page to clear overlay and refresh counters
-        window.location.reload();
+        
+        if (response?.ok) {
+          // Reload page to clear overlay and refresh counters
+          window.location.reload();
+        } else {
+          alert(response?.error || "Failed to reset counters");
+        }
       } catch (e) {
         console.warn("[FT] Error resetting counters:", e.message);
         alert("Error resetting: " + e.message);
-      }
-    });
-  }
-
-  const unlockBtn = overlay.querySelector("#ft-temp-unlock-pro");
-  if (unlockBtn) {
-    unlockBtn.addEventListener("click", async () => {
-      try {
-        if (!isChromeContextValid()) {
-          console.warn("[FT] Cannot unlock - extension context invalidated");
-          return;
-        }
-        await chrome.runtime.sendMessage({ type: "FT_TEMP_UNLOCK", minutes: 10 });
-        if (chrome.runtime.lastError) {
-          console.warn("[FT] Failed to unlock:", chrome.runtime.lastError.message);
-          alert("Failed to unlock: " + chrome.runtime.lastError.message);
-          return;
-        }
-        removeOverlay();
-        // Reload page to continue
-        window.location.reload();
-      } catch (e) {
-        console.warn("[FT] Error unlocking:", e.message);
-        alert("Error unlocking: " + e.message);
       }
     });
   }
@@ -801,6 +798,11 @@ async function showSearchBlockOverlay(plan) {
       <button id="ft-return-yt" class="ft-button ft-button-primary">Return to YouTube</button>
     `;
   }
+  
+  // Add Reset button (dev convenience)
+  buttonsHTML += `
+    <button id="ft-reset" class="ft-button ft-button-secondary" style="background: #ff6b6b; color: white;">Reset</button>
+  `;
 
   overlay.innerHTML = `
     <div class="ft-box">
@@ -823,13 +825,37 @@ async function showSearchBlockOverlay(plan) {
   const upgradeBtn = overlay.querySelector("#ft-upgrade-pro");
   if (upgradeBtn) {
     upgradeBtn.addEventListener("click", () => {
+      openStripeCheckout("monthly").catch((err) => {
+        console.error("[FT] Checkout error:", err);
+      });
+    });
+  }
+
+  const resetBtn = overlay.querySelector("#ft-reset");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", async () => {
       try {
-        // Open Stripe Checkout in new tab
-        window.open(STRIPE_CHECKOUT_URL, "_blank");
+        if (!isChromeContextValid()) {
+          console.warn("[FT] Cannot reset - extension context invalidated");
+          return;
+        }
+        
+        const response = await chrome.runtime.sendMessage({ type: "FT_RESET_COUNTERS" });
+        if (chrome.runtime.lastError) {
+          console.warn("[FT] Failed to reset counters:", chrome.runtime.lastError.message);
+          alert("Failed to reset: " + chrome.runtime.lastError.message);
+          return;
+        }
+        
+        if (response?.ok) {
+          // Reload page to clear overlay and refresh counters
+          window.location.reload();
+        } else {
+          alert(response?.error || "Failed to reset counters");
+        }
       } catch (e) {
-        console.warn("[FT] Error opening Stripe Checkout:", e.message);
-        // Fallback: try opening in same tab if popup blocked
-        window.location.href = STRIPE_CHECKOUT_URL;
+        console.warn("[FT] Error resetting counters:", e.message);
+        alert("Error resetting: " + e.message);
       }
     });
   }
@@ -1503,8 +1529,8 @@ async function stopGlobalTimeTracking() {
 // MODE CHANGE HANDLER (Dev/User toggle listener)
 // ─────────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg?.type === "FT_MODE_CHANGED") {
-    console.log(`[FT content] Mode changed → ${msg.mode}, Plan → ${msg.plan}`);
+  if (msg?.type === "FT_MODE_CHANGED" || msg?.type === "FT_PLAN_CHANGED") {
+    console.log(`[FT content] Plan changed → ${msg.plan}`);
     // Clear overlays & force fresh navigation logic
     removeOverlay();
     scheduleNav(0);
@@ -1568,6 +1594,26 @@ async function handleNavigation() {
     }
   }
 
+  // Extract video title for watch pages (for AI classification)
+  let videoTitle = null;
+  if (pageType === "WATCH") {
+    try {
+      // Try to get video title from page
+      const titleElement = document.querySelector("h1.ytd-watch-metadata yt-formatted-string, h1.ytd-video-primary-info-renderer, h1.title");
+      if (titleElement) {
+        videoTitle = titleElement.textContent?.trim() || null;
+      } else {
+        // Fallback: try meta tag
+        const metaTitle = document.querySelector('meta[property="og:title"]');
+        if (metaTitle) {
+          videoTitle = metaTitle.getAttribute("content")?.trim() || null;
+        }
+      }
+    } catch (e) {
+      console.warn("[FT] Error extracting video title:", e.message || e);
+    }
+  }
+
   // Ask background for a decision
   let resp;
   try {
@@ -1579,7 +1625,8 @@ async function handleNavigation() {
     resp = await chrome.runtime.sendMessage({
       type: "FT_NAVIGATED",
       pageType,
-      url: location.href
+      url: location.href,
+      videoTitle: videoTitle // Pass video title for AI classification (Pro users only)
     });
     
     if (chrome.runtime.lastError) {
@@ -1724,15 +1771,33 @@ async function updateDevPanelStatus(panel) {
   try {
     if (!isChromeContextValid()) return;
     
-    const { ft_mode, ft_plan } = await chrome.storage.local.get(["ft_mode", "ft_plan"]);
+    const { ft_plan, ft_user_email } = await chrome.storage.local.get(["ft_plan", "ft_user_email"]);
     if (chrome.runtime.lastError) {
       console.warn("[FT] Failed to get dev panel status:", chrome.runtime.lastError.message);
       return;
     }
     
+    // Update status display
     const statusEl = panel.querySelector("#ft-status");
     if (statusEl) {
-      statusEl.textContent = `Mode: ${ft_mode || "user"} | Plan: ${ft_plan || "free"}`;
+      const emailText = ft_user_email && ft_user_email.trim() !== "" ? ft_user_email : "Not set";
+      const planText = ft_plan || "free";
+      statusEl.innerHTML = `
+        <div>Email: ${emailText}</div>
+        <div style="margin-top:4px;font-size:11px;">Plan: ${planText}</div>
+      `;
+    }
+    
+    // Update email input value
+    const emailInput = panel.querySelector("#ft-email-input");
+    if (emailInput) {
+      emailInput.value = ft_user_email || "";
+    }
+    
+    // Update plan selector to match current plan
+    const planSelect = panel.querySelector("#ft-plan-select");
+    if (planSelect) {
+      planSelect.value = ft_plan || "free";
     }
   } catch (err) {
     console.warn("[FT content] Could not update dev panel status:", err);
@@ -1766,44 +1831,118 @@ function injectDevToggle() {
   panel.style.userSelect = "none";
   panel.innerHTML = `
   <strong>FocusTube Dev</strong>
-  <button id="ft-toggle-mode">Toggle Mode (Dev/User)</button>
-  <button id="ft-toggle-plan">Toggle Plan (Free/Pro)</button>
+  <div style="margin-top:8px;">
+    <input type="email" id="ft-email-input" placeholder="Enter email" style="width:100%;padding:4px;margin-bottom:4px;border-radius:4px;border:none;font-size:12px;background:rgba(255,255,255,0.1);color:white;box-sizing:border-box;">
+    <button id="ft-save-email" style="width:100%;margin-bottom:4px;font-size:11px;padding:4px;">Save Email</button>
+    <div style="display:flex;gap:4px;margin-bottom:4px;">
+      <select id="ft-plan-select" style="flex:1;padding:4px;border-radius:4px;border:none;font-size:12px;background:rgba(255,255,255,0.1);color:white;">
+        <option value="free">Free</option>
+        <option value="pro">Pro</option>
+      </select>
+      <button id="ft-set-plan" style="flex:1;font-size:11px;padding:4px;">Set Plan</button>
+    </div>
+    <button id="ft-reset-counters" style="width:100%;margin-bottom:4px;font-size:11px;padding:4px;background:#ef4444;">Reset Counters</button>
+  </div>
   <div id="ft-status" style="margin-top:6px;font-size:12px;opacity:0.8;"></div>
 `;
 
   // Click handlers — these send messages to background.js
-  panel.querySelector("#ft-toggle-mode").onclick = async () => {
+  // Email save handler (just saves email, no sync)
+  panel.querySelector("#ft-save-email").onclick = async () => {
+    console.log("[FT] Save Email button clicked");
     try {
-      if (!isChromeContextValid()) {
-        console.warn("[FT] Cannot toggle mode - extension context invalidated");
+      if (!chrome?.runtime?.id) {
+        console.error("[FT] Chrome runtime not available");
+        alert("Extension context invalidated. Please reload the page.");
         return;
       }
-      await chrome.runtime.sendMessage({ type: "FT_TOGGLE_MODE" });
-      if (chrome.runtime.lastError) {
-        console.warn("[FT] Failed to toggle mode:", chrome.runtime.lastError.message);
+      
+      const emailInput = panel.querySelector("#ft-email-input");
+      const email = emailInput?.value?.trim() || "";
+      
+      if (!email) {
+        alert("Please enter an email address");
         return;
       }
-      await updateDevPanelStatus(panel);
-      console.log("[FT content] Mode toggled successfully");
+      
+      console.log("[FT] Saving email:", email);
+      const response = await chrome.runtime.sendMessage({ 
+        type: "FT_SET_EMAIL", 
+        email: email 
+      });
+      console.log("[FT] Save Email response:", response);
+      
+      if (response?.ok) {
+        await updateDevPanelStatus(panel);
+        console.log("[FT content] Email saved successfully");
+        alert("Email saved successfully!");
+      } else {
+        console.warn("[FT] Save Email failed:", response?.error);
+        alert(response?.error || "Failed to save email");
+      }
     } catch (err) {
-      console.warn("[FT content] Error toggling mode:", err);
+      console.error("[FT content] Error saving email:", err);
+      alert("Error saving email: " + (err.message || String(err)));
     }
   };
-  panel.querySelector("#ft-toggle-plan").onclick = async () => {
+  
+  // Set Plan handler (updates Supabase, then syncs)
+  panel.querySelector("#ft-set-plan").onclick = async () => {
+    console.log("[FT] Set Plan button clicked");
     try {
-      if (!isChromeContextValid()) {
-        console.warn("[FT] Cannot toggle plan - extension context invalidated");
+      if (!chrome?.runtime?.id) {
+        console.error("[FT] Chrome runtime not available");
+        alert("Extension context invalidated. Please reload the page.");
         return;
       }
-      await chrome.runtime.sendMessage({ type: "FT_TOGGLE_PLAN" });
-      if (chrome.runtime.lastError) {
-        console.warn("[FT] Failed to toggle plan:", chrome.runtime.lastError.message);
-        return;
+      
+      const planSelect = panel.querySelector("#ft-plan-select");
+      const selectedPlan = planSelect?.value || "free";
+      
+      const response = await chrome.runtime.sendMessage({ 
+        type: "FT_SET_PLAN", 
+        plan: selectedPlan 
+      });
+      console.log("[FT] Set Plan response:", response);
+      
+      if (response?.ok) {
+        await updateDevPanelStatus(panel);
+        console.log("[FT content] Plan set and synced successfully");
+        alert(`Plan set to ${selectedPlan} and synced!`);
+      } else {
+        console.warn("[FT] Set Plan failed:", response?.error);
+        alert(response?.error || "Failed to set plan");
       }
-      await updateDevPanelStatus(panel);
-      console.log("[FT content] Plan toggled successfully");
     } catch (err) {
-      console.warn("[FT content] Error toggling plan:", err);
+      console.error("[FT content] Error setting plan:", err);
+      alert("Error setting plan: " + (err.message || String(err)));
+    }
+  };
+  
+  // Reset Counters handler
+  panel.querySelector("#ft-reset-counters").onclick = async () => {
+    console.log("[FT] Reset Counters button clicked");
+    try {
+      if (!chrome?.runtime?.id) {
+        console.error("[FT] Chrome runtime not available");
+        alert("Extension context invalidated. Please reload the page.");
+        return;
+      }
+      
+      const response = await chrome.runtime.sendMessage({ type: "FT_RESET_COUNTERS" });
+      console.log("[FT] Reset Counters response:", response);
+      
+      if (response?.ok) {
+        await updateDevPanelStatus(panel);
+        console.log("[FT content] Counters reset successfully");
+        alert("All counters reset!");
+      } else {
+        console.warn("[FT] Reset Counters failed:", response?.error);
+        alert(response?.error || "Failed to reset counters");
+      }
+    } catch (err) {
+      console.error("[FT content] Error resetting counters:", err);
+      alert("Error resetting counters: " + (err.message || String(err)));
     }
   };
 
