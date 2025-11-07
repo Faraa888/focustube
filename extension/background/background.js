@@ -13,6 +13,7 @@ import {
   incrementEngagedShorts,   // increment engaged Shorts counter
   getSnapshot,             // debug snapshot (optional)
   getPlanConfig,           // read plan + limits
+  getTrialStatus,          // get trial status (checks expiration)
   isTemporarilyUnlocked,
   resetCounters,
   setPlan,
@@ -64,13 +65,98 @@ let lastClassificationRequest = {
 };
 
 // ─────────────────────────────────────────────────────────────
-// BACKGROUND SYNC: Sync plan every 10 minutes
+// USER ID HELPER (Migration-Friendly)
+// ─────────────────────────────────────────────────────────────
+/**
+ * Get user ID for API requests
+ * Currently returns email, but will read from website session token when ready
+ * This makes migration easy - just swap this function
+ * @returns {Promise<string|null>} User ID (email for now) or null if not set
+ */
+async function getUserId() {
+  const { ft_user_email } = await getLocal(["ft_user_email"]);
+  if (!ft_user_email || ft_user_email.trim() === "") {
+    return null;
+  }
+  return ft_user_email.trim();
+}
+
+// ─────────────────────────────────────────────────────────────
+// BACKGROUND SYNC: Sync plan every 6 hours
 // ─────────────────────────────────────────────────────────────
 setInterval(() => {
   syncPlanFromServer().catch((err) => {
     console.warn("[FT] Background plan sync failed:", err);
   });
-}, 10 * 60 * 1000); // 10 minutes
+}, 6 * 60 * 60 * 1000); // 6 hours
+
+// ─────────────────────────────────────────────────────────────
+// WATCH EVENT BATCH SENDER
+// ─────────────────────────────────────────────────────────────
+/**
+ * Send batched watch events to server
+ * @returns {Promise<boolean>} true if sent successfully, false otherwise
+ */
+async function sendWatchEventBatch() {
+  try {
+    const userId = await getUserId();
+    if (!userId || !SERVER_URL) {
+      return false;
+    }
+
+    const { ft_watch_event_queue } = await getLocal(["ft_watch_event_queue"]);
+    const queue = Array.isArray(ft_watch_event_queue) ? ft_watch_event_queue : [];
+
+    if (queue.length === 0) {
+      return true; // Nothing to send
+    }
+
+    // Send batch to server
+    const response = await fetch(`${SERVER_URL}/events/watch`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        events: queue,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn(`[FT] Failed to send watch event batch: ${response.status} ${response.statusText}`);
+      return false;
+    }
+
+    const data = await response.json();
+    if (!data.ok) {
+      console.warn("[FT] Server returned error for watch event batch:", data.error);
+      return false;
+    }
+
+    // Clear queue after successful send
+    await setLocal({ ft_watch_event_queue: [] });
+    LOG("Watch event batch sent:", { count: queue.length });
+    return true;
+  } catch (error) {
+    console.warn("[FT] Error sending watch event batch:", error?.message || error);
+    return false;
+  }
+}
+
+// Send batch every 15 minutes
+setInterval(() => {
+  sendWatchEventBatch().catch((err) => {
+    console.warn("[FT] Background watch event batch failed:", err);
+  });
+}, 15 * 60 * 1000); // 15 minutes
+
+// Send batch on extension unload (fire-and-forget)
+chrome.runtime.onSuspend.addListener(() => {
+  sendWatchEventBatch().catch((err) => {
+    console.warn("[FT] Unload watch event batch failed:", err);
+  });
+});
 
 // ─────────────────────────────────────────────────────────────
 // COUNTER UPDATER: bump the correct counter for page type
@@ -134,10 +220,10 @@ async function handleMessage(msg) {
 
   if (msg?.type === "FT_SET_PLAN") {
     const plan = msg?.plan?.trim() || "";
-    const { ft_user_email } = await getLocal(["ft_user_email"]);
+    const userId = await getUserId();
     
-    if (!ft_user_email || ft_user_email.trim() === "") {
-      return { ok: false, error: "Email must be set first" };
+    if (!userId) {
+      return { ok: false, error: "User ID must be set first" };
     }
     
     if (!plan || !["free", "pro"].includes(plan)) {
@@ -153,7 +239,7 @@ async function handleMessage(msg) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: ft_user_email.trim(),
+          email: userId, // For now, userId is email
           plan: plan,
         }),
       });
@@ -203,6 +289,74 @@ async function handleMessage(msg) {
     }
   }
 
+  if (msg?.type === "FT_GET_STATUS") {
+    try {
+      const status = await getTrialStatus();
+      return { ok: true, plan: status.plan, days_left: status.days_left };
+    } catch (err) {
+      console.error("[FT] Get status error:", err);
+      return { ok: false, error: String(err) };
+    }
+  }
+
+  if (msg?.type === "FT_SAVE_JOURNAL") {
+    try {
+      const { note, context } = msg;
+      if (!note || typeof note !== "string" || note.trim() === "") {
+        return { ok: false, error: "Note is required" };
+      }
+
+      const userId = await getUserId();
+      if (!userId || !SERVER_URL) {
+        return { ok: false, error: "User ID or server URL not set" };
+      }
+
+      // Send to server
+      const response = await fetch(`${SERVER_URL}/journal`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          note: note.trim(),
+          context: context || {},
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to save journal entry");
+      }
+
+      const data = await response.json();
+      if (!data.ok) {
+        throw new Error(data.error || "Failed to save journal entry");
+      }
+
+      LOG("Journal entry saved:", { note: note.substring(0, 50) + "..." });
+      return { ok: true, message: "Journal entry saved" };
+    } catch (err) {
+      console.error("[FT] Save journal error:", err);
+      return { ok: false, error: String(err) };
+    }
+  }
+
+  if (msg?.type === "FT_CLASSIFY_VIDEO") {
+    try {
+      const videoMetadata = msg?.videoMetadata;
+      if (!videoMetadata || !videoMetadata.video_id) {
+        return { ok: false, error: "Missing videoMetadata or video_id" };
+      }
+      
+      const result = await classifyVideo(videoMetadata);
+      return { ok: true, classification: result };
+    } catch (err) {
+      console.error("[FT] Classify video error:", err);
+      return { ok: false, error: String(err) };
+    }
+  }
+
   return { ok: false, error: "unknown message type" };
 }
 
@@ -227,6 +381,63 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 const SERVER_URL = getServerUrlForBackground();
 
 /**
+ * Classify video with caching (24h per video_id + date)
+ * @param {object} videoMetadata - Video metadata object
+ * @returns {Promise<object|null>} - Classification result or null if error
+ */
+async function classifyVideo(videoMetadata) {
+  if (!videoMetadata || !videoMetadata.video_id) {
+    console.warn("[FT] classifyVideo: Missing video_id");
+    return null;
+  }
+
+  // Build cache key: video_id + today's date
+  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+  const cacheKey = `ft_ai_cache_${videoMetadata.video_id}_${today}`;
+
+  // Check cache first
+  try {
+    const cached = await getLocal([cacheKey]);
+    if (cached[cacheKey]) {
+      const cachedData = cached[cacheKey];
+      // Check if cache is still valid (within 24 hours)
+      const cacheAge = Date.now() - (cachedData.timestamp || 0);
+      const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+      
+      if (cacheAge < CACHE_TTL_MS) {
+        LOG("AI classification cache hit:", { video_id: videoMetadata.video_id.substring(0, 10), age: `${Math.round(cacheAge / 1000)}s` });
+        return cachedData.result;
+      } else {
+        // Cache expired, remove it
+        await setLocal({ [cacheKey]: null });
+      }
+    }
+  } catch (e) {
+    console.warn("[FT] Error checking cache:", e.message);
+  }
+
+  // Not cached or expired - call classifyContent
+  const result = await classifyContent(videoMetadata, "watch");
+  
+  if (result) {
+    // Save to cache
+    try {
+      await setLocal({
+        [cacheKey]: {
+          result: result,
+          timestamp: Date.now(),
+        },
+      });
+      LOG("AI classification cached:", { video_id: videoMetadata.video_id.substring(0, 10) });
+    } catch (e) {
+      console.warn("[FT] Error saving cache:", e.message);
+    }
+  }
+
+  return result;
+}
+
+/**
  * Classify content using AI (Pro users only)
  * @param {string|object} input - Text to classify (search query string) or video metadata object
  * @param {string} context - Context ("search" or "watch")
@@ -234,23 +445,24 @@ const SERVER_URL = getServerUrlForBackground();
  */
 async function classifyContent(input, context = "search") {
   try {
-    // Get user email, plan, and goals
-    const { ft_user_email, ft_plan, ft_user_goals } = await getLocal(["ft_user_email", "ft_plan", "ft_user_goals"]);
+    // Get user ID, plan, and goals
+    const userId = await getUserId();
+    const { ft_plan, ft_user_goals } = await getLocal(["ft_plan", "ft_user_goals"]);
     
-    // Only classify for Pro users
-    if (!ft_plan || ft_plan !== "pro") {
+    // Only classify for Pro or Trial users (trial gets Pro features)
+    if (!ft_plan || (ft_plan !== "pro" && ft_plan !== "trial")) {
       return null;
     }
 
-    // Need email for user_id
-    if (!ft_user_email || ft_user_email.trim() === "") {
-      console.warn("[FT] No email set, cannot classify content");
+    // Need user_id for classification
+    if (!userId) {
+      console.warn("[FT] No user ID set, cannot classify content");
       return null;
     }
 
     // Prepare request body
     let requestBody = {
-      user_id: ft_user_email.trim(),
+      user_id: userId,
       context: context,
     };
     
@@ -364,7 +576,7 @@ function extractVideoId(url) {
 }
 
 /**
- * Track time spent on a video, update allowance if distracting, and send analytics
+ * Track time spent on a video, update allowance if distracting, and queue analytics
  * Called when user navigates away from a WATCH page
  * @param {string} videoId - Video ID
  * @param {number} startTime - Timestamp when video started
@@ -399,7 +611,35 @@ async function finalizeVideoWatch(videoId, startTime, category) {
     });
   }
 
-  // Send watch time to server (fire-and-forget)
+  // Get video title and channel from current video classification
+  const { ft_current_video_classification } = await getLocal(["ft_current_video_classification"]);
+  const title = ft_current_video_classification?.title || "Unknown";
+  const channel = ft_current_video_classification?.channel || "Unknown";
+
+  // Create watch event object
+  const watchEvent = {
+    video_id: videoId,
+    title: title,
+    channel: channel,
+    seconds: durationSeconds,
+    started_at: new Date(startTime).toISOString(),
+    finished_at: new Date(endTime).toISOString(),
+  };
+
+  // Add to queue (will be batched and sent later)
+  const { ft_watch_event_queue } = await getLocal(["ft_watch_event_queue"]);
+  const queue = Array.isArray(ft_watch_event_queue) ? ft_watch_event_queue : [];
+  queue.push(watchEvent);
+  await setLocal({ ft_watch_event_queue: queue });
+
+  LOG("Watch event queued:", {
+    videoId: videoId.substring(0, 10),
+    title: title.substring(0, 30),
+    duration: `${durationSeconds}s`,
+    queueSize: queue.length,
+  });
+
+  // Also send to legacy endpoint (for backward compatibility)
   sendWatchTimeToServer(videoId, durationSeconds, category).catch((err) => {
     console.warn("[FT] Failed to send watch time to server:", err?.message || err);
   });
@@ -416,8 +656,8 @@ async function sendWatchTimeToServer(videoId, durationSeconds, category) {
       return;
     }
 
-    const { ft_user_email } = await getLocal(["ft_user_email"]);
-    if (!ft_user_email || !SERVER_URL) {
+    const userId = await getUserId();
+    if (!userId || !SERVER_URL) {
       return;
     }
 
@@ -427,7 +667,7 @@ async function sendWatchTimeToServer(videoId, durationSeconds, category) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        user_id: ft_user_email,
+        user_id: userId,
         video_id: videoId,
         watch_seconds: durationSeconds,
         category,
@@ -591,13 +831,15 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
               videoId,
               category: aiClassification.category,
               startTime: Date.now(),
-              title: videoMetadata.title,
+              title: videoMetadata.title || "Unknown",
+              channel: videoMetadata.channel || "Unknown",
             },
           });
           LOG("Started tracking video watch:", {
             videoId: videoId.substring(0, 10),
             category: aiClassification.category,
             title: videoMetadata.title?.substring(0, 30) || "unknown",
+            channel: videoMetadata.channel?.substring(0, 30) || "unknown",
           });
         }
       } else {

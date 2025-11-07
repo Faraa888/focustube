@@ -77,6 +77,20 @@ function showOverlay(reason, scope) {
 }
 */
 
+// Add this helper function before openStripeCheckout:
+async function checkServerHealth(serverUrl) {
+  try {
+    const response = await fetch(`${serverUrl}/health`, {
+      method: "GET",
+      signal: AbortSignal.timeout(3000), // 3 second timeout
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn("[FT] Server health check failed:", error.message);
+    return false;
+  }
+}
+
 /**
  * Opens Stripe Checkout by calling server endpoint
  * Gets user email from storage and creates checkout session
@@ -95,6 +109,13 @@ async function openStripeCheckout(planType = "monthly") {
 
     // Get server URL (checks storage for override, defaults to localhost)
     const serverUrl = await getServerUrl();
+    
+    // Check if server is reachable
+    const serverHealthy = await checkServerHealth(serverUrl);
+    if (!serverHealthy) {
+      alert("Cannot connect to server.\n\nPlease ensure:\n1. Server is running (cd server && npm run dev)\n2. Server is on port 3000\n3. Check server terminal for errors");
+      return;
+    }
     
     // Call server to create checkout session
     const response = await fetch(`${serverUrl}/stripe/create-checkout`, {
@@ -415,6 +436,17 @@ let lastKnownBadgeValues = { engaged: 0, scrolled: 0, seconds: 0 }; // Last know
 let globalTimeTracker = null; // Interval timer for global time tracking
 let globalTimeStart = null; // When global time tracking started
 let lastGlobalSaveTime = null; // Last time we saved global time
+
+// Video watch time tracking for AI classification (45 seconds trigger)
+let videoWatchTimer = null; // Timer for 45-second watch trigger
+let currentWatchVideoId = null; // Current video being watched
+let videoWatchStartTime = null; // When current video watch started
+let videoClassified = false; // Whether current video has been classified
+
+// Journal nudge tracking (1 minute trigger for distracting content)
+let journalNudgeTimer = null; // Timer for 1-minute journal nudge trigger
+let journalNudgeShown = false; // Whether journal nudge has been shown for current video
+let currentVideoAIClassification = null; // Store AI classification for journal nudge check
 
 /**
  * Extracts video ID from YouTube Shorts URL
@@ -764,7 +796,7 @@ function getProductivityExamples(totalMinutes) {
       "☕ Grab a drink and look away from your screen",
       "💨 Step outside for a minute of fresh air",
       "🧘 Take two deep breaths and stretch your body",
-      "📱 Reply to that one message you’ve been ignoring",
+      "📱 Reply to that one message you've been ignoring",
       "🧠 Think about one thing you actually want to get done today",
     ],
     5: [
@@ -783,7 +815,7 @@ function getProductivityExamples(totalMinutes) {
     ],
     15: [
       "🏃 Go for a quick walk outside",
-      "📦 Do a small chore you’ve been putting off",
+      "📦 Do a small chore you've been putting off",
       "🎧 Listen to a short podcast or playlist",
       "👥 Make plans with a friend",
       "📓 Write or journal for a few minutes",
@@ -792,7 +824,7 @@ function getProductivityExamples(totalMinutes) {
       "🌳 Go outside and take a proper break from screens",
       "🍝 Cook and eat something simple",
       "📖 Read a full chapter of a book",
-      "💡 Sketch out an idea you’ve been thinking about",
+      "💡 Sketch out an idea you've been thinking about",
       "🧺 Start a small household task like laundry or dishes",
     ],
   };
@@ -1380,12 +1412,12 @@ async function startShortsEngagementTracking() {
 
 /**
  * Checks if time-based milestone reached and shows popup (if not already shown)
- * Milestones: 2 min (120s), 5 min (300s), 10 min (600s), 15 min (900s), 20 min (1200s)
+ * Milestones: 2 min (120s), 5 min (300s), 10 min (600s)
  */
 async function checkAndShowTimeMilestone(totalSeconds) {
   if (!isChromeContextValid()) return;
   
-  const MILESTONES = [120, 300, 600, 900, 1200]; // 2, 5, 10, 15, 20 minutes in seconds
+  const MILESTONES = [120, 300, 600]; // 2, 5, 10 minutes in seconds (MVP spec)
   
   try {
     // Get last milestone threshold shown
@@ -1530,6 +1562,117 @@ async function showShortsMilestonePopup(engaged, scrolled, totalSeconds) {
   });
   
   document.body.appendChild(popup);
+}
+
+/**
+ * Shows journal nudge popup (1 minute into distracting content)
+ * Temporary, dismissible popup asking "What pulled you off track?"
+ * @param {Object} videoMetadata - Video metadata (title, channel, url, etc.)
+ */
+function showJournalNudge(videoMetadata) {
+  // Remove any existing journal nudge
+  const existingNudge = document.getElementById("ft-journal-nudge");
+  if (existingNudge) existingNudge.remove();
+  
+  // Mark as shown to prevent duplicates
+  journalNudgeShown = true;
+  
+  // Create nudge popup
+  const nudge = document.createElement("div");
+  nudge.id = "ft-journal-nudge";
+  nudge.className = "ft-journal-nudge";
+  
+  const videoTitle = videoMetadata?.title || "this video";
+  const videoChannel = videoMetadata?.channel || "";
+  const videoUrl = videoMetadata?.url || location.href;
+  
+  nudge.innerHTML = `
+    <div class="ft-journal-nudge-box">
+      <button class="ft-journal-nudge-close" id="ft-journal-nudge-close" aria-label="Close">×</button>
+      <h3>What pulled you off track?</h3>
+      <p class="ft-journal-nudge-subtitle">You've been watching ${videoTitle}${videoChannel ? ` from ${videoChannel}` : ''} for a minute.</p>
+      <textarea 
+        id="ft-journal-nudge-input" 
+        class="ft-journal-nudge-input" 
+        placeholder="What made you click on this? What were you feeling?"
+        rows="3"
+      ></textarea>
+      <div class="ft-journal-nudge-buttons">
+        <button id="ft-journal-nudge-save" class="ft-journal-nudge-btn ft-journal-nudge-btn-primary">Save</button>
+        <button id="ft-journal-nudge-dismiss" class="ft-journal-nudge-btn ft-journal-nudge-btn-secondary">Dismiss</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(nudge);
+  
+  // Close button handler
+  const closeBtn = nudge.querySelector("#ft-journal-nudge-close");
+  const dismissBtn = nudge.querySelector("#ft-journal-nudge-dismiss");
+  const saveBtn = nudge.querySelector("#ft-journal-nudge-save");
+  const input = nudge.querySelector("#ft-journal-nudge-input");
+  
+  const removeNudge = () => {
+    if (nudge.parentNode) {
+      nudge.parentNode.removeChild(nudge);
+    }
+  };
+  
+  closeBtn.addEventListener("click", removeNudge);
+  dismissBtn.addEventListener("click", removeNudge);
+  
+  // Save button handler
+  saveBtn.addEventListener("click", async () => {
+    const note = input.value.trim();
+    
+    if (!note) {
+      // If empty, just dismiss
+      removeNudge();
+      return;
+    }
+    
+    // Disable button while saving
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving...";
+    
+    try {
+      // Send to background to save to server
+      const response = await chrome.runtime.sendMessage({
+        type: "FT_SAVE_JOURNAL",
+        note: note,
+        context: {
+          url: videoUrl,
+          title: videoTitle,
+          channel: videoChannel,
+          source: "watch"
+        }
+      });
+      
+      if (response?.ok) {
+        saveBtn.textContent = "Saved!";
+        setTimeout(removeNudge, 1000); // Auto-dismiss after 1 second
+      } else {
+        throw new Error(response?.error || "Failed to save");
+      }
+    } catch (err) {
+      console.error("[FT] Error saving journal entry:", err);
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save";
+      alert("Failed to save note. Please try again.");
+    }
+  });
+  
+  // Auto-dismiss after 30 seconds (optional)
+  setTimeout(() => {
+    if (nudge.parentNode) {
+      removeNudge();
+    }
+  }, 30 * 1000);
+  
+  // Focus textarea
+  setTimeout(() => {
+    input.focus();
+  }, 100);
 }
 
 /* COMMENTED OUT: AI distracting popup - to be replaced with nudge/hide/remove per user request
@@ -1864,8 +2007,8 @@ async function startGlobalTimeTracking() {
         console.warn("[FT] Failed to get plan for limit check:", chrome.runtime.lastError.message);
       } else {
         const plan = ft_plan || "free";
-        // Get limit from config (2 mins Free = 120s, 3 mins Pro = 180s)
-        const limitSeconds = plan === "pro" ? 180 : 120;
+        // Get limit from config (60 mins Free = 3600s, 90 mins Pro = 5400s)
+        const limitSeconds = plan === "pro" ? 5400 : 3600;
         
         // Check if limit reached
         if (currentTotalSeconds >= limitSeconds) {
@@ -2059,7 +2202,7 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 /**
  * Core navigation handler — runs whenever the page changes or refreshes.
- * 1. Detects what kind of page we’re on
+ * 1. Detects what kind of page we're on
  * 2. Sends message to background for decision
  * 3. Applies result (block / allow)
  */
@@ -2137,6 +2280,110 @@ async function handleNavigation() {
   // Extract video metadata for watch pages (for AI classification)
   let videoMetadata = null;
   if (pageType === "WATCH") {
+    // Start 45-second watch timer for AI classification
+    const videoId = extractVideoIdFromUrl();
+    if (videoId && videoId !== currentWatchVideoId) {
+      // New video - reset tracking
+      if (videoWatchTimer) {
+        clearTimeout(videoWatchTimer);
+        videoWatchTimer = null;
+      }
+      currentWatchVideoId = videoId;
+      videoWatchStartTime = Date.now();
+      videoClassified = false;
+      journalNudgeShown = false;
+      currentVideoAIClassification = null;
+      
+      // Start 1-minute journal nudge timer (starts immediately when video starts)
+      // This will show nudge at 60 seconds if content is distracting
+      // Timer will be cancelled if content is not distracting when classification returns
+      journalNudgeTimer = setTimeout(async () => {
+        if (currentWatchVideoId === videoId && !journalNudgeShown) {
+          // Check if we have classification yet
+          if (currentVideoAIClassification) {
+            const distraction = currentVideoAIClassification.distraction_level || 
+                              currentVideoAIClassification.category || "neutral";
+            if (distraction === "distracting") {
+              // Check if Pro/Trial plan
+              const { ft_plan } = await chrome.storage.local.get(["ft_plan"]);
+              if (ft_plan === "pro" || ft_plan === "trial") {
+                // Extract metadata now for nudge
+                const meta = extractVideoMetadata();
+                if (meta) {
+                  meta.video_id = videoId;
+                  meta.url = location.href;
+                }
+                showJournalNudge(meta || { title: "this video" });
+              }
+            }
+          } else {
+            // Classification hasn't returned yet - wait a bit more and check again
+            // This handles case where classification is slow
+            console.log("[FT] Journal nudge timer fired but classification not ready, waiting 5 more seconds...");
+            setTimeout(async () => {
+              if (currentWatchVideoId === videoId && 
+                  currentVideoAIClassification && 
+                  !journalNudgeShown) {
+                const distraction = currentVideoAIClassification.distraction_level || 
+                                  currentVideoAIClassification.category || "neutral";
+                if (distraction === "distracting") {
+                  const { ft_plan } = await chrome.storage.local.get(["ft_plan"]);
+                  if (ft_plan === "pro" || ft_plan === "trial") {
+                    const meta = extractVideoMetadata();
+                    if (meta) {
+                      meta.video_id = videoId;
+                      meta.url = location.href;
+                    }
+                    showJournalNudge(meta || { title: "this video" });
+                  }
+                }
+              }
+            }, 5 * 1000); // Wait 5 more seconds
+          }
+        }
+      }, 60 * 1000); // 1 minute from video start
+      
+      // Start 45-second timer (non-blocking)
+      // Note: videoMetadata will be extracted later in the function, so we'll extract it in the timeout
+      videoWatchTimer = setTimeout(async () => {
+        if (currentWatchVideoId === videoId && !videoClassified) {
+          // Still on same video and not yet classified
+          try {
+            // Extract metadata now (videoMetadata from outer scope may not be ready yet)
+            let meta = extractVideoMetadata();
+            if (meta) {
+              meta.video_id = videoId;
+              meta.url = location.href;
+            }
+            
+            if (meta && meta.video_id && meta.title) {
+              // Send classification request to background (non-blocking)
+              chrome.runtime.sendMessage({
+                type: "FT_CLASSIFY_VIDEO",
+                videoMetadata: meta,
+              }).then((response) => {
+                if (response?.ok && response?.classification) {
+                  console.log("[FT] Video classified after 45s:", {
+                    video_id: videoId.substring(0, 10),
+                    category: response.classification.category_primary || response.classification.category,
+                    distraction: response.classification.distraction_level || response.classification.category,
+                  });
+                  videoClassified = true;
+                }
+              }).catch((err) => {
+                console.warn("[FT] Error classifying video:", err.message);
+              });
+            } else {
+              console.warn("[FT] Could not extract metadata for 45s classification:", { videoId, hasMeta: !!meta });
+            }
+          } catch (e) {
+            console.warn("[FT] Error in 45s classification trigger:", e.message);
+          }
+        }
+      }, 45 * 1000); // 45 seconds
+    } else if (videoId === currentWatchVideoId && videoClassified) {
+      // Same video, already classified - do nothing
+    }
     try {
       const initialVideoId = extractVideoIdFromUrl();
       console.log("[FT] Starting metadata extraction for video:", initialVideoId);
@@ -2292,6 +2539,43 @@ async function handleNavigation() {
       const responseVideoId = ai.video_id || "unknown";
       const currentVideoId = videoMetadata?.video_id || extractVideoIdFromUrl() || "unknown";
       
+      // Store AI classification for journal nudge (if video ID matches)
+      if (responseVideoId === currentVideoId && responseVideoId !== "unknown") {
+        currentVideoAIClassification = ai;
+        
+        // Check if content is distracting - if not, cancel the journal nudge timer
+        chrome.storage.local.get(["ft_plan"]).then(({ ft_plan }) => {
+          const isDistracting = (distraction === "distracting" || category === "distracting");
+          const isProOrTrial = (ft_plan === "pro" || ft_plan === "trial");
+          
+          // If not distracting or not Pro/Trial, cancel the nudge timer
+          if (!isDistracting || !isProOrTrial) {
+            if (journalNudgeTimer) {
+              clearTimeout(journalNudgeTimer);
+              journalNudgeTimer = null;
+              console.log("[FT] Journal nudge cancelled - content not distracting or not Pro plan");
+            }
+          } else {
+            // Content is distracting and Pro/Trial - timer already running from video start
+            // Check if we've already passed 1 minute (classification came back late)
+            const timeSinceVideoStart = Date.now() - (videoWatchStartTime || Date.now());
+            if (timeSinceVideoStart >= 60 * 1000 && !journalNudgeShown) {
+              // Already past 1 minute, show nudge immediately
+              console.log("[FT] Classification came back after 1 minute, showing journal nudge immediately");
+              if (journalNudgeTimer) {
+                clearTimeout(journalNudgeTimer);
+                journalNudgeTimer = null;
+              }
+              showJournalNudge(videoMetadata);
+            } else {
+              console.log(`[FT] Journal nudge timer active - will show in ${Math.max(0, 60 - Math.floor(timeSinceVideoStart / 1000))} seconds`);
+            }
+          }
+        }).catch((err) => {
+          console.warn("[FT] Error checking plan for journal nudge:", err);
+        });
+      }
+      
       // Always log AI classification (for visibility)
       // Validate video_id matches for blocking decisions, but still show tag
       if (responseVideoId === currentVideoId && responseVideoId !== "unknown") {
@@ -2413,6 +2697,23 @@ async function handleNavigation() {
     await stopShortsTimeTracking();
   }
 
+  // Clean up video watch timer when leaving WATCH page
+  if (pageType !== "WATCH") {
+    if (videoWatchTimer) {
+      clearTimeout(videoWatchTimer);
+      videoWatchTimer = null;
+    }
+    if (journalNudgeTimer) {
+      clearTimeout(journalNudgeTimer);
+      journalNudgeTimer = null;
+    }
+    currentWatchVideoId = null;
+    videoWatchStartTime = null;
+    journalNudgeShown = false;
+    currentVideoAIClassification = null;
+    videoClassified = false;
+  }
+
   // Handle AI classification popup (show before checking blocked status)
   // Only show popup if content is NOT blocked (blocked content shows different overlay)
   if (!resp.blocked && resp.aiClassification && resp.aiClassification.category === "distracting") {
@@ -2490,7 +2791,7 @@ async function handleNavigation() {
     }
     */
     // Global blocking: show global limit overlay with daily summary
-    else if (resp.scope === "global" && !document.getElementById("ft-overlay")) {
+    if (resp.scope === "global" && !document.getElementById("ft-overlay")) {
       await showGlobalLimitOverlay(resp.plan || "free", resp.counters || {});
     }
   } else {

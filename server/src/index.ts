@@ -15,9 +15,11 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import {
   getUserPlan,
+  getUserPlanInfo,
   updateUserPlan,
   upsertVideoClassification,
   updateVideoWatchTime,
+  insertJournalEntry,
 } from "./supabase";
 
 const app = express();
@@ -111,6 +113,9 @@ interface ClassifierPrompt {
   allowance_mapping: any;
   examples: any[];
   failsafe: any;
+  rules?: string[];
+  category_set?: string[];
+  distraction_levels?: Record<string, string>;
 }
 
 let classifierPrompt: ClassifierPrompt | null = null;
@@ -132,10 +137,26 @@ try {
 
 // Middleware
 app.use(cors({
-  origin: [
-    /^chrome-extension:\/\/.*/, // Allow Chrome extensions
-    "http://localhost:*",      // Allow localhost for development
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, Postman, or Chrome extensions)
+    if (!origin) {
+      return callback(null, true);
+    }
+    // Allow Chrome extensions
+    if (origin.startsWith('chrome-extension://')) {
+      return callback(null, true);
+    }
+    // Allow localhost for development
+    if (origin.startsWith('http://localhost:') || origin.startsWith('https://localhost:')) {
+      return callback(null, true);
+    }
+    // Allow YouTube (for content scripts)
+    if (origin.includes('youtube.com')) {
+      return callback(null, true);
+    }
+    // Reject other origins
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 
@@ -182,7 +203,7 @@ app.post("/ai/classify", async (req, res) => {
       context, 
       user_goals,
       // Video metadata fields
-      video_id,
+      video_id: initialVideoId,
       video_title,
       video_description,
       video_tags,
@@ -193,6 +214,9 @@ app.post("/ai/classify", async (req, res) => {
       duration_seconds,
       video_url // Phase 2: URL for server-side validation
     } = req.body;
+    
+    // Allow video_id to be reassigned if URL validation finds a mismatch
+    let video_id = initialVideoId;
 
     // Determine if this is a search (text) or watch (video_title) request
     const isVideoRequest = video_title && video_title.trim().length > 0;
@@ -241,8 +265,8 @@ app.post("/ai/classify", async (req, res) => {
           video_id = urlVideoId;
           console.log(`[AI Classify] Using video_id from URL: ${video_id}`);
         }
-      } catch (e) {
-        console.warn(`[AI Classify] Could not validate video_id from URL:`, e.message);
+      } catch (e: any) {
+        console.warn(`[AI Classify] Could not validate video_id from URL:`, e?.message || String(e));
       }
     }
 
@@ -650,7 +674,8 @@ app.post("/video/update-watch-time", async (req, res) => {
  * License verification endpoint
  * GET /license/verify?email=user@example.com
  * 
- * Returns user plan from Supabase database (cached for 24h)
+ * Returns user plan and trial info from Supabase database (cached for 24h)
+ * Response: { plan: "trial"|"pro"|"free", days_left?: number }
  */
 app.get("/license/verify", async (req, res) => {
   try {
@@ -667,25 +692,45 @@ app.get("/license/verify", async (req, res) => {
     const cacheKey = email.toLowerCase().trim();
     const cachedPlan = getCached<string>(planCache, cacheKey);
     if (cachedPlan !== null) {
+      // For cached plan, return it (trial days_left calculation happens client-side if needed)
+      console.log(`[License Verify] Cache hit for ${email}: ${cachedPlan}`);
       return res.json({
         plan: cachedPlan,
       });
     }
+    
+    console.log(`[License Verify] Cache miss for ${email}, fetching from Supabase...`);
 
-    // Get user plan from Supabase
-    const plan = await getUserPlan(email);
+    // Get user plan and trial info from Supabase
+    const planInfo = await getUserPlanInfo(email);
 
-    if (plan === null) {
+    if (planInfo === null) {
       // User not found - return free plan as default
+      console.log(`[License Verify] User ${email} not found in Supabase, returning free`);
       setCached(planCache, cacheKey, "free");
       res.json({
         plan: "free",
       });
     } else {
+      const { plan, trial_expires_at } = planInfo;
+      console.log(`[License Verify] Fetched plan from Supabase for ${email}: ${plan}`);
       setCached(planCache, cacheKey, plan);
-      res.json({
-        plan: plan,
-      });
+
+      // Calculate days_left for trial users
+      let days_left: number | undefined = undefined;
+      if (plan === "trial" && trial_expires_at) {
+        const expiresAt = new Date(trial_expires_at);
+        const now = new Date();
+        const diffMs = expiresAt.getTime() - now.getTime();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        days_left = Math.max(0, diffDays); // Don't return negative days
+      }
+
+      const response: any = { plan };
+      if (days_left !== undefined) {
+        response.days_left = days_left;
+      }
+      res.json(response);
     }
   } catch (error) {
     console.error("Error in /license/verify:", error);
@@ -728,6 +773,7 @@ app.post("/user/update-plan", async (req, res) => {
       // Invalidate cache for this email (plan changed)
       const cacheKey = email.toLowerCase().trim();
       planCache.delete(cacheKey);
+      console.log(`[Update Plan] Cache invalidated for ${email}, plan set to ${plan}`);
       
       res.json({
         ok: true,
@@ -742,6 +788,76 @@ app.post("/user/update-plan", async (req, res) => {
     }
   } catch (error: any) {
     console.error("Error in /user/update-plan:", error);
+    res.status(500).json({
+      ok: false,
+      error: "Internal server error",
+    });
+  }
+});
+
+/**
+ * Watch events endpoint (MVP stub - no-op)
+ * POST /events/watch
+ * 
+ * Receives batched watch session data from extension
+ * Body: { video_id, title, channel, seconds, started_at, finished_at }[]
+ * Returns 200 OK (no-op for MVP)
+ */
+app.post("/events/watch", (req, res) => {
+  // MVP: Just log and return 200
+  const events = req.body;
+  if (Array.isArray(events) && events.length > 0) {
+    console.log(`[Events] Received ${events.length} watch event(s)`);
+  }
+  res.status(200).json({ ok: true });
+});
+
+/**
+ * Journal entry endpoint
+ * POST /journal
+ * 
+ * Receives journal notes from extension and stores in Supabase
+ * Body: { user_id: string, note: string, context: { url, title, channel, source } }
+ * Returns 200 OK with success status
+ */
+app.post("/journal", async (req, res) => {
+  try {
+    const { user_id, note, context } = req.body || {};
+
+    // Validate input
+    if (!user_id || typeof user_id !== "string") {
+      return res.status(400).json({
+        ok: false,
+        error: "user_id is required",
+      });
+    }
+
+    if (!note || typeof note !== "string" || note.trim() === "") {
+      return res.status(400).json({
+        ok: false,
+        error: "note is required",
+      });
+    }
+
+    // Store journal entry in Supabase
+    const success = await insertJournalEntry({
+      user_id,
+      note: note.trim(),
+      context: context || {},
+    });
+
+    if (!success) {
+      console.error("[Journal] Failed to insert journal entry");
+      return res.status(500).json({
+        ok: false,
+        error: "Failed to store journal entry",
+      });
+    }
+
+    console.log(`[Journal] Entry saved for user ${user_id}: ${note.substring(0, 50)}...`);
+    res.status(200).json({ ok: true, message: "Journal entry saved" });
+  } catch (error: any) {
+    console.error("[Journal] Error processing journal entry:", error);
     res.status(500).json({
       ok: false,
       error: "Internal server error",

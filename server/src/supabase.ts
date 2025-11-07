@@ -25,22 +25,56 @@ export const supabase = createClient(
 );
 
 /**
- * Get user plan from Supabase
+ * Get user plan and trial info from Supabase
  * @param email - User email
- * @returns User plan ("free" | "pro") or null if user not found
+ * @returns User plan ("free" | "pro" | "trial") and trial_expires_at, or null if user not found
  */
-export async function getUserPlan(email: string): Promise<string | null> {
+export interface UserPlanInfo {
+  plan: string;
+  trial_expires_at: string | null;
+}
+
+export async function getUserPlanInfo(email: string): Promise<UserPlanInfo | null> {
   try {
     if (!supabaseUrl || !supabaseServiceKey) {
       console.warn("[Supabase] Credentials not set, returning default plan");
-      return "free";
+      return { plan: "free", trial_expires_at: null };
     }
 
-    const { data, error } = await supabase
+    // Try to get plan and trial_expires_at
+    let { data, error } = await supabase
       .from("users")
-      .select("plan")
+      .select("plan, trial_expires_at")
       .eq("email", email)
       .single();
+
+    // If column doesn't exist (error code 42703), retry with just plan
+    if (error && error.code === "42703") {
+      console.warn("[Supabase] trial_expires_at column doesn't exist, querying plan only");
+      const { data: planData, error: planError } = await supabase
+        .from("users")
+        .select("plan")
+        .eq("email", email)
+        .single();
+      
+      if (planError) {
+        if (planError.code === "PGRST116") {
+          // User not found
+          return null;
+        }
+        console.error("[Supabase] Error getting user plan:", planError);
+        return null;
+      }
+      
+      // Normalize plan to lowercase
+      const plan = planData?.plan;
+      const normalizedPlan = typeof plan === "string" ? plan.toLowerCase() : "free";
+      
+      return {
+        plan: normalizedPlan,
+        trial_expires_at: null, // Column doesn't exist yet
+      };
+    }
 
     if (error) {
       if (error.code === "PGRST116") {
@@ -53,15 +87,26 @@ export async function getUserPlan(email: string): Promise<string | null> {
 
     // Normalize plan to lowercase (Supabase might return "Pro", "PRO", etc.)
     const plan = data?.plan;
-    if (typeof plan === "string") {
-      return plan.toLowerCase();
-    }
+    const normalizedPlan = typeof plan === "string" ? plan.toLowerCase() : "free";
 
-    return "free";
+    return {
+      plan: normalizedPlan,
+      trial_expires_at: data?.trial_expires_at || null,
+    };
   } catch (error) {
     console.error("[Supabase] Exception getting user plan:", error);
     return null;
   }
+}
+
+/**
+ * Get user plan from Supabase (backward compatibility)
+ * @param email - User email
+ * @returns User plan ("free" | "pro") or null if user not found
+ */
+export async function getUserPlan(email: string): Promise<string | null> {
+  const info = await getUserPlanInfo(email);
+  return info?.plan || null;
 }
 
 /**
@@ -243,6 +288,124 @@ export async function updateVideoWatchTime(
     return true;
   } catch (error) {
     console.error("[Supabase] Exception updating watch time:", error);
+    return false;
+  }
+}
+
+/**
+ * Insert batched watch sessions into video_sessions table
+ * @param events - Array of watch event objects: { video_id, title, channel, seconds, started_at, finished_at }
+ * @param userId - User ID (email for now)
+ * @returns true if successful, false otherwise
+ */
+export async function insertVideoSessions(
+  events: Array<{
+    video_id: string;
+    title?: string;
+    channel?: string;
+    seconds: number;
+    started_at: string;
+    finished_at: string;
+  }>,
+  userId: string
+): Promise<boolean> {
+  try {
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.warn("[Supabase] Credentials not set, cannot insert video sessions");
+      return false;
+    }
+
+    if (!events || events.length === 0) {
+      return true; // Nothing to insert
+    }
+
+    if (!userId) {
+      console.warn("[Supabase] Missing user_id for video sessions insert");
+      return false;
+    }
+
+    // Prepare data for insertion
+    const nowIso = new Date().toISOString();
+    const rows = events.map((event) => {
+      // Extract date from started_at (YYYY-MM-DD)
+      const dateStr = event.started_at.split("T")[0]; // "2025-01-15"
+
+      return {
+        user_id: userId,
+        video_id: event.video_id,
+        title: event.title || null,
+        channel: event.channel || null,
+        category: null, // Will be populated from AI classification if available
+        duration: null, // Video length (not available in watch events)
+        alignment: null, // Will be populated from AI classification if available
+        date: dateStr,
+        watch_seconds: event.seconds,
+        created_at: nowIso,
+      };
+    });
+
+    // Insert batch
+    const { error } = await supabase.from("video_sessions").insert(rows);
+
+    if (error) {
+      console.error("[Supabase] Error inserting video sessions:", error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("[Supabase] Exception inserting video sessions:", error);
+    return false;
+  }
+}
+
+/**
+ * Insert journal entry into journal_entries table
+ * @param payload - Journal entry data: { user_id, note, context }
+ * @returns true if successful, false otherwise
+ */
+export async function insertJournalEntry(payload: {
+  user_id: string;
+  note: string;
+  context?: {
+    url?: string;
+    title?: string;
+    channel?: string;
+    source?: string;
+  };
+}): Promise<boolean> {
+  try {
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.warn("[Supabase] Credentials not set, cannot insert journal entry");
+      return false;
+    }
+
+    const { user_id, note, context } = payload;
+
+    if (!user_id || !note || note.trim() === "") {
+      console.warn("[Supabase] Missing user_id or note for journal entry");
+      return false;
+    }
+
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase.from("journal_entries").insert({
+      user_id,
+      note: note.trim(),
+      context_url: context?.url || null,
+      context_title: context?.title || null,
+      context_channel: context?.channel || null,
+      context_source: context?.source || null,
+      created_at: nowIso,
+    });
+
+    if (error) {
+      console.error("[Supabase] Error inserting journal entry:", error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("[Supabase] Exception inserting journal entry:", error);
     return false;
   }
 }

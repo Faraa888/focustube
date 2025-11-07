@@ -11,6 +11,7 @@ import {
   PERIOD_MONTHLY,
   PLAN_FREE,
   PLAN_PRO,
+  PLAN_TRIAL,
   PLAN_TEST
 } from "./constants.js";
 import { CONFIG_BY_PLAN } from "./rules.js";
@@ -22,8 +23,10 @@ import { CONFIG_BY_PLAN } from "./rules.js";
 // They are automatically created the first time the extension runs.
 const DEFAULTS = {
   // Plan and rotation setup
-  ft_plan: "free",                // free | pro | test
+  ft_plan: "free",                // free | pro | test | trial
   ft_user_email: "",              // user email for server sync
+  ft_trial_expires_at: null,      // ISO timestamp when trial expires (null if not trial)
+  ft_days_left: null,             // number of days left in trial (null if not trial)
   ft_user_goals: [],              // user goals array (for AI classification)
   ft_onboarding_completed: false, // true = user has completed onboarding
   ft_reset_period: "daily",       // daily | weekly | monthly
@@ -48,7 +51,10 @@ const DEFAULTS = {
   ft_allowance_seconds_left: 600,  // daily allowance for distracting content in seconds (default: 10 minutes = 600 seconds)
   
   // Current video tracking (for allowance decrement)
-  ft_current_video_classification: null  // { videoId, category, startTime, title } or null
+  ft_current_video_classification: null,  // { videoId, category, startTime, title } or null
+  
+  // Watch event queue (batched analytics)
+  ft_watch_event_queue: []  // Array of watch session objects
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -147,6 +153,35 @@ export async function maybeRotateCounters(now = new Date()) {
     buildDailyKey(now);
 
   if (!ft_last_reset_key || ft_last_reset_key !== currentKey) {
+    // Save daily totals before reset (only for daily period)
+    if (period === PERIOD_DAILY && ft_last_reset_key) {
+      // Get current counters before reset
+      const current = await getLocal([
+        "ft_watch_seconds_today",
+        "ft_short_visits_today",
+        "ft_searches_today",
+        "ft_watch_visits_today"
+      ]);
+
+      // Build date key for storage (YYYY-MM-DD)
+      const dateKey = ft_last_reset_key; // Already in YYYY-MM-DD format for daily
+      const dailyTotalsKey = `ft_daily_totals_${dateKey}`;
+
+      // Save daily totals
+      const dailyTotals = {
+        date: dateKey,
+        watch_seconds: Number(current.ft_watch_seconds_today || 0),
+        shorts_count: Number(current.ft_short_visits_today || 0),
+        searches_count: Number(current.ft_searches_today || 0),
+        videos_watched: Number(current.ft_watch_visits_today || 0),
+        saved_at: new Date().toISOString()
+      };
+
+      await setLocal({ [dailyTotalsKey]: dailyTotals });
+      console.log(`[FT] Daily totals saved for ${dateKey}:`, dailyTotals);
+    }
+
+    // Reset counters
     await setLocal({
       ...resetShape(),
       ft_last_reset_key: currentKey
@@ -213,19 +248,58 @@ export async function resetCounters() {
 // Links plan name ("free" | "pro" | "test") to its limits.
 export { CONFIG_BY_PLAN };
 
+/**
+ * Get trial status - checks if trial is expired
+ * @returns { plan, days_left } where plan is the effective plan (trial -> free if expired)
+ */
+export async function getTrialStatus() {
+  const { ft_plan, ft_days_left } = await getLocal(["ft_plan", "ft_days_left"]);
+  
+  // If not on trial, return current plan
+  if (ft_plan !== PLAN_TRIAL) {
+    return { plan: ft_plan || PLAN_FREE, days_left: null };
+  }
+  
+  // If on trial, check if expired
+  const daysLeft = typeof ft_days_left === "number" ? ft_days_left : null;
+  if (daysLeft !== null && daysLeft <= 0) {
+    // Trial expired - treat as free
+    return { plan: PLAN_FREE, days_left: 0 };
+  }
+  
+  // Trial active
+  return { plan: PLAN_TRIAL, days_left: daysLeft };
+}
+
 export async function getPlanConfig() {
   const { ft_plan } = await getLocal(["ft_plan"]);
   const plan =
-    ft_plan === PLAN_PRO  ? PLAN_PRO  :
-    ft_plan === PLAN_TEST ? PLAN_TEST :
+    ft_plan === PLAN_PRO   ? PLAN_PRO   :
+    ft_plan === PLAN_TRIAL ? PLAN_TRIAL :
+    ft_plan === PLAN_TEST  ? PLAN_TEST  :
     PLAN_FREE;
-  return { plan, config: CONFIG_BY_PLAN[plan] };
+  
+  // Check if trial is expired - if so, use free config
+  let effectivePlan = plan;
+  if (plan === PLAN_TRIAL) {
+    const trialStatus = await getTrialStatus();
+    if (trialStatus.plan === PLAN_FREE) {
+      effectivePlan = PLAN_FREE;
+    } else {
+      effectivePlan = PLAN_PRO; // Active trial gets Pro features
+    }
+  } else {
+    effectivePlan = plan;
+  }
+  
+  return { plan, config: CONFIG_BY_PLAN[effectivePlan] };
 }
 
 export async function setPlan(plan) {
   const valid =
-    plan === PLAN_PRO  ? PLAN_PRO  :
-    plan === PLAN_TEST ? PLAN_TEST :
+    plan === PLAN_PRO   ? PLAN_PRO   :
+    plan === PLAN_TRIAL ? PLAN_TRIAL :
+    plan === PLAN_TEST  ? PLAN_TEST  :
     PLAN_FREE;
   await setLocal({ ft_plan: valid });
   return valid;
@@ -243,9 +317,9 @@ let lastSyncTime = 0;
 const SYNC_DEBOUNCE_MS = 30 * 1000; // 30 seconds
 
 /**
- * Fetch user plan from server
+ * Fetch user plan and trial info from server
  * @param email - User email
- * @returns User plan ("free" | "pro") or null if error
+ * @returns { plan, days_left, trial_expires_at } or null if error
  */
 export async function fetchUserPlanFromServer(email) {
   if (!email || email.trim() === "") {
@@ -273,8 +347,12 @@ export async function fetchUserPlanFromServer(email) {
     // Normalize plan to lowercase (handle "Pro", "PRO", etc.)
     const plan = typeof planRaw === "string" ? planRaw.toLowerCase() : null;
 
-    if (plan === "free" || plan === "pro" || plan === "test") {
-      return plan;
+    if (plan === "free" || plan === "pro" || plan === "test" || plan === "trial") {
+      return {
+        plan,
+        days_left: data?.days_left ?? null,
+        trial_expires_at: data?.trial_expires_at ?? null,
+      };
     }
 
     console.warn("[FT] Invalid plan from server:", planRaw);
@@ -287,7 +365,7 @@ export async function fetchUserPlanFromServer(email) {
 
 /**
  * Sync plan from server (debounced)
- * Fetches plan from server and saves to Chrome storage
+ * Fetches plan and trial info from server and saves to Chrome storage
  * @param force - Force sync even if debounced (default: false)
  * @returns true if synced, false if skipped or failed
  */
@@ -295,7 +373,9 @@ export async function syncPlanFromServer(force = false) {
   const now = Date.now();
 
   // Debounce: only sync once per 30 seconds (unless forced)
-  if (!force && now - lastSyncTime < SYNC_DEBOUNCE_MS) {
+  // For production, sync every 6 hours (21600000 ms) instead of 30 seconds
+  const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+  if (!force && now - lastSyncTime < SYNC_INTERVAL_MS) {
     console.log("[FT] Plan sync skipped (debounced)");
     return false;
   }
@@ -308,20 +388,48 @@ export async function syncPlanFromServer(force = false) {
     return false;
   }
 
-  // Fetch plan from server
-  const plan = await fetchUserPlanFromServer(ft_user_email);
+  // Fetch plan and trial info from server
+  const planInfo = await fetchUserPlanFromServer(ft_user_email);
 
-  if (plan === null) {
+  if (planInfo === null) {
     // Server error - use cached plan (don't crash)
     console.warn("[FT] Server unavailable, using cached plan");
     return false;
   }
 
-  // Save plan to storage
-  await setPlan(plan);
+  // Save plan to storage (even if trial info is missing)
+  // This ensures plan sync works even if trial_expires_at column doesn't exist yet
+  if (planInfo.plan) {
+    await setPlan(planInfo.plan);
+  } else {
+    console.warn("[FT] No plan in server response, skipping sync");
+    return false;
+  }
+  
+  // Save trial info if present
+  const toStore = {};
+  if (planInfo.days_left !== null && planInfo.days_left !== undefined) {
+    toStore.ft_days_left = planInfo.days_left;
+  }
+  if (planInfo.trial_expires_at !== null && planInfo.trial_expires_at !== undefined) {
+    toStore.ft_trial_expires_at = planInfo.trial_expires_at;
+  } else if (planInfo.plan !== "trial") {
+    // Clear trial data if not on trial
+    toStore.ft_trial_expires_at = null;
+    toStore.ft_days_left = null;
+  }
+  
+  if (Object.keys(toStore).length > 0) {
+    await setLocal(toStore);
+  }
+  
   lastSyncTime = now;
 
-  console.log(`[FT] Plan synced from server: ${plan}`);
+  if (planInfo.plan === "trial" && planInfo.days_left !== null) {
+    console.log(`[FT] Plan synced from server: ${planInfo.plan} (${planInfo.days_left} days left)`);
+  } else {
+    console.log(`[FT] Plan synced from server: ${planInfo.plan}`);
+  }
   return true;
 }
 

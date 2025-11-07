@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────
 export const PLAN_FREE  = "free";    // Basic tier - strict rules
 export const PLAN_PRO   = "pro";     // Paid tier - relaxed rules, AI features
+export const PLAN_TRIAL = "trial";   // 14-day trial - same features as Pro
 export const PLAN_TEST  = "test";    // Internal/dev tier - unlimited, logs everything
 
 // ─────────────────────────────────────────────────────────────
