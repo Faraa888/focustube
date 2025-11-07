@@ -7,8 +7,28 @@
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────
 
-// Server URL (development)
-const SERVER_URL = "http://localhost:3000";
+/**
+ * Get server URL - checks storage for override, defaults to localhost
+ * Cross-browser compatible (no imports needed for content scripts)
+ * @returns {Promise<string>} Server URL
+ */
+async function getServerUrl() {
+  try {
+    // Check if chrome.storage is available
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      const storage = await chrome.storage.local.get(["ft_server_url"]);
+      if (storage.ft_server_url && typeof storage.ft_server_url === 'string') {
+        return storage.ft_server_url.trim();
+      }
+    }
+  } catch (e) {
+    console.warn("[FT] Error reading server URL from storage:", e.message);
+  }
+  
+  // Default to localhost for development
+  // Can be updated to production URL when deployed to Lovable Cloud
+  return "http://localhost:3000";
+}
 
 // ─────────────────────────────────────────────────────────────
 // BASIC HELPERS
@@ -34,10 +54,11 @@ function detectPageType() {
   return "OTHER";
 }
 
-/**
+/* COMMENTED OUT: Generic block overlay - removed per user request
  * Simple overlay creator. Shown when user is blocked (search/global scope).
  * Uses CSS classes from overlay.css instead of inline styles.
  */
+/*
 function showOverlay(reason, scope) {
   removeOverlay(); // ensure no duplicates
 
@@ -54,6 +75,7 @@ function showOverlay(reason, scope) {
 
   document.body.appendChild(overlay);
 }
+*/
 
 /**
  * Opens Stripe Checkout by calling server endpoint
@@ -68,11 +90,14 @@ async function openStripeCheckout(planType = "monthly") {
 
     if (!email || email.trim() === "") {
       alert("Email not set.\n\nPlease set your email using the dev panel (bottom right corner) or extension settings.\n\nAfter setting your email, try upgrading again.");
-      return;
-    }
+        return;
+      }
 
+    // Get server URL (checks storage for override, defaults to localhost)
+    const serverUrl = await getServerUrl();
+    
     // Call server to create checkout session
-    const response = await fetch(`${SERVER_URL}/stripe/create-checkout`, {
+    const response = await fetch(`${serverUrl}/stripe/create-checkout`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -157,6 +182,116 @@ function showShortsBlockedOverlay() {
     openStripeCheckout("monthly").catch((err) => {
       console.error("[FT] Checkout error:", err);
     });
+  });
+
+  document.body.appendChild(overlay);
+}
+
+/**
+ * Shows onboarding overlay for first-time users
+ * Collects user goals and sets onboarding_completed flag
+ */
+function showOnboardingOverlay() {
+  removeOverlay(); // ensure no duplicates
+
+  const overlay = document.createElement("div");
+  overlay.id = "ft-overlay";
+  overlay.className = "ft-onboarding-overlay";
+
+  overlay.innerHTML = `
+    <div class="ft-box ft-onboarding-box">
+      <h1>🎯 Welcome to FocusTube!</h1>
+      <p class="ft-onboarding-intro">Let's set up your goals to help you stay focused.</p>
+      
+      <div class="ft-onboarding-goals-section">
+        <label for="ft-onboarding-goals-input" style="display:block;margin-bottom:8px;font-size:14px;font-weight:600;">
+          What are your goals?
+        </label>
+        <textarea 
+          id="ft-onboarding-goals-input" 
+          placeholder="e.g., learn python, build SaaS, launch MVP"
+          style="width:100%;padding:12px;border-radius:8px;border:2px solid rgba(255,255,255,0.2);font-size:14px;background:rgba(255,255,255,0.1);color:white;resize:vertical;min-height:100px;font-family:inherit;box-sizing:border-box;"
+        ></textarea>
+      </div>
+      
+      <div id="ft-onboarding-value-prop" style="margin-top:16px;padding:12px;background:rgba(100,150,255,0.1);border-radius:8px;border:1px solid rgba(100,150,255,0.3);font-size:13px;opacity:0.8;">
+        <strong>We'll help you stay focused on:</strong>
+        <div id="ft-goals-preview" style="margin-top:8px;color:#64b5f6;">Enter your goals above</div>
+      </div>
+      
+      <div class="ft-button-container" style="margin-top:24px;">
+        <button id="ft-onboarding-start" class="ft-button ft-button-primary">Get Started</button>
+      </div>
+    </div>
+  `;
+
+  // Auto-update value proposition as user types
+  const goalsInput = overlay.querySelector("#ft-onboarding-goals-input");
+  const goalsPreview = overlay.querySelector("#ft-goals-preview");
+  
+  if (goalsInput && goalsPreview) {
+    goalsInput.addEventListener("input", () => {
+      const goalsText = goalsInput.value.trim();
+      if (goalsText) {
+        const goalsArray = goalsText
+          .split(",")
+          .map(g => g.trim())
+          .filter(g => g.length > 0);
+        if (goalsArray.length > 0) {
+          goalsPreview.innerHTML = goalsArray.map(g => `<div style="margin:4px 0;">• ${g}</div>`).join("");
+          goalsPreview.parentElement.style.opacity = "1";
+        } else {
+          goalsPreview.textContent = "Enter your goals above";
+          goalsPreview.parentElement.style.opacity = "0.8";
+        }
+      } else {
+        goalsPreview.textContent = "Enter your goals above";
+        goalsPreview.parentElement.style.opacity = "0.8";
+      }
+    });
+  }
+
+  // Get Started button handler
+  overlay.querySelector("#ft-onboarding-start").addEventListener("click", async () => {
+    const goalsText = goalsInput?.value?.trim() || "";
+    
+    if (!goalsText) {
+      alert("Please enter at least one goal to continue.");
+      return;
+    }
+    
+    // Parse goals (comma-separated → array)
+    const goalsArray = goalsText
+      .split(",")
+      .map(g => g.trim())
+      .filter(g => g.length > 0);
+    
+    if (goalsArray.length === 0) {
+      alert("Please enter at least one valid goal.");
+      return;
+    }
+    
+    try {
+      // Save goals and mark onboarding as completed
+      if (!isChromeContextValid()) {
+        alert("Extension context invalidated. Please reload the page.");
+        return;
+      }
+      
+      await chrome.storage.local.set({
+        ft_user_goals: goalsArray,
+        ft_onboarding_completed: true
+      });
+      
+      // Dismiss overlay
+      removeOverlay();
+      
+      // Trigger navigation check to show normal extension flow
+      handleNavigation().catch(console.error);
+    } catch (e) {
+      console.error("[FT] Error completing onboarding:", e);
+      alert("Error saving goals. Please try again.");
+    }
   });
 
   document.body.appendChild(overlay);
@@ -289,6 +424,312 @@ let lastGlobalSaveTime = null; // Last time we saved global time
 function getShortsVideoId(pathname = location.pathname) {
   const match = pathname.match(/^\/shorts\/([^/?]+)/);
   return match ? match[1] : null;
+}
+
+/**
+ * Extracts comprehensive video metadata from YouTube watch page
+ * Returns all available data for AI classification
+ */
+/**
+ * Extracts video ID from YouTube URL
+ * @param {string} url - Full URL or pathname
+ * @returns {string|null} - Video ID or null
+ */
+function extractVideoIdFromUrl(url = location.href) {
+  try {
+    const urlObj = new URL(url);
+    const videoId = urlObj.searchParams.get("v");
+    return videoId || null;
+  } catch (e) {
+    // Fallback: try regex if URL parsing fails
+    const match = url.match(/[?&]v=([^&]+)/);
+    return match ? match[1] : null;
+  }
+}
+
+/**
+ * Step 1: Wait for DOM element to appear (for YouTube SPA async loading)
+ * @param {string} selector - CSS selector to wait for
+ * @param {number} timeout - Maximum time to wait in milliseconds (default: 2000)
+ * @returns {Promise<boolean>} - Resolves to true if element found, false if timeout
+ */
+function waitForElement(selector, timeout = 2000) {
+  return new Promise((resolve) => {
+    // Check immediately
+    if (document.querySelector(selector)) {
+      resolve(true);
+      return;
+    }
+    
+    // Set up MutationObserver to watch for element
+    const observer = new MutationObserver(() => {
+      if (document.querySelector(selector)) {
+        observer.disconnect();
+        resolve(true);
+      }
+    });
+    
+    observer.observe(document.body, { childList: true, subtree: true });
+    
+    // Timeout fallback
+    setTimeout(() => {
+      observer.disconnect();
+      resolve(false);
+    }, timeout);
+  });
+}
+
+let lastDescriptionExpandedVideoId = null;
+
+async function expandDescriptionIfCollapsed(videoId) {
+  try {
+    // Skip if we already expanded for this video
+    if (videoId && lastDescriptionExpandedVideoId === videoId) {
+      return;
+    }
+
+    // Wait for description container to exist first
+    const descContainer = await waitForElement(
+      'ytd-video-secondary-info-renderer, #description, #watch-description',
+      2000
+    );
+
+    if (!descContainer) {
+      console.log("[FT] Description container not found, skipping expansion");
+      return;
+    }
+
+    // Try multiple selectors for "Show more" button (YouTube uses different ones)
+    const selectors = [
+      'button[aria-label*="show more" i]',
+      'button[aria-label*="SHOW MORE" i]',
+      '#expand',
+      '#more',
+      'tp-yt-paper-button#expand',
+      'yt-formatted-string[role="button"][id="expand"]',
+      'ytd-video-secondary-info-renderer #expand',
+      'ytd-video-secondary-info-renderer #more',
+      'ytd-video-secondary-info-renderer button',
+      'ytd-expander button',
+      'ytd-expander #expand',
+      'ytd-expander #more'
+    ];
+
+    let showMoreBtn = null;
+    for (const selector of selectors) {
+      showMoreBtn = document.querySelector(selector);
+      if (showMoreBtn) {
+        const label = (showMoreBtn.getAttribute("aria-label") || showMoreBtn.textContent || "").toLowerCase();
+        if (label.includes("more") || selector.includes("expand") || selector.includes("more")) {
+          console.log(`[FT] Found "Show more" button with selector: ${selector}`);
+          break;
+        }
+      }
+    }
+
+    if (!showMoreBtn) {
+      console.log("[FT] No 'Show more' button found (description may already be expanded)");
+      return;
+    }
+
+    // Check if already expanded
+    const ariaExpanded = showMoreBtn.getAttribute("aria-expanded");
+    const label = (showMoreBtn.getAttribute("aria-label") || showMoreBtn.textContent || "").toLowerCase();
+    const alreadyExpanded = ariaExpanded === "true" || label.includes("show less") || label.includes("less");
+
+    if (alreadyExpanded) {
+      console.log("[FT] Description already expanded");
+      return;
+    }
+
+    // Click the button
+    console.log("[FT] Clicking 'Show more' button to expand description");
+    showMoreBtn.click();
+    
+    if (videoId) {
+      lastDescriptionExpandedVideoId = videoId;
+    }
+
+    // Wait longer for YouTube's animation to complete
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    console.log("[FT] Description expansion complete");
+  } catch (error) {
+    console.warn("[FT] Failed to expand description:", error?.message || error);
+  }
+}
+
+function extractVideoMetadata() {
+  const metadata = {
+    video_id: null,
+    title: null,
+    description: null,
+    tags: [],
+    channel: null,
+    category: null,
+    related_videos: [],
+    duration_seconds: null,
+    is_shorts: false
+  };
+
+  try {
+    // 0. Extract Video ID from URL
+    metadata.video_id = extractVideoIdFromUrl();
+    
+    // 0.5. Detect if this is a Shorts video
+    const pathname = location.pathname;
+    metadata.is_shorts = pathname.startsWith("/shorts/") || pathname.includes("/shorts/");
+    // 1. Video Title
+    const titleElement = document.querySelector("h1.ytd-watch-metadata yt-formatted-string, h1.ytd-video-primary-info-renderer, h1.title");
+    if (titleElement) {
+      metadata.title = titleElement.textContent?.trim() || null;
+    } else {
+      // Fallback: try meta tag
+      const metaTitle = document.querySelector('meta[property="og:title"]');
+      if (metaTitle) {
+        metadata.title = metaTitle.getAttribute("content")?.trim() || null;
+      }
+    }
+
+    // 2. Video Description
+    const descElement = document.querySelector("#description, ytd-video-secondary-info-renderer #description, #watch-description-text");
+    if (descElement) {
+      const descText = descElement.textContent?.trim() || "";
+      metadata.description = descText.substring(0, 500); // Truncate to 500 chars
+    } else {
+      // Fallback: try meta tag
+      const metaDesc = document.querySelector('meta[property="og:description"]');
+      if (metaDesc) {
+        metadata.description = metaDesc.getAttribute("content")?.trim()?.substring(0, 500) || null;
+      }
+    }
+
+    // 3. Video Tags
+    // Try multiple selectors for tags
+    const tagElements = document.querySelectorAll(
+      'ytd-watch-metadata #container ytd-badge-supported-renderer, ' +
+      'meta[property="og:video:tag"], ' +
+      'ytd-metadata-row-renderer[has-metadata-layout="COMPACT"] a'
+    );
+    if (tagElements.length > 0) {
+      tagElements.forEach(el => {
+        const tagText = el.textContent?.trim() || el.getAttribute("content")?.trim();
+        if (tagText && tagText.length > 0) {
+          metadata.tags.push(tagText);
+        }
+      });
+    }
+
+    // 4. Channel Name
+    const channelElement = document.querySelector("ytd-channel-name a, #owner-sub-count a, ytd-video-owner-renderer #channel-name a");
+    if (channelElement) {
+      metadata.channel = channelElement.textContent?.trim() || null;
+    } else {
+      // Fallback: try meta tags
+      const metaChannel = document.querySelector('meta[property="og:video:channel_name"], link[itemprop="name"]');
+      if (metaChannel) {
+        metadata.channel = metaChannel.getAttribute("content")?.trim() || metaChannel.getAttribute("href")?.trim() || null;
+      }
+    }
+
+    // 5. Video Category (YouTube's category)
+    const categoryElement = document.querySelector('meta[itemprop="genre"]');
+    if (categoryElement) {
+      metadata.category = categoryElement.getAttribute("content")?.trim() || null;
+    } else {
+      // Try alternative selector
+      const categoryText = document.querySelector("#watch-description-extras ytd-metadata-row-renderer");
+      if (categoryText) {
+        const categoryLabel = categoryText.querySelector("#label");
+        if (categoryLabel && categoryLabel.textContent?.toLowerCase().includes("category")) {
+          const categoryValue = categoryText.querySelector("#content");
+          if (categoryValue) {
+            metadata.category = categoryValue.textContent?.trim() || null;
+          }
+        }
+      }
+    }
+
+    // 6. Related Videos (first 3-5, with channel_name and is_shorts)
+    const relatedVideoContainers = document.querySelectorAll(
+      "ytd-watch-next-secondary-results-renderer ytd-compact-video-renderer"
+    );
+    if (relatedVideoContainers.length > 0) {
+      const maxRelated = Math.min(5, Math.max(3, relatedVideoContainers.length)); // At least 3, up to 5
+      for (let i = 0; i < maxRelated; i++) {
+        const container = relatedVideoContainers[i];
+        const titleEl = container.querySelector("#video-title, a#video-title");
+        const channelEl = container.querySelector("#channel-name a, #channel-name yt-formatted-string, ytd-channel-name a");
+        
+        const title = titleEl?.textContent?.trim() || null;
+        const channelName = channelEl?.textContent?.trim() || null;
+        
+        // Detect if related video is Shorts (check for Shorts indicator or URL)
+        let isShorts = false;
+        const linkEl = container.querySelector("a#video-title");
+        if (linkEl) {
+          const href = linkEl.getAttribute("href") || "";
+          isShorts = href.includes("/shorts/");
+        }
+        
+        if (title) {
+          metadata.related_videos.push({
+            title: title,
+            channel_name: channelName || "",
+            is_shorts: isShorts
+          });
+        }
+      }
+    }
+
+    // 7. Video Duration
+    // Try meta tag first
+    const durationMeta = document.querySelector('meta[itemprop="duration"]');
+    if (durationMeta) {
+      const durationContent = durationMeta.getAttribute("content");
+      // ISO 8601 duration format: PT4M13S → 253 seconds
+      if (durationContent && durationContent.startsWith("PT")) {
+        const match = durationContent.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+        if (match) {
+          const hours = parseInt(match[1] || 0);
+          const minutes = parseInt(match[2] || 0);
+          const seconds = parseInt(match[3] || 0);
+          metadata.duration_seconds = hours * 3600 + minutes * 60 + seconds;
+        }
+      }
+    } else {
+      // Fallback: try DOM element
+      const durationElement = document.querySelector("span.ytp-time-duration, .ytp-time-duration");
+      if (durationElement) {
+        const durationText = durationElement.textContent?.trim();
+        if (durationText) {
+          // Parse "4:13" or "1:23:45" format
+          const parts = durationText.split(":").map(Number);
+          if (parts.length === 2) {
+            metadata.duration_seconds = parts[0] * 60 + parts[1];
+          } else if (parts.length === 3) {
+            metadata.duration_seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+          }
+        }
+      }
+    }
+
+  } catch (e) {
+    console.warn("[FT] Error in extractVideoMetadata:", e.message || e);
+  }
+
+  // Step 3: Log extracted metadata for debugging
+  console.log("[FT] Metadata extracted:", {
+    video_id: metadata.video_id || "MISSING",
+    title: metadata.title?.substring(0, 50) || "MISSING",
+    description: metadata.description ? `${metadata.description.substring(0, 50)}...` : "MISSING",
+    tags_count: metadata.tags.length,
+    channel: metadata.channel || "MISSING",
+    related_videos_count: metadata.related_videos.length,
+    category: metadata.category || "MISSING",
+    is_shorts: metadata.is_shorts
+  });
+
+  return metadata;
 }
 
 /**
@@ -703,8 +1144,8 @@ async function showGlobalLimitOverlay(plan, counters) {
 
   // Get button HTML based on plan
   let buttonsHTML = '';
-  buttonsHTML = `
-    <button id="ft-check-usage" class="ft-button ft-button-primary">Check Your Usage! 📊</button>
+    buttonsHTML = `
+      <button id="ft-check-usage" class="ft-button ft-button-primary">Check Your Usage! 📊</button>
     <button id="ft-reset" class="ft-button ft-button-secondary" style="background: #ff6b6b; color: white;">Reset</button>
   `;
 
@@ -762,8 +1203,8 @@ async function showGlobalLimitOverlay(plan, counters) {
         }
         
         if (response?.ok) {
-          // Reload page to clear overlay and refresh counters
-          window.location.reload();
+        // Reload page to clear overlay and refresh counters
+        window.location.reload();
         } else {
           alert(response?.error || "Failed to reset counters");
         }
@@ -777,9 +1218,10 @@ async function showGlobalLimitOverlay(plan, counters) {
   document.body.appendChild(overlay);
 }
 
-/**
+/* COMMENTED OUT: Search block overlay - hidden per user request
  * Shows search block overlay with plan-specific buttons
  */
+/*
 async function showSearchBlockOverlay(plan) {
   removeOverlay(); // ensure no duplicates
 
@@ -862,6 +1304,7 @@ async function showSearchBlockOverlay(plan) {
 
   document.body.appendChild(overlay);
 }
+*/
 
 /**
  * Starts tracking Shorts engagement (5-second timer)
@@ -1088,6 +1531,79 @@ async function showShortsMilestonePopup(engaged, scrolled, totalSeconds) {
   
   document.body.appendChild(popup);
 }
+
+/* COMMENTED OUT: AI distracting popup - to be replaced with nudge/hide/remove per user request
+ * Shows AI distracting content popup
+ * Shows when content is classified as distracting and user has allowance
+ */
+/*
+async function showAIDistractingPopup(classification, allowance) {
+  // Remove any existing popup
+  const existingPopup = document.getElementById("ft-ai-distracting-popup");
+  if (existingPopup) existingPopup.remove();
+  
+  // Pause and mute video before showing popup
+  pauseAndMuteVideo();
+  
+  // Format allowance display
+  const allowanceVideosLeft = allowance.allowanceVideosLeft || 0;
+  const allowanceSecondsLeft = allowance.allowanceSecondsLeft || 0;
+  let allowanceText = "";
+  if (allowanceVideosLeft > 0) {
+    allowanceText = `${allowanceVideosLeft} video${allowanceVideosLeft !== 1 ? 's' : ''} left`;
+  } else if (allowanceSecondsLeft > 0) {
+    const minutesLeft = Math.floor(allowanceSecondsLeft / 60);
+    const secondsLeft = allowanceSecondsLeft % 60;
+    if (minutesLeft > 0) {
+      allowanceText = `${minutesLeft}m ${secondsLeft}s left`;
+    } else {
+      allowanceText = `${secondsLeft}s left`;
+    }
+  }
+  
+  // Get allowance cost from classification
+  const allowanceCost = classification.allowance_cost || { type: "none", amount: 0 };
+  let costText = "";
+  if (allowanceCost.type === "video") {
+    costText = `This will use ${allowanceCost.amount} of your daily video allowance`;
+  } else if (allowanceCost.type === "minutes") {
+    costText = `This will use ${allowanceCost.amount} minutes of your daily time allowance`;
+  }
+  
+  // Create popup
+  const popup = document.createElement("div");
+  popup.id = "ft-ai-distracting-popup";
+  
+  popup.innerHTML = `
+    <div class="ft-milestone-box">
+      <h2>⚠️ This content is not aligned with your goals</h2>
+      <p class="ft-milestone-intro">${classification.reason || "This content may distract you from your goals"}</p>
+      ${costText ? `<p style="color: #ffcc66; margin: 12px 0; font-size: 14px;">${costText}</p>` : ''}
+      ${allowanceText ? `<p style="color: #ccc; margin: 8px 0; font-size: 13px;">Remaining allowance: ${allowanceText}</p>` : ''}
+      <div class="ft-milestone-buttons">
+        <button id="ft-ai-go-back" class="ft-button ft-button-secondary">Go Back</button>
+        <button id="ft-ai-continue" class="ft-button ft-button-primary">Continue</button>
+      </div>
+    </div>
+  `;
+  
+  // Go Back button - navigate away
+  popup.querySelector("#ft-ai-go-back").addEventListener("click", () => {
+    popup.remove();
+    restoreVideoState();
+    // Navigate to YouTube home
+    window.location.href = "https://www.youtube.com/";
+  });
+  
+  // Continue button - dismiss and restore video state
+  popup.querySelector("#ft-ai-continue").addEventListener("click", () => {
+    popup.remove();
+    restoreVideoState(); // Restore original muted state (but don't auto-play)
+  });
+  
+  document.body.appendChild(popup);
+}
+*/
 
 /**
  * Starts tracking time spent on Shorts (Pro plan only)
@@ -1547,12 +2063,36 @@ chrome.runtime.onMessage.addListener((msg) => {
  * 2. Sends message to background for decision
  * 3. Applies result (block / allow)
  */
+// Track last extracted URL and video_id for debugging
+let lastExtractedUrl = null;
+let lastExtractedVideoId = null;
+
 async function handleNavigation() {
   // Guard: make sure Chrome APIs exist before continuing
   if (!chrome?.runtime) {
     console.warn("[FT] chrome.runtime unavailable — skipping navigation check.");
   return;
 }
+  
+  // Debug: Log when handleNavigation is called
+  const currentUrl = location.href;
+  console.log("[FT DEBUG] handleNavigation() called", { url: currentUrl, timestamp: Date.now() });
+  
+  // Check if onboarding is needed (first-time user)
+  try {
+    if (isChromeContextValid()) {
+      const { ft_onboarding_completed } = await chrome.storage.local.get(["ft_onboarding_completed"]);
+      if (!ft_onboarding_completed) {
+        // Show onboarding overlay and block everything until completed
+        showOnboardingOverlay();
+        return; // Don't proceed with normal navigation
+      }
+    }
+  } catch (e) {
+    console.warn("[FT] Error checking onboarding status:", e.message);
+    // Continue with normal navigation if check fails
+  }
+  
   const pageType = detectPageType();
 
   // Check if we just redirected from Shorts (on home page)
@@ -1594,23 +2134,126 @@ async function handleNavigation() {
     }
   }
 
-  // Extract video title for watch pages (for AI classification)
-  let videoTitle = null;
+  // Extract video metadata for watch pages (for AI classification)
+  let videoMetadata = null;
   if (pageType === "WATCH") {
     try {
-      // Try to get video title from page
-      const titleElement = document.querySelector("h1.ytd-watch-metadata yt-formatted-string, h1.ytd-video-primary-info-renderer, h1.title");
-      if (titleElement) {
-        videoTitle = titleElement.textContent?.trim() || null;
-      } else {
-        // Fallback: try meta tag
-        const metaTitle = document.querySelector('meta[property="og:title"]');
-        if (metaTitle) {
-          videoTitle = metaTitle.getAttribute("content")?.trim() || null;
+      const initialVideoId = extractVideoIdFromUrl();
+      console.log("[FT] Starting metadata extraction for video:", initialVideoId);
+
+      await expandDescriptionIfCollapsed(initialVideoId);
+
+      let attempts = 0;
+      const maxAttempts = 10; // 5 seconds max (10 × 500ms)
+
+      while (attempts < maxAttempts) {
+        videoMetadata = extractVideoMetadata();
+
+        if (videoMetadata) {
+          const currentVideoId = extractVideoIdFromUrl();
+          videoMetadata.video_id = currentVideoId;
+        }
+
+        const allReady = Boolean(
+          videoMetadata &&
+          videoMetadata.video_id &&
+          videoMetadata.title &&
+          videoMetadata.channel
+        );
+
+        if (allReady) {
+          console.log("[FT] ✅ Core metadata ready:", {
+            video_id: videoMetadata.video_id,
+            title: videoMetadata.title?.substring(0, 50),
+            channel: videoMetadata.channel,
+            category: videoMetadata.category,
+            description_length: videoMetadata.description?.length || 0,
+            tags_count: videoMetadata.tags?.length || 0
+          });
+          break;
+        }
+
+        attempts++;
+        if (attempts < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
       }
+
+      if (!videoMetadata || !videoMetadata.video_id || !videoMetadata.title) {
+        console.warn("[FT] ⚠️ Metadata incomplete after 5s, proceeding with partial data:", {
+          video_id: videoMetadata?.video_id || "MISSING",
+          title_present: Boolean(videoMetadata?.title),
+          channel_present: Boolean(videoMetadata?.channel),
+          category_present: Boolean(videoMetadata?.category),
+          description_present: Boolean(videoMetadata?.description)
+        });
+      }
+
+      if (videoMetadata) {
+        // Ensure category is fresh (wait specifically for category/meta to update)
+        let categoryReady = videoMetadata.category && videoMetadata.category !== "MISSING" ? videoMetadata.category : null;
+        let descriptionReady = videoMetadata.description || null;
+        const extraAttempts = 12; // additional 6 seconds max (12 × 500ms)
+
+        if (!categoryReady) {
+          console.log("[FT] Category not ready, starting extended wait loop...");
+          for (let i = 0; i < extraAttempts; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
+            // Try to expand description during category wait if still missing
+            if (!descriptionReady) {
+              await expandDescriptionIfCollapsed(initialVideoId);
+            }
+
+            const latestMetadata = extractVideoMetadata();
+            const latestCategory = latestMetadata?.category && latestMetadata.category !== "MISSING" ? latestMetadata.category : null;
+
+            if (!descriptionReady && latestMetadata?.description) {
+              descriptionReady = latestMetadata.description;
+              console.log(`[FT] Description found on attempt ${i + 1}`);
+            }
+
+            if ((!videoMetadata.tags || videoMetadata.tags.length === 0) && latestMetadata?.tags?.length) {
+              videoMetadata.tags = latestMetadata.tags;
+            }
+
+            if (latestCategory) {
+              categoryReady = latestCategory;
+              console.log(`[FT] ✅ Category found on attempt ${i + 1}: ${latestCategory}`);
+              break;
+            }
+
+            if (i === extraAttempts - 1) {
+              console.warn(`[FT] Category still missing after ${extraAttempts} attempts`);
+            }
+          }
+
+          if (!categoryReady) {
+            console.warn("[FT] ⚠️ Category missing after extended wait, falling back to 'Unknown'");
+            categoryReady = "Unknown";
+          }
+        } else {
+          console.log(`[FT] Category already ready: ${categoryReady}`);
+        }
+
+        videoMetadata.category = categoryReady;
+        if (descriptionReady) {
+          videoMetadata.description = descriptionReady;
+        }
+
+        videoMetadata.url = location.href;
+
+        console.log("[FT] ✅ Final metadata ready:", {
+          video_id: videoMetadata.video_id,
+          title: videoMetadata.title?.substring(0, 60),
+          channel: videoMetadata.channel,
+          category: videoMetadata.category,
+          description_length: videoMetadata.description?.length || 0,
+          tags_count: videoMetadata.tags?.length || 0
+        });
+      }
     } catch (e) {
-      console.warn("[FT] Error extracting video title:", e.message || e);
+      console.warn("[FT] Error extracting video metadata:", e.message || e);
     }
   }
 
@@ -1622,12 +2265,50 @@ async function handleNavigation() {
       return;
     }
     
+    // Phase 1: Log before sending to background
+    console.log("[FT DEBUG] Sending to background:", {
+      pageType,
+      url: location.href,
+      videoMetadata: videoMetadata ? {
+        video_id: videoMetadata.video_id,
+        title: videoMetadata.title?.substring(0, 50),
+        url: videoMetadata.url
+      } : null
+    });
+    
     resp = await chrome.runtime.sendMessage({
       type: "FT_NAVIGATED",
       pageType,
       url: location.href,
-      videoTitle: videoTitle // Pass video title for AI classification (Pro users only)
+      videoMetadata: videoMetadata // Pass full video metadata for AI classification (Pro users only)
     });
+    
+    // Immediate console log for AI classification results with validation
+    if (resp && resp.aiClassification) {
+      const ai = resp.aiClassification;
+      const category = ai.category_primary || ai.category || "unknown";
+      const distraction = ai.distraction_level || ai.category || "neutral";
+      const confidence = ai.confidence_distraction || ai.confidence || 0.5;
+      const responseVideoId = ai.video_id || "unknown";
+      const currentVideoId = videoMetadata?.video_id || extractVideoIdFromUrl() || "unknown";
+      
+      // Always log AI classification (for visibility)
+      // Validate video_id matches for blocking decisions, but still show tag
+      if (responseVideoId === currentVideoId && responseVideoId !== "unknown") {
+        console.log(`[FT] AI: ${category} → ${distraction} (${(confidence * 100).toFixed(0)}%) [${currentVideoId}]`);
+      } else {
+        console.warn(`[FT] ⚠️ AI Classification mismatch (may be from previous video):`, {
+          responseVideoId,
+          currentVideoId,
+          category,
+          distraction,
+          confidence: `${(confidence * 100).toFixed(0)}%`
+        });
+        console.log(`[FT] AI Tag (mismatch): ${category} → ${distraction} (${(confidence * 100).toFixed(0)}%)`);
+        // Keep classification for dev panel visibility, but mark as potentially stale
+        // Don't clear it - let dev panel show it for debugging
+      }
+    }
     
     if (chrome.runtime.lastError) {
       if (!isChromeContextValid()) {
@@ -1732,6 +2413,43 @@ async function handleNavigation() {
     await stopShortsTimeTracking();
   }
 
+  // Handle AI classification popup (show before checking blocked status)
+  // Only show popup if content is NOT blocked (blocked content shows different overlay)
+  if (!resp.blocked && resp.aiClassification && resp.aiClassification.category === "distracting") {
+    const actionHint = resp.aiClassification.action_hint || "allow";
+    const allowanceVideosLeft = resp.counters?.allowanceVideosLeft || 0;
+    const allowanceSecondsLeft = resp.counters?.allowanceSecondsLeft || 0;
+    
+    // COMMENTED OUT: AI distracting popup - to be replaced with nudge/hide/remove per user request
+    // Show popup if:
+    // - action_hint is "soft-warn" OR
+    // - content is distracting but allowed (has allowance and not blocked)
+    /*
+    if (actionHint === "soft-warn" || (actionHint !== "block" && (allowanceVideosLeft > 0 || allowanceSecondsLeft > 0))) {
+      // Don't show if already showing popup or overlay
+      if (!document.getElementById("ft-overlay") && !document.getElementById("ft-ai-distracting-popup")) {
+        await showAIDistractingPopup(resp.aiClassification, {
+          allowanceVideosLeft,
+          allowanceSecondsLeft
+        });
+      }
+    }
+    */
+  }
+
+  // Update dev panel with AI classification results (only if valid)
+  const devPanel = document.getElementById("ft-dev-toggle");
+  if (devPanel && resp.aiClassification) {
+    // Validate video_id before updating dev panel
+    const responseVideoId = resp.aiClassification.video_id;
+    const currentVideoId = videoMetadata?.video_id || extractVideoIdFromUrl();
+    if (responseVideoId === currentVideoId) {
+      await updateDevPanelStatus(devPanel, resp.aiClassification);
+    } else {
+      console.warn("[FT] Dev panel: Classification video_id mismatch, not updating");
+    }
+  }
+
   if (resp.blocked) {
     pauseVideos();
     await stopShortsTimeTracking(); // Stop tracking if blocked
@@ -1753,11 +2471,24 @@ async function handleNavigation() {
     }
 
     // Search blocking: show search-specific overlay with plan-specific buttons
+    // COMMENTED OUT: Search block overlay hidden per user request
+    /*
     if (resp.scope === "search") {
       if (!document.getElementById("ft-overlay")) {
         await showSearchBlockOverlay(resp.plan || "free");
       }
     } 
+    */
+    // Watch/AI blocking: show generic overlay for AI-blocked videos
+    // COMMENTED OUT: Generic overlay removed per user request
+    /*
+    else if (resp.scope === "watch") {
+      if (!document.getElementById("ft-overlay")) {
+        // Show generic block overlay for AI-blocked videos
+        showOverlay(resp.reason || "ai_distracting_blocked", "watch");
+      }
+    }
+    */
     // Global blocking: show global limit overlay with daily summary
     else if (resp.scope === "global" && !document.getElementById("ft-overlay")) {
       await showGlobalLimitOverlay(resp.plan || "free", resp.counters || {});
@@ -1767,25 +2498,100 @@ async function handleNavigation() {
   }
 }
 
-async function updateDevPanelStatus(panel) {
+async function updateDevPanelStatus(panel, aiClassificationFromResponse = null) {
   try {
     if (!isChromeContextValid()) return;
     
-    const { ft_plan, ft_user_email } = await chrome.storage.local.get(["ft_plan", "ft_user_email"]);
+    const { ft_plan, ft_user_email, ft_user_goals, ft_last_watch_classification, ft_last_search_classification } = await chrome.storage.local.get([
+      "ft_plan",
+      "ft_user_email",
+      "ft_user_goals",
+      "ft_last_watch_classification",
+      "ft_last_search_classification"
+    ]);
     if (chrome.runtime.lastError) {
       console.warn("[FT] Failed to get dev panel status:", chrome.runtime.lastError.message);
       return;
     }
+    
+    // Get latest AI classification (prefer response data if available, then storage)
+    const latestClassification = (aiClassificationFromResponse !== null && aiClassificationFromResponse !== undefined) 
+      ? aiClassificationFromResponse 
+      : (ft_last_watch_classification || ft_last_search_classification || null);
     
     // Update status display
     const statusEl = panel.querySelector("#ft-status");
     if (statusEl) {
       const emailText = ft_user_email && ft_user_email.trim() !== "" ? ft_user_email : "Not set";
       const planText = ft_plan || "free";
+      const goalsText = ft_user_goals && Array.isArray(ft_user_goals) && ft_user_goals.length > 0 
+        ? ft_user_goals.join(", ") 
+        : "Not set";
       statusEl.innerHTML = `
         <div>Email: ${emailText}</div>
         <div style="margin-top:4px;font-size:11px;">Plan: ${planText}</div>
+        <div style="margin-top:4px;font-size:11px;">Goals: ${goalsText}</div>
       `;
+    }
+    
+    // Update AI classification box
+    const aiBoxEl = panel.querySelector("#ft-ai-classification");
+    if (aiBoxEl) {
+      if (latestClassification) {
+        // New schema fields
+        const categoryPrimary = latestClassification.category_primary || latestClassification.category || "Other";
+        const categorySecondary = latestClassification.category_secondary || [];
+        const distractionLevel = latestClassification.distraction_level || latestClassification.category || "neutral";
+        const confidenceCategory = latestClassification.confidence_category || latestClassification.confidence || 0.5;
+        const confidenceDistraction = latestClassification.confidence_distraction || latestClassification.confidence || 0.5;
+        const goalsAlignment = latestClassification.goals_alignment || "unknown";
+        const reasons = Array.isArray(latestClassification.reasons) ? latestClassification.reasons : (latestClassification.reason ? [latestClassification.reason] : ["No reason provided"]);
+        const suggestionsSummary = latestClassification.suggestions_summary || { on_goal_ratio: 0.0, shorts_ratio: 0.0, dominant_themes: [] };
+        const flags = latestClassification.flags || { is_shorts: false, clickbait_likelihood: 0.0, time_sink_risk: 0.0 };
+        
+        // Old schema fields (for compatibility)
+        const category = latestClassification.category || distractionLevel;
+        const confidence = latestClassification.confidence || confidenceDistraction;
+        const reason = Array.isArray(latestClassification.reasons) ? latestClassification.reasons.join("; ") : (latestClassification.reason || "No reason provided");
+        const tags = latestClassification.suggestions_summary?.dominant_themes || latestClassification.tags || [];
+        const blockReasonCode = latestClassification.block_reason_code || "ok";
+        const actionHint = latestClassification.action_hint || "allow";
+        const allowanceCost = latestClassification.allowance_cost || { type: "none", amount: 0 };
+        
+        // Color coding for distraction level
+        let distractionColor = "#ccc"; // neutral
+        if (distractionLevel === "productive") distractionColor = "#4ade80"; // green
+        else if (distractionLevel === "distracting") distractionColor = "#ef4444"; // red
+        
+        // Goals alignment color
+        let alignmentColor = "#ccc";
+        if (goalsAlignment === "aligned") alignmentColor = "#4ade80";
+        else if (goalsAlignment === "partially_aligned") alignmentColor = "#fbbf24";
+        else if (goalsAlignment === "misaligned") alignmentColor = "#ef4444";
+        
+        aiBoxEl.innerHTML = `
+          <div style="margin-top:8px;padding:8px;background:rgba(255,255,255,0.05);border-radius:6px;font-size:11px;">
+            <div style="font-weight:600;margin-bottom:6px;">AI Classification:</div>
+            <div style="margin:4px 0;"><span style="color:${distractionColor};">Category:</span> ${categoryPrimary}${categorySecondary.length > 0 ? ` (${categorySecondary.join(", ")})` : ''}</div>
+            <div style="margin:4px 0;"><span style="color:${distractionColor};">Distraction:</span> ${distractionLevel}</div>
+            <div style="margin:4px 0;"><span style="color:${alignmentColor};">Goals:</span> ${goalsAlignment}</div>
+            <div style="margin:4px 0;font-size:10px;">Confidence: ${(confidenceCategory * 100).toFixed(0)}% (category) / ${(confidenceDistraction * 100).toFixed(0)}% (distraction)</div>
+            ${reasons.length > 0 ? `<div style="margin:4px 0;font-size:10px;opacity:0.9;">Reasons: ${reasons.map(r => `• ${r}`).join(" ")}</div>` : ''}
+            ${tags.length > 0 ? `<div style="margin:4px 0;font-size:10px;opacity:0.8;">Themes: ${tags.join(", ")}</div>` : ''}
+            <div style="margin:4px 0;font-size:10px;opacity:0.8;">Suggestions: ${(suggestionsSummary.on_goal_ratio * 100).toFixed(0)}% on-goal, ${(suggestionsSummary.shorts_ratio * 100).toFixed(0)}% Shorts</div>
+            <div style="margin:4px 0;font-size:10px;opacity:0.8;">Flags: Clickbait ${(flags.clickbait_likelihood * 100).toFixed(0)}%, Time Sink ${(flags.time_sink_risk * 100).toFixed(0)}%</div>
+            <div style="margin:4px 0;font-size:10px;opacity:0.8;">Action: ${actionHint} | Code: ${blockReasonCode}</div>
+            <div style="margin:4px 0;font-size:10px;opacity:0.8;">Cost: ${allowanceCost.type} (${allowanceCost.amount})</div>
+          </div>
+        `;
+      } else {
+        aiBoxEl.innerHTML = `
+          <div style="margin-top:8px;padding:8px;background:rgba(255,255,255,0.05);border-radius:6px;font-size:11px;opacity:0.6;">
+            <div style="font-weight:600;margin-bottom:6px;">AI Classification:</div>
+            <div style="font-size:10px;">No classification yet</div>
+          </div>
+        `;
+      }
     }
     
     // Update email input value
@@ -1798,6 +2604,13 @@ async function updateDevPanelStatus(panel) {
     const planSelect = panel.querySelector("#ft-plan-select");
     if (planSelect) {
       planSelect.value = ft_plan || "free";
+    }
+    
+    // Update goals input value
+    const goalsInput = panel.querySelector("#ft-goals-input");
+    if (goalsInput) {
+      const goalsArray = ft_user_goals && Array.isArray(ft_user_goals) ? ft_user_goals : [];
+      goalsInput.value = goalsArray.join(", ");
     }
   } catch (err) {
     console.warn("[FT content] Could not update dev panel status:", err);
@@ -1841,9 +2654,12 @@ function injectDevToggle() {
       </select>
       <button id="ft-set-plan" style="flex:1;font-size:11px;padding:4px;">Set Plan</button>
     </div>
+    <textarea id="ft-goals-input" placeholder="Enter goals (comma-separated)" style="width:100%;padding:4px;margin-bottom:4px;border-radius:4px;border:none;font-size:11px;background:rgba(255,255,255,0.1);color:white;resize:vertical;min-height:40px;font-family:inherit;box-sizing:border-box;"></textarea>
+    <button id="ft-save-goals" style="width:100%;margin-bottom:4px;font-size:11px;padding:4px;">Save Goals</button>
     <button id="ft-reset-counters" style="width:100%;margin-bottom:4px;font-size:11px;padding:4px;background:#ef4444;">Reset Counters</button>
   </div>
   <div id="ft-status" style="margin-top:6px;font-size:12px;opacity:0.8;"></div>
+  <div id="ft-ai-classification"></div>
 `;
 
   // Click handlers — these send messages to background.js
@@ -1873,7 +2689,7 @@ function injectDevToggle() {
       console.log("[FT] Save Email response:", response);
       
       if (response?.ok) {
-        await updateDevPanelStatus(panel);
+      await updateDevPanelStatus(panel);
         console.log("[FT content] Email saved successfully");
         alert("Email saved successfully!");
       } else {
@@ -1916,6 +2732,46 @@ function injectDevToggle() {
     } catch (err) {
       console.error("[FT content] Error setting plan:", err);
       alert("Error setting plan: " + (err.message || String(err)));
+    }
+  };
+  
+  // Save Goals handler
+  panel.querySelector("#ft-save-goals").onclick = async () => {
+    console.log("[FT] Save Goals button clicked");
+    try {
+      if (!chrome?.runtime?.id) {
+        console.error("[FT] Chrome runtime not available");
+        alert("Extension context invalidated. Please reload the page.");
+        return;
+      }
+      
+      const goalsInput = panel.querySelector("#ft-goals-input");
+      const goalsText = goalsInput?.value?.trim() || "";
+      
+      // Parse comma-separated goals into array
+      const goalsArray = goalsText
+        .split(",")
+        .map(g => g.trim())
+        .filter(g => g.length > 0);
+      
+      console.log("[FT] Saving goals:", goalsArray);
+      const response = await chrome.runtime.sendMessage({ 
+        type: "FT_SET_GOALS", 
+        goals: goalsArray 
+      });
+      console.log("[FT] Save Goals response:", response);
+      
+      if (response?.ok) {
+      await updateDevPanelStatus(panel);
+        console.log("[FT content] Goals saved successfully");
+        alert(`Goals saved! (${goalsArray.length} goal${goalsArray.length !== 1 ? 's' : ''})`);
+      } else {
+        console.warn("[FT] Save Goals failed:", response?.error);
+        alert(response?.error || "Failed to save goals");
+      }
+    } catch (err) {
+      console.error("[FT content] Error saving goals:", err);
+      alert("Error saving goals: " + (err.message || String(err)));
     }
   };
   

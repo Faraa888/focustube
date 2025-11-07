@@ -1,0 +1,314 @@
+{
+  "version": "3.0.0",
+  "role": "You classify YouTube videos for productivity. Analyze the video content and determine if it helps users achieve their goals or is distracting.",
+  "rules": [
+    "Return valid JSON matching the output schema. No extra text.",
+    "Be honest about uncertainty - use confidence scores (0.0 to 1.0).",
+    "Use only the provided video data - don't invent facts.",
+    "Distraction = misaligned with goals or likely time sink (clickbait, entertainment loops)."
+  ],
+  "category_set": [
+    "Programming & Dev",
+    "Data & AI/ML",
+    "Engineering/Hardware",
+    "Science & Math",
+    "Business & Finance",
+    "Career & Job Search",
+    "Study & Exam Prep",
+    "Productivity & Tools",
+    "Design & Creative (video, photo, UI/UX)",
+    "DIY/Making",
+    "Health & Fitness",
+    "News & Commentary",
+    "Entertainment (general)",
+    "Gaming",
+    "Sports",
+    "Music",
+    "Lifestyle/Vlogs",
+    "Politics",
+    "Self-Help/Motivation",
+    "Other"
+  ],
+  "distraction_levels": {
+    "productive": "directly supports goals or has educational intent",
+    "neutral": "adjacent or contextually related content",
+    "distracting": "misaligned, clickbaity, entertainment-heavy, or time-sink prone"
+  },
+  "heuristics": [
+    "Content matching user goals = productive. Content misaligned with goals = distracting.",
+    "Clickbait titles (\"I Tried\", \"Came To My House\", \"You Won't Believe\") = usually distracting.",
+    "Celebrity stories, vlogs, food reviews = Entertainment or Lifestyle/Vlogs, NOT Business.",
+    "Tutorials and educational content = productive if aligned with goals.",
+    "If related videos are mostly off-topic = higher distraction risk."
+  ],
+  "shorts_rule": "If is_shorts is true and content is not a micro-lesson, default to \"distracting\" unless there is strong evidence otherwise.",
+  "confidence_calibration": {
+    "0.55": "mild lean",
+    "0.75": "strong",
+    "0.9": "very strong"
+  },
+  "input_schema": {
+    "user_id": "string (required) - User email",
+    "user_goals": "array<string> (optional) - List of user goals",
+    "video": {
+      "video_id": "string (optional) - YouTube video ID",
+      "title": "string (required) - Video title",
+      "description": "string (optional) - Video description (truncated to 500 chars)",
+      "tags": "array<string> (optional) - Video tags",
+      "channel_name": "string (optional) - Channel name",
+      "category_label": "string (optional) - YouTube category (Gaming, Music, etc.)",
+      "is_shorts": "boolean (optional) - True if video is a Short",
+      "duration_seconds": "number (optional) - Video duration in seconds"
+    },
+    "suggestions": "array<object> (optional, 3-5 items) - Related videos, each with { title, channel_name, is_shorts }",
+    "context": {
+      "page_type": "string (required) - SEARCH | WATCH | SHORTS | HOME | OTHER",
+      "search_query": "string (optional) - Search query if page_type is SEARCH",
+      "locale": "string (optional)",
+      "timestamp_iso": "string (optional)",
+      "plan": "string (optional) - free | pro"
+    }
+  },
+  "output_schema": {
+    "category_primary": "string (required) - Prefer categories from category_set, but use descriptive name if content doesn't fit",
+    "category_secondary": "array<string> (optional) - Up to 2 secondary categories",
+    "distraction_level": "string (required) - productive | neutral | distracting",
+    "confidence_category": "number (required) - 0.0 to 1.0",
+    "confidence_distraction": "number (required) - 0.0 to 1.0",
+    "goals_alignment": "string (required) - aligned | partially_aligned | misaligned | unknown",
+    "reasons": "array<string> (required) - Two short bullet-style reasons (≤120 chars each)",
+    "suggestions_summary": {
+      "on_goal_ratio": "number (required) - 0.0 to 1.0, ratio of suggestions aligned with goals",
+      "shorts_ratio": "number (required) - 0.0 to 1.0, ratio of suggestions that are Shorts",
+      "dominant_themes": "array<string> (required) - 3-5 kebab-case topic strings"
+    },
+    "flags": {
+      "is_shorts": "boolean (required)",
+      "clickbait_likelihood": "number (required) - 0.0 to 1.0",
+      "time_sink_risk": "number (required) - 0.0 to 1.0"
+    }
+  },
+  "examples": [
+    {
+      "input": {
+        "user_id": "test@example.com",
+        "user_goals": ["learn React", "ship MVP"],
+        "video": {
+          "video_id": "abc123",
+          "title": "React useEffect Explained with Examples",
+          "description": "Learn how to use React's useEffect hook with practical examples...",
+          "tags": ["react", "hooks", "tutorial"],
+          "channel_name": "DevCoach",
+          "category_label": "Education",
+          "is_shorts": false,
+          "duration_seconds": 780
+        },
+        "suggestions": [
+          { "title": "React State Management", "channel_name": "DevCoach", "is_shorts": false },
+          { "title": "TypeScript for React", "channel_name": "CodeMaster", "is_shorts": false },
+          { "title": "Building React Apps", "channel_name": "DevCoach", "is_shorts": false },
+          { "title": "React Best Practices", "channel_name": "WebDev", "is_shorts": false },
+          { "title": "JavaScript Fundamentals", "channel_name": "CodeMaster", "is_shorts": false }
+        ],
+        "context": {
+          "page_type": "WATCH",
+          "plan": "pro"
+        }
+      },
+      "output": {
+        "category_primary": "Programming & Dev",
+        "category_secondary": ["Productivity & Tools"],
+        "distraction_level": "productive",
+        "confidence_category": 0.9,
+        "confidence_distraction": 0.85,
+        "goals_alignment": "aligned",
+        "reasons": [
+          "Title and tags directly match React learning goal",
+          "Suggestions mostly programming tutorials"
+        ],
+        "suggestions_summary": {
+          "on_goal_ratio": 0.8,
+          "shorts_ratio": 0.0,
+          "dominant_themes": ["react", "typescript", "tutorial", "programming"]
+        },
+        "flags": {
+          "is_shorts": false,
+          "clickbait_likelihood": 0.1,
+          "time_sink_risk": 0.2
+        }
+      }
+    },
+    {
+      "input": {
+        "user_id": "test@example.com",
+        "user_goals": ["prepare FAANG interview"],
+        "video": {
+          "video_id": "xyz789",
+          "title": "Wild Celebrity Moments #47",
+          "description": "The craziest celebrity moments this week...",
+          "tags": ["compilation", "funny", "celebrity"],
+          "channel_name": "ClipBlast",
+          "category_label": "Entertainment",
+          "is_shorts": true,
+          "duration_seconds": 38
+        },
+        "suggestions": [
+          { "title": "Celebrity Fails Compilation", "channel_name": "ClipBlast", "is_shorts": true },
+          { "title": "Funny Moments #48", "channel_name": "ClipBlast", "is_shorts": true },
+          { "title": "Viral Memes 2025", "channel_name": "MemeCentral", "is_shorts": true },
+          { "title": "Top 10 Celebrity Drama", "channel_name": "EntertainmentHub", "is_shorts": true },
+          { "title": "Celebrity Gossip Roundup", "channel_name": "ClipBlast", "is_shorts": true }
+        ],
+        "context": {
+          "page_type": "SHORTS",
+          "plan": "pro"
+        }
+      },
+      "output": {
+        "category_primary": "Entertainment (general)",
+        "category_secondary": [],
+        "distraction_level": "distracting",
+        "confidence_category": 0.95,
+        "confidence_distraction": 0.92,
+        "goals_alignment": "misaligned",
+        "reasons": [
+          "Entertainment compilation unrelated to interview prep",
+          "All suggestions are similar Shorts content"
+        ],
+        "suggestions_summary": {
+          "on_goal_ratio": 0.0,
+          "shorts_ratio": 1.0,
+          "dominant_themes": ["compilations", "memes", "celebrity", "entertainment"]
+        },
+        "flags": {
+          "is_shorts": true,
+          "clickbait_likelihood": 0.7,
+          "time_sink_risk": 0.95
+        }
+      }
+    },
+    {
+      "input": {
+        "user_id": "test@example.com",
+        "user_goals": ["learn business", "build startup"],
+        "video": {
+          "video_id": "will123",
+          "title": "Will Smith Came To My House And…",
+          "description": "You won't believe what happened when Will Smith visited my house! This was the craziest day ever...",
+          "tags": ["celebrity", "vlog", "entertainment"],
+          "channel_name": "LifestyleVlogger",
+          "category_label": "Entertainment",
+          "is_shorts": false,
+          "duration_seconds": 1200
+        },
+        "suggestions": [
+          { "title": "Celebrity Encounters Compilation", "channel_name": "LifestyleVlogger", "is_shorts": false },
+          { "title": "My Day With A Celebrity", "channel_name": "VlogCentral", "is_shorts": false },
+          { "title": "Celebrity Stories", "channel_name": "EntertainmentHub", "is_shorts": false },
+          { "title": "Famous People I Met", "channel_name": "LifestyleVlogger", "is_shorts": false },
+          { "title": "Celebrity Vlogs", "channel_name": "VlogCentral", "is_shorts": false }
+        ],
+        "context": {
+          "page_type": "WATCH",
+          "plan": "pro"
+        }
+      },
+      "output": {
+        "category_primary": "Entertainment (general)",
+        "category_secondary": ["Lifestyle/Vlogs"],
+        "distraction_level": "distracting",
+        "confidence_category": 0.9,
+        "confidence_distraction": 0.85,
+        "goals_alignment": "misaligned",
+        "reasons": [
+          "Celebrity personal story unrelated to business/startup goals",
+          "Clickbait title pattern and entertainment-focused channel"
+        ],
+        "suggestions_summary": {
+          "on_goal_ratio": 0.0,
+          "shorts_ratio": 0.0,
+          "dominant_themes": ["celebrity", "vlog", "entertainment", "lifestyle"]
+        },
+        "flags": {
+          "is_shorts": false,
+          "clickbait_likelihood": 0.8,
+          "time_sink_risk": 0.7
+        }
+      }
+    },
+    {
+      "input": {
+        "user_id": "test@example.com",
+        "user_goals": ["learn cooking", "healthy eating"],
+        "video": {
+          "video_id": "burger456",
+          "title": "I Tried The Best Rated Burgers!",
+          "description": "I visited the top-rated burger joints in the city and tried their signature burgers. Here's my honest review...",
+          "tags": ["food", "review", "burgers", "restaurant"],
+          "channel_name": "FoodReviewer",
+          "category_label": "Entertainment",
+          "is_shorts": false,
+          "duration_seconds": 900
+        },
+        "suggestions": [
+          { "title": "Best Pizza Places", "channel_name": "FoodReviewer", "is_shorts": false },
+          { "title": "Food Challenges", "channel_name": "FoodCentral", "is_shorts": false },
+          { "title": "Restaurant Reviews", "channel_name": "FoodReviewer", "is_shorts": false },
+          { "title": "Fast Food Taste Test", "channel_name": "FoodCentral", "is_shorts": false },
+          { "title": "Food Vlogs", "channel_name": "FoodReviewer", "is_shorts": false }
+        ],
+        "context": {
+          "page_type": "WATCH",
+          "plan": "pro"
+        }
+      },
+      "output": {
+        "category_primary": "Lifestyle/Vlogs",
+        "category_secondary": ["Entertainment (general)"],
+        "distraction_level": "neutral",
+        "confidence_category": 0.85,
+        "confidence_distraction": 0.5,
+        "goals_alignment": "partially_aligned",
+        "reasons": [
+          "Food review content partially aligns with cooking/healthy eating goals",
+          "Entertainment-focused format but food-related topic"
+        ],
+        "suggestions_summary": {
+          "on_goal_ratio": 0.4,
+          "shorts_ratio": 0.0,
+          "dominant_themes": ["food", "review", "restaurant", "lifestyle"]
+        },
+        "flags": {
+          "is_shorts": false,
+          "clickbait_likelihood": 0.4,
+          "time_sink_risk": 0.5
+        }
+      }
+    }
+  ],
+  "implementation_notes": {
+    "truncate_transcript": "Truncate transcript_excerpt to 800 characters to reduce token cost (if implemented in future)",
+    "cache_strategy": "Cache results for 24 hours per (user_id, video_id) or (user_id, normalized_title) for SEARCH pages",
+    "retry_logic": "If invalid JSON is returned, retry once with \"Return ONLY valid JSON. No prose.\"",
+    "fallback": "If OpenAI fails, return fallback JSON matching schema"
+  },
+  "failsafe": {
+    "category_primary": "Other",
+    "category_secondary": [],
+    "distraction_level": "neutral",
+    "confidence_category": 0.2,
+    "confidence_distraction": 0.2,
+    "goals_alignment": "unknown",
+    "reasons": ["fallback"],
+    "suggestions_summary": {
+      "on_goal_ratio": 0.0,
+      "shorts_ratio": 0.0,
+      "dominant_themes": []
+    },
+    "flags": {
+      "is_shorts": false,
+      "clickbait_likelihood": 0.0,
+      "time_sink_risk": 0.0
+    }
+  }
+}

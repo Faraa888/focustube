@@ -124,3 +124,126 @@ export async function updateUserPlan(
   }
 }
 
+export interface VideoClassificationPayload {
+  user_id: string;
+  video_id: string;
+  video_title?: string | null;
+  channel_name?: string | null;
+  video_category?: string | null;
+  distraction_level?: string | null;
+  category_primary?: string | null;
+  confidence_distraction?: number | null;
+}
+
+/**
+ * Upsert video classification metadata for analytics tracking
+ */
+export async function upsertVideoClassification(
+  payload: VideoClassificationPayload
+): Promise<boolean> {
+  try {
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.warn("[Supabase] Credentials not set, cannot store video classification");
+      return false;
+    }
+
+    const { user_id, video_id } = payload;
+    if (!user_id || !video_id) {
+      console.warn("[Supabase] Missing user_id or video_id for classification upsert");
+      return false;
+    }
+
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase
+      .from("video_classifications")
+      .upsert(
+        {
+          user_id,
+          video_id,
+          video_title: payload.video_title || null,
+          channel_name: payload.channel_name || null,
+          video_category: payload.video_category || null,
+          distraction_level: payload.distraction_level || null,
+          category_primary: payload.category_primary || null,
+          confidence_distraction: payload.confidence_distraction ?? null,
+          updated_at: nowIso,
+          created_at: nowIso,
+        },
+        {
+          onConflict: "user_id,video_id",
+          ignoreDuplicates: false,
+        }
+      );
+
+    if (error) {
+      console.error("[Supabase] Error upserting video classification:", error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("[Supabase] Exception upserting video classification:", error);
+    return false;
+  }
+}
+
+/**
+ * Update watch time for a video classification row
+ */
+export async function updateVideoWatchTime(
+  user_id: string,
+  video_id: string,
+  watch_seconds: number
+): Promise<boolean> {
+  try {
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.warn("[Supabase] Credentials not set, cannot update watch time");
+      return false;
+    }
+
+    if (!user_id || !video_id) {
+      console.warn("[Supabase] Missing user_id or video_id for watch time update");
+      return false;
+    }
+
+    const nowIso = new Date().toISOString();
+    const { data, error } = await supabase
+      .from("video_classifications")
+      .update({
+        watch_seconds,
+        updated_at: nowIso,
+      })
+      .eq("user_id", user_id)
+      .eq("video_id", video_id)
+      .select("video_id");
+
+    if (error) {
+      console.error("[Supabase] Error updating watch time:", error);
+      return false;
+    }
+
+    // If no row existed (classification maybe missing), create minimal row
+    if (!data || data.length === 0) {
+      const fallback = await supabase
+        .from("video_classifications")
+        .insert({
+          user_id,
+          video_id,
+          watch_seconds,
+          updated_at: nowIso,
+          created_at: nowIso,
+        });
+
+      if (fallback.error) {
+        console.error("[Supabase] Error inserting watch time fallback:", fallback.error);
+        return false;
+      }
+    }
+
+    return true;
+  } catch (error) {
+    console.error("[Supabase] Exception updating watch time:", error);
+    return false;
+  }
+}
+

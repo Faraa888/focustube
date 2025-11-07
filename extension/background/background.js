@@ -20,6 +20,7 @@ import {
 } from "../lib/state.js";
 
 import { evaluateBlock } from "../lib/rules.js";
+import { getServerUrlForBackground } from "../lib/config.js";
 
 // ─────────────────────────────────────────────────────────────
 // DEBUG MODE (set false when you ship)
@@ -53,6 +54,14 @@ async function boot() {
 
 chrome.runtime.onInstalled.addListener(() => boot().catch(console.error));
 chrome.runtime.onStartup.addListener(() => boot().catch(console.error));
+
+// ─────────────────────────────────────────────────────────────
+// REQUEST TRACKING: Prevents race conditions from quick video switching
+// ─────────────────────────────────────────────────────────────
+let lastClassificationRequest = {
+  videoId: null,
+  timestamp: 0
+};
 
 // ─────────────────────────────────────────────────────────────
 // BACKGROUND SYNC: Sync plan every 10 minutes
@@ -106,6 +115,21 @@ async function handleMessage(msg) {
     LOG("Email saved:", email);
     // Just save email, no sync (sync happens when Set Plan is clicked)
     return { ok: true, email };
+  }
+
+  if (msg?.type === "FT_SET_GOALS") {
+    const goals = msg?.goals || [];
+    if (!Array.isArray(goals)) {
+      return { ok: false, error: "Goals must be an array" };
+    }
+    await setLocal({ ft_user_goals: goals });
+    LOG("Goals saved:", { count: goals.length, goals });
+    
+    // Verify they were saved
+    const { ft_user_goals: savedGoals } = await getLocal(["ft_user_goals"]);
+    LOG("Goals verification:", { saved: savedGoals });
+    
+    return { ok: true, goals };
   }
 
   if (msg?.type === "FT_SET_PLAN") {
@@ -199,19 +223,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // AI CLASSIFICATION (Pro users only)
 // ─────────────────────────────────────────────────────────────
 
-// Server URL (development)
-const SERVER_URL = "http://localhost:3000";
+// Server URL (auto-detected based on environment)
+const SERVER_URL = getServerUrlForBackground();
 
 /**
  * Classify content using AI (Pro users only)
- * @param {string} text - Text to classify (search query or video title)
+ * @param {string|object} input - Text to classify (search query string) or video metadata object
  * @param {string} context - Context ("search" or "watch")
  * @returns {Promise<{category: string, allowed: boolean} | null>} - Classification result or null if error
  */
-async function classifyContent(text, context = "search") {
+async function classifyContent(input, context = "search") {
   try {
-    // Get user email and plan
-    const { ft_user_email, ft_plan } = await getLocal(["ft_user_email", "ft_plan"]);
+    // Get user email, plan, and goals
+    const { ft_user_email, ft_plan, ft_user_goals } = await getLocal(["ft_user_email", "ft_plan", "ft_user_goals"]);
     
     // Only classify for Pro users
     if (!ft_plan || ft_plan !== "pro") {
@@ -224,17 +248,56 @@ async function classifyContent(text, context = "search") {
       return null;
     }
 
+    // Prepare request body
+    let requestBody = {
+      user_id: ft_user_email.trim(),
+      context: context,
+    };
+    
+    // Handle different input types
+    if (typeof input === "string") {
+      // Search query - just send text
+      requestBody.text = input.trim();
+    } else if (typeof input === "object" && input !== null) {
+      // Video metadata - send all fields matching new schema
+      requestBody.video_id = input.video_id || null;
+      requestBody.video_title = input.title || "";
+      requestBody.video_description = input.description || "";
+      requestBody.video_tags = Array.isArray(input.tags) ? input.tags : [];
+      requestBody.channel_name = input.channel || "";
+      requestBody.video_category = input.category || null;
+      requestBody.is_shorts = input.is_shorts || false;
+      requestBody.duration_seconds = input.duration_seconds || null;
+      // Phase 2: Include URL for server-side validation
+      requestBody.video_url = input.url || null;
+      // Related videos as array of objects with title, channel_name, is_shorts
+      requestBody.related_videos = Array.isArray(input.related_videos) 
+        ? input.related_videos.map(rv => ({
+            title: typeof rv === "string" ? rv : (rv.title || ""),
+            channel_name: typeof rv === "object" ? (rv.channel_name || "") : "",
+            is_shorts: typeof rv === "object" ? (rv.is_shorts || false) : false
+          }))
+        : [];
+    } else {
+      console.warn("[FT] Invalid input for classifyContent:", input);
+      return null;
+    }
+    
+    // Include goals if available
+    if (ft_user_goals && Array.isArray(ft_user_goals) && ft_user_goals.length > 0) {
+      requestBody.user_goals = ft_user_goals;
+      LOG("Sending goals to AI:", { count: ft_user_goals.length, goals: ft_user_goals });
+    } else {
+      LOG("No goals available for AI classification");
+    }
+
     // Call AI classification endpoint
     const response = await fetch(`${SERVER_URL}/ai/classify`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        user_id: ft_user_email.trim(),
-        text: text.trim(),
-        context: context,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -244,11 +307,35 @@ async function classifyContent(text, context = "search") {
 
     const data = await response.json();
     
-    // Return classification result
+    // Return classification result with both new and old schema
     return {
-      category: data.category || "neutral", // "productive" | "neutral" | "distracting"
-      allowed: data.allowed !== false, // Default to true if not specified
-      reason: data.reason || "ai_classification",
+      // New schema fields (full)
+      category_primary: data.category_primary || "Other",
+      category_secondary: data.category_secondary || [],
+      distraction_level: data.distraction_level || data.category || "neutral",
+      confidence_category: data.confidence_category || data.confidence || 0.5,
+      confidence_distraction: data.confidence_distraction || data.confidence || 0.5,
+      goals_alignment: data.goals_alignment || "unknown",
+      reasons: Array.isArray(data.reasons) ? data.reasons : (data.reason ? [data.reason] : ["No reason provided"]),
+      suggestions_summary: data.suggestions_summary || {
+        on_goal_ratio: 0.0,
+        shorts_ratio: 0.0,
+        dominant_themes: data.tags || []
+      },
+      flags: data.flags || {
+        is_shorts: false,
+        clickbait_likelihood: 0.0,
+        time_sink_risk: 0.0
+      },
+      // Old schema fields (for compatibility)
+      category: data.distraction_level || data.category || "neutral",
+      allowed: data.allowed !== false,
+      reason: Array.isArray(data.reasons) ? data.reasons.join("; ") : (data.reason || "ai_classification"),
+      confidence: data.confidence_distraction || data.confidence || 0.5,
+      tags: data.suggestions_summary?.dominant_themes || data.tags || [],
+      block_reason_code: data.block_reason_code || "ok",
+      action_hint: data.action_hint || "allow",
+      allowance_cost: data.allowance_cost || { type: "none", amount: 0 },
     };
   } catch (error) {
     console.warn("[FT] Error classifying content:", error.message || error);
@@ -258,9 +345,103 @@ async function classifyContent(text, context = "search") {
 }
 
 // ─────────────────────────────────────────────────────────────
+// VIDEO TIME TRACKING (for allowance decrement + analytics)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Extract video ID from YouTube URL
+ * @param {string} url - YouTube URL
+ * @returns {string|null} - Video ID or null
+ */
+function extractVideoId(url) {
+  try {
+    const urlObj = new URL(url);
+    const videoId = urlObj.searchParams.get("v");
+    return videoId || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Track time spent on a video, update allowance if distracting, and send analytics
+ * Called when user navigates away from a WATCH page
+ * @param {string} videoId - Video ID
+ * @param {number} startTime - Timestamp when video started
+ * @param {string} category - Video category ("distracting" | "neutral" | "productive")
+ * @returns {Promise<number>} - Time watched in seconds
+ */
+async function finalizeVideoWatch(videoId, startTime, category) {
+  if (!videoId || !startTime) {
+    return 0;
+  }
+
+  const endTime = Date.now();
+  const durationSeconds = Math.floor((endTime - startTime) / 1000);
+
+  if (durationSeconds <= 0) {
+    return 0;
+  }
+
+  if (category === "distracting") {
+    const { ft_allowance_seconds_left } = await getLocal(["ft_allowance_seconds_left"]);
+    const currentAllowance = Number(ft_allowance_seconds_left || 600);
+
+    const newAllowance = Math.max(0, currentAllowance - durationSeconds);
+
+    await setLocal({ ft_allowance_seconds_left: newAllowance });
+
+    LOG("Distracting video time tracked:", {
+      videoId: videoId.substring(0, 10),
+      duration: `${durationSeconds}s`,
+      allowanceBefore: currentAllowance,
+      allowanceAfter: newAllowance,
+    });
+  }
+
+  // Send watch time to server (fire-and-forget)
+  sendWatchTimeToServer(videoId, durationSeconds, category).catch((err) => {
+    console.warn("[FT] Failed to send watch time to server:", err?.message || err);
+  });
+
+  return durationSeconds;
+}
+
+/**
+ * Send watch time analytics to server (best-effort)
+ */
+async function sendWatchTimeToServer(videoId, durationSeconds, category) {
+  try {
+    if (!videoId || !durationSeconds || durationSeconds <= 0) {
+      return;
+    }
+
+    const { ft_user_email } = await getLocal(["ft_user_email"]);
+    if (!ft_user_email || !SERVER_URL) {
+      return;
+    }
+
+    await fetch(`${SERVER_URL}/video/update-watch-time`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: ft_user_email,
+        video_id: videoId,
+        watch_seconds: durationSeconds,
+        category,
+      }),
+    });
+  } catch (error) {
+    console.warn("[FT] Error sending watch time to server:", error?.message || error);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // HANDLE NAVIGATION (main logic)
 // ─────────────────────────────────────────────────────────────
-async function handleNavigated({ pageType = "OTHER", url = "", videoTitle = null }) {
+async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = null }) {
   // 1. Always make sure defaults + rotation are up-to-date
   await ensureDefaults();
   await maybeRotateCounters();
@@ -273,7 +454,28 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoTitle = null
   // 3. Count the page view
   await countForPageType(pageType);
 
-  // 4. Get current counters and unlock info
+  // 4. Handle video time tracking (finalize previous video if any)
+  // This happens when:
+  // - User leaves a WATCH page (navigates to non-WATCH page)
+  // - User enters a new WATCH page (need to finalize previous video first)
+  const { ft_current_video_classification: prevVideo } = await getLocal(["ft_current_video_classification"]);
+  if (prevVideo && prevVideo.startTime) {
+    const { videoId, category, startTime } = prevVideo;
+    // Only finalize if:
+    // - We're leaving WATCH page (going to different page type)
+    // - OR we're entering a new WATCH page (different video ID)
+    const currentVideoId = pageType === "WATCH" ? extractVideoId(url) : null;
+    const isNewVideo = pageType === "WATCH" && currentVideoId && currentVideoId !== videoId;
+    const isLeavingWatchPage = pageType !== "WATCH";
+    
+    if (isLeavingWatchPage || isNewVideo) {
+      await finalizeVideoWatch(videoId, startTime, category);
+      // Clear previous video tracking
+      await setLocal({ ft_current_video_classification: null });
+    }
+  }
+
+  // 5. Get current counters and unlock info
   const state = await getLocal([
     "ft_searches_today",
     "ft_short_visits_today",
@@ -288,59 +490,136 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoTitle = null
     "ft_allowance_seconds_left"
   ]);
 
-  // 4. Read plan + limits
+  // 6. Read plan + limits
   const { plan, config } = await getPlanConfig();
 
-  // 5. AI Classification (Pro users only) - for search and watch pages
+  // 7. AI Classification (Pro users only)
+  // Strategy: Search = logging only, Watch = primary action point (block/warn)
   let aiClassification = null;
   if (plan === "pro") {
     if (pageType === "SEARCH" && url) {
-      // Extract search query from URL
+      // Search classification: Log only (no blocking)
+      // This helps with context but doesn't block search results
       try {
         const urlObj = new URL(url);
         const searchQuery = urlObj.searchParams.get("search_query");
         if (searchQuery) {
-          // Classify search query
-          aiClassification = await classifyContent(decodeURIComponent(searchQuery), "search");
-          if (aiClassification) {
-            // Store classification result
+          // Classify search query for logging/context only
+          const searchClassification = await classifyContent(decodeURIComponent(searchQuery), "search");
+          if (searchClassification) {
+            // Store classification result for dev panel/logging only (with new schema)
             await setLocal({
               ft_last_search_classification: {
-                category: aiClassification.category,
-                allowed: aiClassification.allowed,
+                // New schema fields (full)
+                category_primary: searchClassification.category_primary,
+                category_secondary: searchClassification.category_secondary,
+                distraction_level: searchClassification.distraction_level,
+                confidence_category: searchClassification.confidence_category,
+                confidence_distraction: searchClassification.confidence_distraction,
+                goals_alignment: searchClassification.goals_alignment,
+                reasons: searchClassification.reasons,
+                suggestions_summary: searchClassification.suggestions_summary,
+                flags: searchClassification.flags,
+                // Old schema fields (for compatibility)
+                category: searchClassification.category,
+                allowed: searchClassification.allowed,
+                confidence: searchClassification.confidence,
+                reason: searchClassification.reason,
+                tags: searchClassification.tags,
+                block_reason_code: searchClassification.block_reason_code,
+                action_hint: searchClassification.action_hint,
+                allowance_cost: searchClassification.allowance_cost,
+                // Metadata
                 query: searchQuery,
                 timestamp: Date.now(),
               },
             });
-            LOG("AI Search Classification:", { query: searchQuery.substring(0, 30), ...aiClassification });
+            LOG("AI Search Classification (logging only):", { query: searchQuery.substring(0, 30), ...searchClassification });
+            // Don't set aiClassification - search doesn't trigger blocking
           }
         }
       } catch (e) {
         console.warn("[FT] Error extracting search query:", e.message || e);
       }
-    } else if (pageType === "WATCH" && videoTitle) {
-      // Classify video title
-      aiClassification = await classifyContent(videoTitle, "watch");
-      if (aiClassification) {
-        // Store classification result
+    } else if (pageType === "WATCH" && videoMetadata && videoMetadata.title) {
+      // Timestamp-based request tracking (prevents race conditions from quick video switching)
+      const videoId = videoMetadata.video_id || extractVideoId(url);
+      const requestTimestamp = Date.now();
+      
+      // Store this request as the latest
+      lastClassificationRequest = { videoId, timestamp: requestTimestamp };
+      
+      // Classify video with full metadata
+      aiClassification = await classifyContent(videoMetadata, "watch");
+      
+      // Only use classification if this is still the latest request (video hasn't changed)
+      if (aiClassification && lastClassificationRequest.timestamp === requestTimestamp) {
+        // Store classification result (full data for dev panel and analytics)
         await setLocal({
           ft_last_watch_classification: {
+            // New schema fields (full)
+            category_primary: aiClassification.category_primary,
+            category_secondary: aiClassification.category_secondary,
+            distraction_level: aiClassification.distraction_level,
+            confidence_category: aiClassification.confidence_category,
+            confidence_distraction: aiClassification.confidence_distraction,
+            goals_alignment: aiClassification.goals_alignment,
+            reasons: aiClassification.reasons,
+            suggestions_summary: aiClassification.suggestions_summary,
+            flags: aiClassification.flags,
+            // Old schema fields (for compatibility)
             category: aiClassification.category,
             allowed: aiClassification.allowed,
-            title: videoTitle,
+            confidence: aiClassification.confidence,
+            reason: aiClassification.reason,
+            tags: aiClassification.tags,
+            block_reason_code: aiClassification.block_reason_code,
+            action_hint: aiClassification.action_hint,
+            allowance_cost: aiClassification.allowance_cost,
+            // Metadata
+            title: videoMetadata.title,
+            video_id: videoId,
             timestamp: Date.now(),
           },
         });
-        LOG("AI Watch Classification:", { title: videoTitle.substring(0, 50), ...aiClassification });
+        LOG("AI Watch Classification:", { title: videoMetadata.title?.substring(0, 50) || "unknown", ...aiClassification });
+
+        // Track current video for watch-time analytics
+        if (videoId && aiClassification.allowed !== false) {
+          await setLocal({
+            ft_current_video_classification: {
+              videoId,
+              category: aiClassification.category,
+              startTime: Date.now(),
+              title: videoMetadata.title,
+            },
+          });
+          LOG("Started tracking video watch:", {
+            videoId: videoId.substring(0, 10),
+            category: aiClassification.category,
+            title: videoMetadata.title?.substring(0, 30) || "unknown",
+          });
+        }
+      } else {
+        // Request was superseded by newer video - don't store or use
+        if (aiClassification) {
+          LOG("AI Classification ignored (video changed during classification):", { 
+            requestVideoId: videoId?.substring(0, 10), 
+            currentVideoId: lastClassificationRequest.videoId?.substring(0, 10),
+            requestTime: requestTimestamp,
+            currentTime: lastClassificationRequest.timestamp
+          });
+          aiClassification = null; // Don't include in response
+        }
       }
     }
   }
 
-  // 6. Check unlock status
+  // 8. Check unlock status
   const now = Date.now();
   const unlocked = await isTemporarilyUnlocked(now);
 
-  // 7. Build context for evaluateBlock()
+  // 9. Build context for evaluateBlock()
   const ctx = {
     plan,
     config,
@@ -354,48 +633,69 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoTitle = null
     aiClassification, // Add AI classification to context
   };
 
-  // 8. Check AI classification and allowance (Pro users only)
+  // 10. Check AI classification and allowance (Pro users only)
   let finalBlocked = false;
   let finalScope = "none";
   let finalReason = "ok";
 
-  // If AI classified content as distracting, check allowance
-  if (aiClassification && aiClassification.category === "distracting") {
-    const allowanceVideosLeft = Number(state.ft_allowance_videos_left || 1);
-    const allowanceSecondsLeft = Number(state.ft_allowance_seconds_left || 600);
+  // If AI classified content, use action_hint and allowance_cost from response
+  if (aiClassification) {
+    const actionHint = aiClassification.action_hint || "allow";
+    const allowanceCost = aiClassification.allowance_cost || { type: "none", amount: 0 };
+    const category = aiClassification.category;
 
-    if (pageType === "WATCH") {
-      // For watch pages: check video allowance
-      if (allowanceVideosLeft > 0) {
-        // Allow but decrement allowance
-        await setLocal({ ft_allowance_videos_left: allowanceVideosLeft - 1 });
-        LOG("AI Distracting Video Allowed (allowance decremented):", { remaining: allowanceVideosLeft - 1 });
-        finalBlocked = false;
-        finalScope = "none";
-        finalReason = "ai_allowance_used";
-      } else {
-        // Block - no allowance left
-        LOG("AI Distracting Video Blocked (no allowance):", { remaining: 0 });
-        finalBlocked = true;
-        finalScope = "search"; // Use search scope for AI-blocked content
-        finalReason = "ai_distracting_no_allowance";
-      }
-    } else if (pageType === "SEARCH") {
-      // For search pages: check time allowance (we'll track time watched)
-      // For now, allow if seconds allowance > 0, but we'll need to track time
-      // This is a simplified version - full implementation would track time watched
-      if (allowanceSecondsLeft > 0) {
-        // Allow for now (time tracking will be handled separately)
-        finalBlocked = false;
-        finalScope = "none";
-        finalReason = "ai_allowance_used";
-      } else {
-        // Block - no time allowance left
-        LOG("AI Distracting Search Blocked (no time allowance):", { remaining: 0 });
-        finalBlocked = true;
+    // Use action_hint to determine blocking
+    if (actionHint === "block") {
+      finalBlocked = true;
+      // Set scope based on actual page type, not always "search"
+      if (pageType === "SEARCH") {
         finalScope = "search";
-        finalReason = "ai_distracting_no_allowance";
+      } else if (pageType === "WATCH") {
+        finalScope = "watch"; // AI-blocked video
+      } else {
+        finalScope = "global"; // Fallback for other page types
       }
+      finalReason = aiClassification.block_reason_code || "ai_distracting_blocked";
+      LOG("AI Content Blocked:", { category, reason: aiClassification.reason, actionHint, scope: finalScope });
+    } else if (actionHint === "soft-warn" || category === "distracting") {
+      // Check allowance for distracting content
+      const allowanceVideosLeft = Number(state.ft_allowance_videos_left || 1);
+      const allowanceSecondsLeft = Number(state.ft_allowance_seconds_left || 600);
+
+      if (pageType === "WATCH") {
+        // For watch pages: check video allowance
+        if (allowanceCost.type === "video" && allowanceVideosLeft >= allowanceCost.amount) {
+          // Allow but will decrement allowance when video ends (tracked separately)
+          finalBlocked = false;
+          finalScope = "none";
+          finalReason = "ai_allowance_used";
+          LOG("AI Distracting Video Allowed (will use allowance):", { remaining: allowanceVideosLeft, cost: allowanceCost.amount });
+        } else if (allowanceVideosLeft > 0) {
+          // Legacy support: if no allowance_cost specified, use old logic
+          finalBlocked = false;
+          finalScope = "none";
+          finalReason = "ai_allowance_used";
+        } else {
+          // Block - no allowance left
+          finalBlocked = true;
+          finalScope = "watch"; // Blocked video, not search
+          finalReason = "ai_distracting_no_allowance";
+          LOG("AI Distracting Video Blocked (no allowance):", { remaining: 0 });
+        }
+      } else if (pageType === "SEARCH") {
+        // Search pages: Don't block based on AI classification
+        // Search classification is for logging/context only
+        // Blocking happens on watch pages when user actually clicks a video
+        finalBlocked = false;
+        finalScope = "none";
+        finalReason = "ok";
+        LOG("AI Search Classification (no blocking):", { category, reason: aiClassification.reason });
+      }
+    } else {
+      // Allow - not distracting or action_hint is "allow"
+      finalBlocked = false;
+      finalScope = "none";
+      finalReason = "ok";
     }
   } else {
     // Not distracting or no AI classification - use normal block logic
@@ -405,12 +705,12 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoTitle = null
     finalReason = blockResult.reason;
   }
 
-  // 9. If global block triggered, mark it
+  // 11. If global block triggered, mark it
   if (finalBlocked && finalScope === "global" && !state.ft_blocked_today) {
     await setLocal({ ft_blocked_today: true });
   }
 
-  // 10. Respond to content.js
+  // 12. Respond to content.js
   const resp = {
     ok: true,
     pageType,
@@ -430,8 +730,27 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoTitle = null
     },
     unlocked,
     aiClassification: aiClassification ? {
+      // Include video_id for client-side validation
+      video_id: lastClassificationRequest.videoId,
+      // New schema fields (full)
+      category_primary: aiClassification.category_primary,
+      category_secondary: aiClassification.category_secondary,
+      distraction_level: aiClassification.distraction_level,
+      confidence_category: aiClassification.confidence_category,
+      confidence_distraction: aiClassification.confidence_distraction,
+      goals_alignment: aiClassification.goals_alignment,
+      reasons: aiClassification.reasons,
+      suggestions_summary: aiClassification.suggestions_summary,
+      flags: aiClassification.flags,
+      // Old schema fields (for compatibility)
       category: aiClassification.category,
-      allowed: aiClassification.allowed
+      allowed: aiClassification.allowed,
+      confidence: aiClassification.confidence,
+      reason: aiClassification.reason,
+      tags: aiClassification.tags,
+      block_reason_code: aiClassification.block_reason_code,
+      action_hint: aiClassification.action_hint,
+      allowance_cost: aiClassification.allowance_cost
     } : null
   };
 

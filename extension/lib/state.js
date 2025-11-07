@@ -24,6 +24,8 @@ const DEFAULTS = {
   // Plan and rotation setup
   ft_plan: "free",                // free | pro | test
   ft_user_email: "",              // user email for server sync
+  ft_user_goals: [],              // user goals array (for AI classification)
+  ft_onboarding_completed: false, // true = user has completed onboarding
   ft_reset_period: "daily",       // daily | weekly | monthly
   ft_last_reset_key: "",          // stores last date/week/month key
 
@@ -43,7 +45,10 @@ const DEFAULTS = {
 
   // AI Allowance (Pro users only - daily allowance for distracting content)
   ft_allowance_videos_left: 1,     // daily allowance for distracting videos (default: 1)
-  ft_allowance_seconds_left: 600   // daily allowance for distracting content in seconds (default: 10 minutes = 600 seconds)
+  ft_allowance_seconds_left: 600,  // daily allowance for distracting content in seconds (default: 10 minutes = 600 seconds)
+  
+  // Current video tracking (for allowance decrement)
+  ft_current_video_classification: null  // { videoId, category, startTime, title } or null
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -115,7 +120,8 @@ function resetShape() {
     ft_pro_manual_block_shorts: false,
     ft_unlock_until_epoch: 0,
     ft_allowance_videos_left: 1,      // Reset to default: 1 video
-    ft_allowance_seconds_left: 600     // Reset to default: 10 minutes (600 seconds)
+    ft_allowance_seconds_left: 600,   // Reset to default: 10 minutes (600 seconds)
+    ft_current_video_classification: null  // Clear current video tracking
   };
 }
 

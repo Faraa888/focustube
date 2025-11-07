@@ -82,8 +82,9 @@ export function evaluateBlock(ctx) {
     }
   }
 
-  // If already globally blocked for this period, keep enforcing
-  if (ft_blocked_today) {
+  // If already globally blocked for this period, keep enforcing (but not on HOME page)
+  // HOME page should never be blocked - user needs to be able to navigate
+  if (ft_blocked_today && pageType !== "HOME") {
     return { blocked: true, scope: "global", reason: REASONS.TIME_LIMIT };
   }
 
