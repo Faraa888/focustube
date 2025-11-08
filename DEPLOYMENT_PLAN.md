@@ -1,10 +1,27 @@
-# Server Deployment Plan
+# Deployment Plan - FocusTube
 
-## Where Will the Server Be in Production?
+## Architecture Overview
 
-### Recommended Options
+### **Frontend (Website)**
+- **Build:** Lovable (visual editor)
+- **Host:** Vercel (automatic deployment)
+- **URL:** `https://your-app.vercel.app`
 
-1. **Railway** (Easiest)
+### **Backend (API Server)**
+- **Host:** Railway or Render (auto-deploys from Git)
+- **URL:** `https://your-backend.railway.app` or `https://your-backend.onrender.com`
+
+### **Extension (Chrome Add-on)**
+- **Host:** Chrome Web Store
+- **Calls:** Backend API (Railway/Render)
+
+---
+
+## Backend Deployment Options
+
+### Recommended: Railway or Render
+
+1. **Railway** (Recommended)
    - Free tier available
    - Auto-deploys from Git
    - Simple setup
@@ -15,13 +32,7 @@
    - Auto-deploys from Git
    - URL: `https://your-app.onrender.com`
 
-3. **Lovable Cloud** (If using Lovable)
-   - Integrated with Lovable platform
-   - URL: `https://your-app.lovable.app`
-
-4. **Fly.io** (More control)
-   - Good for production
-   - URL: `https://your-app.fly.dev`
+**Note:** Backend is separate from frontend. Frontend goes to Vercel, backend goes to Railway/Render.
 
 ## What Needs to Change
 
@@ -71,17 +82,75 @@ Server already allows Chrome extensions, but verify:
 
 ## Deployment Steps
 
-1. **Push code to Git**
-2. **Connect Railway/Render to your repo**
-3. **Set environment variables**
+### Backend Deployment (Railway/Render)
+
+1. **Push backend code to Git**
+   ```bash
+   cd /Users/faraazanjum/Desktop/FocusTube/server
+   git add .
+   git commit -m "Ready for deployment"
+   git push origin main
+   ```
+
+2. **Connect Railway/Render to Git repo**
+   - Go to railway.app or render.com
+   - Click "New Project" → "Deploy from Git"
+   - Connect your GitHub repo
+   - Select the `/server` directory
+
+3. **Set environment variables in Railway/Render**
+   - Add all variables from `server/.env.example`
+   - See list below
+
 4. **Deploy**
+   - Railway/Render auto-deploys
+   - Get production URL: `https://your-backend.railway.app`
+
 5. **Update extension with production URL**
+   - Update `extension/lib/config.js` with backend URL
+   - Or set via `chrome.storage.local.set({ ft_server_url: 'https://...' })`
+
 6. **Test end-to-end**
+   - Test extension → backend connection
+   - Test frontend → backend connection
+
+### Frontend Deployment (Vercel)
+
+1. **Build frontend in Lovable**
+   - Create project in Lovable
+   - Build pages
+   - Lovable auto-syncs to Git
+
+2. **Connect Vercel to Git**
+   - Go to vercel.com
+   - Import Git repository (from Lovable)
+   - Vercel auto-detects framework
+
+3. **Set environment variables in Vercel**
+   - `VITE_BACKEND_URL` = your Railway/Render URL
+   - `VITE_SUPABASE_URL` = your Supabase URL
+   - `VITE_SUPABASE_ANON_KEY` = your Supabase anon key
+   - `VITE_STRIPE_PUBLISHABLE_KEY` = your Stripe key
+
+4. **Deploy**
+   - Vercel auto-deploys on every Git push
+   - Get URL: `https://your-app.vercel.app`
 
 ## Current Status
 
+### Backend
 - ✅ Server code ready for deployment
 - ✅ CORS configured for extensions
-- ⚠️ Extension hardcoded to `localhost:3000` (needs update)
-- ⚠️ Need to set production URL in extension config
+- ⚠️ Need to deploy to Railway/Render
+- ⚠️ Need to set environment variables
+
+### Frontend
+- ⚠️ Need to build in Lovable
+- ⚠️ Need to connect Vercel to Git
+- ⚠️ Need to set environment variables in Vercel
+
+### Extension
+- ✅ Extension code ready
+- ⚠️ Hardcoded to `localhost:3000` (needs update)
+- ⚠️ Need to set production backend URL after deployment
 

@@ -216,7 +216,7 @@ async function handleMessage(msg) {
     LOG("Goals verification:", { saved: savedGoals });
     
     return { ok: true, goals };
-  }
+      }
 
   if (msg?.type === "FT_SET_PLAN") {
     const plan = msg?.plan?.trim() || "";
@@ -276,7 +276,7 @@ async function handleMessage(msg) {
       console.error("[FT] Set Plan error:", err);
       return { ok: false, error: String(err) };
     }
-  }
+      }
 
   if (msg?.type === "FT_RESET_COUNTERS") {
     try {
@@ -296,7 +296,7 @@ async function handleMessage(msg) {
     } catch (err) {
       console.error("[FT] Get status error:", err);
       return { ok: false, error: String(err) };
-    }
+      }
   }
 
   if (msg?.type === "FT_SAVE_JOURNAL") {

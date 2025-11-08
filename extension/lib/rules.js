@@ -16,12 +16,12 @@ export const CONFIG_BY_PLAN = Object.freeze({
   [PLAN_FREE]: Object.freeze({
     strict_shorts: true,   // Block Shorts immediately
     search_threshold: 5,   // Block Search after 5 searches today
-    daily_watch_minutes_limit: 60 // 60 minutes per day (Free plan)
+    daily_watch_minutes_limit: 2 // 2 minutes per day (Free plan) - testing value, production: 60
   }),
   [PLAN_PRO]: Object.freeze({
     strict_shorts: false,  // Allow Shorts (you can still warn via UI if you want)
     search_threshold: 15,  // More generous
-    daily_watch_minutes_limit: 90 // 90 minutes per day (Pro plan default - configurable from website later)
+    daily_watch_minutes_limit: 3 // 3 minutes per day (Pro plan) - testing value, production: 90 (configurable 3-150)
   }),
   [PLAN_TEST]: Object.freeze({
     strict_shorts: false,

@@ -97,7 +97,7 @@ async function checkServerHealth(serverUrl) {
  * @param planType - "monthly", "annual", or "lifetime" (defaults to "monthly")
  */
 async function openStripeCheckout(planType = "monthly") {
-  try {
+    try {
     // Get user email from storage
     const storage = await chrome.storage.local.get(["ft_user_email"]);
     const email = storage.ft_user_email;
@@ -114,8 +114,8 @@ async function openStripeCheckout(planType = "monthly") {
     const serverHealthy = await checkServerHealth(serverUrl);
     if (!serverHealthy) {
       alert("Cannot connect to server.\n\nPlease ensure:\n1. Server is running (cd server && npm run dev)\n2. Server is on port 3000\n3. Check server terminal for errors");
-      return;
-    }
+        return;
+      }
     
     // Call server to create checkout session
     const response = await fetch(`${serverUrl}/stripe/create-checkout`, {
@@ -436,6 +436,7 @@ let lastKnownBadgeValues = { engaged: 0, scrolled: 0, seconds: 0 }; // Last know
 let globalTimeTracker = null; // Interval timer for global time tracking
 let globalTimeStart = null; // When global time tracking started
 let lastGlobalSaveTime = null; // Last time we saved global time
+let globalBaseSeconds = 0; // Base seconds for global time tracking (synced with storage)
 
 // Video watch time tracking for AI classification (45 seconds trigger)
 let videoWatchTimer = null; // Timer for 45-second watch trigger
@@ -1955,19 +1956,34 @@ async function startGlobalTimeTracking() {
 
   if (!isChromeContextValid()) return;
 
-  // Get current time at start
-  let baseSeconds = 0;
+  // Get current time at start and verify we're on the right day
   try {
-    const { ft_watch_seconds_today } = await chrome.storage.local.get(["ft_watch_seconds_today"]);
+    const { 
+      ft_watch_seconds_today,
+      ft_last_reset_key 
+    } = await chrome.storage.local.get([
+      "ft_watch_seconds_today",
+      "ft_last_reset_key"
+    ]);
     if (chrome.runtime.lastError) {
       console.warn("[FT] Failed to get initial global time:", chrome.runtime.lastError.message);
-      baseSeconds = 0;
+      globalBaseSeconds = 0;
     } else {
-      baseSeconds = Number(ft_watch_seconds_today || 0);
+      // Verify we're on the current day (reset key should match today)
+      const todayKey = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const storedSeconds = Number(ft_watch_seconds_today || 0);
+      
+      // If reset key doesn't match today, we're on a new day - start from 0
+      if (ft_last_reset_key && ft_last_reset_key !== todayKey) {
+        console.log("[FT] Reset key mismatch - new day detected, starting from 0");
+        globalBaseSeconds = 0;
+      } else {
+        globalBaseSeconds = storedSeconds;
+      }
     }
   } catch (e) {
     console.warn("[FT] Error getting initial global time:", e.message);
-    baseSeconds = 0;
+    globalBaseSeconds = 0;
   }
   
   globalTimeStart = Date.now();
@@ -1990,7 +2006,7 @@ async function startGlobalTimeTracking() {
     const timeSinceLastSave = Math.floor((Date.now() - lastGlobalSaveTime) / 1000);
     
     // Calculate current total watch time
-    const currentTotalSeconds = baseSeconds + elapsed;
+    const currentTotalSeconds = globalBaseSeconds + elapsed;
     
     // Check global time limit every second
     try {
@@ -2007,8 +2023,8 @@ async function startGlobalTimeTracking() {
         console.warn("[FT] Failed to get plan for limit check:", chrome.runtime.lastError.message);
       } else {
         const plan = ft_plan || "free";
-        // Get limit from config (60 mins Free = 3600s, 90 mins Pro = 5400s)
-        const limitSeconds = plan === "pro" ? 5400 : 3600;
+        // Get limit from config (2 mins Free = 120s, 3 mins Pro = 180s) - testing values
+        const limitSeconds = plan === "pro" ? 180 : 120;
         
         // Check if limit reached
         if (currentTotalSeconds >= limitSeconds) {
@@ -2062,10 +2078,16 @@ async function startGlobalTimeTracking() {
       console.warn("[FT] Error checking global limit:", e.message);
     }
     
-    // Re-read storage every 5 seconds to get latest saved value (in case another tab saved)
+    // Re-read storage every 5 seconds to get latest saved value (in case another tab saved or reset happened)
     if (timeSinceLastSave >= 5) {
       try {
-        const { ft_watch_seconds_today: latestSeconds } = await chrome.storage.local.get(["ft_watch_seconds_today"]);
+        const { 
+          ft_watch_seconds_today: latestSeconds,
+          ft_last_reset_key: latestResetKey 
+        } = await chrome.storage.local.get([
+          "ft_watch_seconds_today",
+          "ft_last_reset_key"
+        ]);
         if (chrome.runtime.lastError) {
           // Context invalidated or error - stop interval
           if (!isChromeContextValid()) {
@@ -2080,16 +2102,30 @@ async function startGlobalTimeTracking() {
         } else {
           const latestBase = Number(latestSeconds || 0);
           
+          // Check if reset happened (stored value is much lower, or reset key changed)
+          // Reset key format: YYYY-MM-DD for daily
+          const todayKey = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+          // Reset happened if reset key exists and doesn't match today
+          const resetHappened = latestResetKey && latestResetKey !== todayKey;
+          
+          // If reset happened OR stored value is significantly lower (more than 10 seconds difference)
+          // This handles the case where reset happened at midnight
+          if (resetHappened || (latestBase < globalBaseSeconds - 10 && latestBase < 60)) {
+            // Reset detected - start fresh from the new value
+            console.log("[FT] Daily reset detected, resetting global time tracker");
+            globalBaseSeconds = latestBase;
+            globalTimeStart = Date.now(); // Reset to continue from new base
+            lastGlobalSaveTime = Date.now();
+          } else if (latestBase > globalBaseSeconds) {
           // If another tab saved more time, adjust our base and reset start time
-          if (latestBase > baseSeconds) {
-            baseSeconds = latestBase;
+            globalBaseSeconds = latestBase;
             globalTimeStart = Date.now(); // Reset to continue from new base
             lastGlobalSaveTime = Date.now();
           } else {
             // Update our saved value
-            baseSeconds = baseSeconds + elapsed;
+            globalBaseSeconds = globalBaseSeconds + elapsed;
             try {
-              await chrome.storage.local.set({ ft_watch_seconds_today: baseSeconds });
+              await chrome.storage.local.set({ ft_watch_seconds_today: globalBaseSeconds });
               if (chrome.runtime.lastError) {
                 if (!isChromeContextValid()) {
                   clearInterval(globalTimeTracker);
@@ -2958,6 +2994,7 @@ function injectDevToggle() {
     <textarea id="ft-goals-input" placeholder="Enter goals (comma-separated)" style="width:100%;padding:4px;margin-bottom:4px;border-radius:4px;border:none;font-size:11px;background:rgba(255,255,255,0.1);color:white;resize:vertical;min-height:40px;font-family:inherit;box-sizing:border-box;"></textarea>
     <button id="ft-save-goals" style="width:100%;margin-bottom:4px;font-size:11px;padding:4px;">Save Goals</button>
     <button id="ft-reset-counters" style="width:100%;margin-bottom:4px;font-size:11px;padding:4px;background:#ef4444;">Reset Counters</button>
+    <button id="ft-test-reset" style="width:100%;margin-bottom:4px;font-size:11px;padding:4px;background:#8b5cf6;">Test Daily Reset</button>
   </div>
   <div id="ft-status" style="margin-top:6px;font-size:12px;opacity:0.8;"></div>
   <div id="ft-ai-classification"></div>
@@ -3103,6 +3140,39 @@ function injectDevToggle() {
     }
   };
 
+  // Test Daily Reset handler (simulates overnight reset)
+  panel.querySelector("#ft-test-reset").onclick = async () => {
+    console.log("[FT] Test Daily Reset button clicked");
+    try {
+      if (!chrome?.storage?.local) {
+        alert("Chrome storage not available");
+        return;
+      }
+
+      // Set reset key to yesterday (simulates overnight)
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayKey = yesterday.toISOString().split('T')[0];
+
+      // Set some fake watch time
+      await chrome.storage.local.set({ 
+        ft_last_reset_key: yesterdayKey,
+        ft_watch_seconds_today: 100
+      });
+
+      console.log("✅ Set reset key to yesterday:", yesterdayKey);
+      console.log("✅ Set watch time to 100 seconds");
+      
+      alert(`✅ Test reset set!\n\nReset key: ${yesterdayKey}\nWatch time: 100 seconds\n\nNow REFRESH the page to see the reset detection!`);
+      
+      // Update status
+      await updateDevPanelStatus(panel);
+    } catch (err) {
+      console.error("[FT content] Error testing reset:", err);
+      alert("Error testing reset: " + (err.message || String(err)));
+    }
+  };
+
   document.body.appendChild(panel);
   updateDevPanelStatus(panel);
 }
@@ -3173,6 +3243,28 @@ setupFullscreenDetection();
 // ─────────────────────────────────────────────────────────────
 chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace !== "local") return;
+  
+  // Detect daily reset - if reset key changed, reset the global time tracker
+  if (changes.ft_last_reset_key) {
+    const todayKey = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const newResetKey = changes.ft_last_reset_key.newValue;
+    
+    // If reset key changed to today's date, a reset just happened
+    if (newResetKey === todayKey && globalTimeTracker && globalTimeStart) {
+      console.log("[FT] Daily reset detected via storage change, resetting global time tracker");
+      // Re-read the current value (should be 0 or very low after reset)
+      chrome.storage.local.get(["ft_watch_seconds_today"]).then(storage => {
+        if (!chrome.runtime.lastError && storage.ft_watch_seconds_today !== undefined) {
+          // Reset our tracking to match the new value
+          globalBaseSeconds = Number(storage.ft_watch_seconds_today || 0);
+          globalTimeStart = Date.now();
+          lastGlobalSaveTime = Date.now();
+        }
+      }).catch(e => {
+        console.warn("[FT] Error resetting global tracker:", e.message);
+      });
+    }
+  }
   
   // Update global time counter if watch time changed
   if (changes.ft_watch_seconds_today) {

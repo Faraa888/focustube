@@ -285,9 +285,9 @@ FocusTube is a Chrome extension and companion web app that helps users use YouTu
 
 The product has three parts:
 
-- **Website (Lovable)** → signup, marketing, dashboard, settings
+- **Website (Frontend)** → Built in Lovable, hosted on Vercel → signup, marketing, dashboard, settings
 - **Extension** → behavior control, tracking, overlays
-- **Backend (Node + Supabase)** → data storage, AI classification, journal synthesis, Stripe integration
+- **Backend (Node + Supabase)** → Hosted on Railway/Render → data storage, AI classification, journal synthesis, Stripe integration
 
 ---
 
