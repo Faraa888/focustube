@@ -1,6 +1,6 @@
-# FocusTube - 30-Hour Development Plan & Tracking
+# FocusTube - 34-Hour Development Plan & Tracking
 
-## 📊 Macro Plan Overview (30 Hours Total)
+## 📊 Macro Plan Overview (34 Hours Total)
 
 ### Phase 1: User Flow & Authentication (Foundation) - ~5 hours
 **Status:** ✅ Complete  
@@ -39,6 +39,28 @@
 - ✅ Database columns added (goals, anti_goals, trial_started_at)
 - ⏳ Extension storage sync
 - ⏳ Data flow testing
+
+---
+
+### Phase 2.5: Channel Blocking (Critical Feature) - ~4 hours
+**Status:** ⚪ Not Started  
+**Time Spent:** 0 hours  
+**Time Remaining:** ~4 hours
+
+**Objectives:**
+- Hard block specific channels (e.g., Eddie Hall)
+- Allow other channels (e.g., Jeff Nippard) 
+- No soft blocking/nudging for blocked channels - just remove them
+- Stop spirals on good channels
+
+**Key Deliverables:**
+- ⏳ Channel blocklist storage (chrome.storage + Supabase)
+- ⏳ Channel detection from video metadata
+- ⏳ Hard redirect for blocked channels (immediate, no overlay)
+- ⏳ Settings UI to manage blocked channels
+- ⏳ Integration with existing blocking logic in rules.js
+
+**Priority:** HIGH - Most important feature per user requirements
 
 ---
 
@@ -205,14 +227,15 @@
 
 ## 📈 Progress Summary
 
-**Total Time Allocated:** 30 hours  
+**Total Time Allocated:** 34 hours  
 **Time Spent:** ~7 hours  
-**Time Remaining:** ~23 hours  
-**Completion:** ~23%
+**Time Remaining:** ~27 hours  
+**Completion:** ~21%
 
 **By Phase:**
 - Phase 1: 100% complete ✅
 - Phase 2: 25% complete
+- Phase 2.5: 0% complete (Channel Blocking - HIGH PRIORITY)
 - Phase 3: 0% complete
 - Phase 4: 0% complete
 - Phase 5: 17% complete
@@ -223,11 +246,11 @@
 ## 🎯 Next Steps
 
 1. ✅ Complete Phase 1: Extension authentication integration (DONE)
-2. **IMPORTANT:** Run Supabase migration `005_fix_rls_policies.sql` to fix RLS policies
-3. Test the complete login flow end-to-end
+2. ✅ Complete all sign-in flow tests (DONE)
+3. **PRIORITY:** Phase 2.5: Implement hard channel blocking
 4. Complete Phase 2: Extension storage sync & data flow verification
 5. Begin Phase 3: API calls & classifier
 
 ---
 
-*Last Updated: 2025-01-15*
+*Last Updated: 2025-01-16*
