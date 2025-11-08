@@ -1,21 +1,164 @@
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Chrome } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Chrome, CheckCircle2 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { storeEmailForExtension } from "@/lib/extensionStorage";
 
 const Signup = () => {
-  const handleGoogleSignup = () => {
-    // TODO: Implement Google OAuth
-    console.log("Google signup clicked");
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [emailConfirmationSent, setEmailConfirmationSent] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+
+  // Debug: Log when component mounts
+  useEffect(() => {
+    console.log("✅ [SIGNUP] Component mounted - Signup page loaded");
+  }, []);
+
+  const handleGoogleSignup = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const { error: authError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/goals`,
+        },
+      });
+
+      if (authError) {
+        setError(authError.message);
+        setLoading(false);
+      }
+      // OAuth will redirect, so we don't navigate here
+    } catch (err) {
+      console.error("Google signup error:", err);
+      setError("Failed to sign up with Google. Please try again.");
+      setLoading(false);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // TODO: Implement email/password signup
-    console.log("Email signup submitted");
+    console.log("🚀 [SIGNUP] handleSubmit called - form submitted");
+    setLoading(true);
+    setError("");
+
+    const formData = new FormData(e.currentTarget);
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+    const name = formData.get("name") as string;
+
+    console.log("🚀 [SIGNUP] Form data extracted:", { email, name, hasPassword: !!password });
+
+    try {
+      console.log("🚀 [SIGNUP] Calling supabase.auth.signUp...");
+      // Sign up with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name: name,
+          },
+        },
+      });
+
+      console.log("🚀 [SIGNUP] Supabase response:", { 
+        hasUser: !!authData?.user, 
+        hasSession: !!authData?.session,
+        userEmail: authData?.user?.email,
+        error: authError?.message 
+      });
+
+      if (authError) {
+        console.error("🔴 [SIGNUP] Auth error:", authError);
+        setError(authError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!authData.user) {
+        console.error("🔴 [SIGNUP] No user returned from Supabase");
+        setError("Failed to create account. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      // Check if email confirmation is required
+      if (authData.user && !authData.session) {
+        console.log("🟡 [SIGNUP] No session - email confirmation required (but should be disabled)");
+        // Email confirmation required
+        setEmailConfirmationSent(true);
+        setUserEmail(authData.user.email || email);
+        setLoading(false);
+        return;
+      }
+
+      console.log("✅ [SIGNUP] User created with session, proceeding to database...");
+
+      // Create user record in users table with trial plan
+      const trialStart = new Date();
+      const trialEnd = new Date();
+      trialEnd.setDate(trialEnd.getDate() + 14);
+
+      console.log("🚀 [SIGNUP] Creating user in database...");
+      const { data: userData, error: dbError } = await supabase.from("users").upsert({
+        email: authData.user.email,
+        plan: "trial",
+        trial_started_at: trialStart.toISOString(),
+        trial_expires_at: trialEnd.toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'email'
+      });
+
+      if (dbError) {
+        console.error("🔴 [SIGNUP] Database error:", dbError);
+        console.error("Error details:", {
+          message: dbError.message,
+          code: dbError.code,
+          details: dbError.details,
+          hint: dbError.hint
+        });
+        // Show error to user but don't block signup
+        setError(`Account created, but couldn't save to database: ${dbError.message}. Please contact support.`);
+      } else {
+        console.log("✅ [SIGNUP] User created successfully in database:", userData);
+      }
+
+      // Store email in chrome.storage for extension
+      if (authData.user?.email) {
+        console.log("🚀 [SIGNUP] Storing email in chrome.storage...");
+        await storeEmailForExtension(authData.user.email);
+      }
+
+      // If we have a session, redirect to goals
+      // Otherwise, user needs to confirm email first
+      if (authData.session) {
+        console.log("✅ [SIGNUP] Session exists, redirecting to /goals");
+        navigate("/goals");
+      } else {
+        console.log("🟡 [SIGNUP] No session (unexpected), showing email confirmation");
+        // This shouldn't happen if we handled it above, but just in case
+        setEmailConfirmationSent(true);
+        setUserEmail(authData.user.email || email);
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error("🔴 [SIGNUP] Exception caught:", err);
+      setError("Something went wrong. Please try again.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -31,14 +174,35 @@ const Signup = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {emailConfirmationSent ? (
+            <Alert className="border-green-500/50 bg-green-50 dark:bg-green-950/20">
+              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <AlertTitle className="text-green-900 dark:text-green-100">Check your email</AlertTitle>
+              <AlertDescription className="text-green-800 dark:text-green-200">
+                We've sent a confirmation link to <strong>{userEmail}</strong>. Click it to verify your account, then come back to sign in.
+              </AlertDescription>
+              <div className="mt-4">
           <Button
+                  variant="outline"
+                  className="w-full border-green-500 text-green-700 hover:bg-green-100 dark:text-green-300 dark:hover:bg-green-900/30"
+                  onClick={() => navigate("/login")}
+                >
+                  Already verified? Sign in
+                </Button>
+              </div>
+            </Alert>
+          ) : (
+            <>
+          {/* Google OAuth - Disabled for MVP, will enable later */}
+          {/* <Button
             variant="outline"
             className="w-full"
             onClick={handleGoogleSignup}
+                disabled={loading}
             data-evt="signup_google"
           >
             <Chrome className="mr-2 h-5 w-5" />
-            Continue with Google
+                {loading ? "Loading..." : "Continue with Google"}
           </Button>
 
           <div className="relative">
@@ -48,13 +212,27 @@ const Signup = () => {
             <div className="relative flex justify-center text-xs uppercase">
               <span className="bg-card px-2 text-muted-foreground">Or continue with email</span>
             </div>
-          </div>
+          </div> */}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form 
+            onSubmit={(e) => {
+              console.log("🔵 [SIGNUP] Form onSubmit event fired");
+              handleSubmit(e);
+            }} 
+            className="space-y-4"
+          >
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
             <div className="space-y-2">
               <Label htmlFor="name">Full name</Label>
               <Input
                 id="name"
+                name="name"
                 type="text"
                 placeholder="John Doe"
                 required
@@ -64,6 +242,7 @@ const Signup = () => {
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
+                name="email"
                 type="email"
                 placeholder="you@example.com"
                 required
@@ -73,14 +252,15 @@ const Signup = () => {
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
+                name="password"
                 type="password"
                 placeholder="At least 8 characters"
                 required
                 minLength={8}
               />
             </div>
-            <Button type="submit" className="w-full" data-evt="signup_email">
-              Start free trial
+                <Button type="submit" className="w-full" disabled={loading} data-evt="signup_email">
+                  {loading ? "Creating account..." : "Start free trial"}
             </Button>
           </form>
 
@@ -101,6 +281,8 @@ const Signup = () => {
               Sign in
             </Link>
           </p>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
