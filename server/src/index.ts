@@ -20,6 +20,7 @@ import {
   upsertVideoClassification,
   updateVideoWatchTime,
   insertJournalEntry,
+  UserPlanInfo,
 } from "./supabase";
 
 const app = express();
@@ -33,7 +34,7 @@ interface CacheEntry {
   expiresAt: number;
 }
 
-const planCache = new Map<string, CacheEntry>(); // email -> { plan, expiresAt }
+const planCache = new Map<string, CacheEntry>(); // email -> { UserPlanInfo, expiresAt }
 const aiCache = new Map<string, CacheEntry>(); // user_id + text -> { category, expiresAt }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -690,14 +691,33 @@ app.get("/license/verify", async (req, res) => {
 
     // Check cache first
     const cacheKey = email.toLowerCase().trim();
-    const cachedPlan = getCached<string>(planCache, cacheKey);
-    if (cachedPlan !== null) {
+    const cachedPlanInfo = getCached<UserPlanInfo>(planCache, cacheKey);
+    if (cachedPlanInfo !== null) {
       // For cached plan, return it with exists: true (cached plans are only for existing users)
-      console.log(`[License Verify] Cache hit for ${email}: ${cachedPlan}`);
-      return res.json({
+      const { plan, trial_expires_at } = cachedPlanInfo;
+      console.log(`[License Verify] Cache hit for ${email}: ${plan}`);
+      
+      // Calculate days_left for trial users
+      let days_left: number | undefined = undefined;
+      if (plan === "trial" && trial_expires_at) {
+        const expiresAt = new Date(trial_expires_at);
+        const now = new Date();
+        const diffMs = expiresAt.getTime() - now.getTime();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        days_left = Math.max(0, diffDays); // Don't return negative days
+      }
+
+      const response: any = {
         exists: true,
-        plan: cachedPlan,
-      });
+        plan,
+      };
+      if (days_left !== undefined) {
+        response.days_left = days_left;
+      }
+      if (trial_expires_at) {
+        response.trial_expires_at = trial_expires_at;
+      }
+      return res.json(response);
     }
     
     console.log(`[License Verify] Cache miss for ${email}, fetching from Supabase...`);
@@ -716,7 +736,7 @@ app.get("/license/verify", async (req, res) => {
     } else {
       const { plan, trial_expires_at } = planInfo;
       console.log(`[License Verify] Fetched plan from Supabase for ${email}: ${plan}`);
-      setCached(planCache, cacheKey, plan);
+      setCached(planCache, cacheKey, planInfo);
 
       // Calculate days_left for trial users
       let days_left: number | undefined = undefined;
