@@ -9,10 +9,11 @@
  */
 export async function storeEmailForExtension(email: string): Promise<boolean> {
   try {
-    // Check if chrome.runtime is available (extension is installed)
-    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+    // Check if chrome.runtime exists (Chrome browser)
+    if (typeof chrome !== 'undefined' && chrome.runtime) {
       try {
         // Send message to extension to store email
+        // Don't check chrome.runtime.id - just try sending the message
         const response = await chrome.runtime.sendMessage({
           type: "FT_STORE_EMAIL_FROM_WEBSITE",
           email: email.trim()
@@ -27,17 +28,21 @@ export async function storeEmailForExtension(email: string): Promise<boolean> {
         }
       } catch (error: any) {
         // Extension might not be installed or not responding
-        if (error.message?.includes('Extension context invalidated') || 
-            error.message?.includes('Could not establish connection') ||
-            error.message?.includes('Receiving end does not exist')) {
+        const errorMsg = error.message || String(error);
+        if (errorMsg.includes('Extension context invalidated') || 
+            errorMsg.includes('Could not establish connection') ||
+            errorMsg.includes('Receiving end does not exist') ||
+            errorMsg.includes('message port closed')) {
           console.log('ℹ️ Extension not installed or not responding - email will be stored when extension is installed');
           return false;
         }
-        throw error;
+        // Log unexpected errors
+        console.error('Unexpected error sending message to extension:', error);
+        return false;
       }
     } else {
-      // Extension not installed - that's okay
-      console.log('ℹ️ Extension not installed - email will be stored when extension is installed');
+      // Not in Chrome browser
+      console.log('ℹ️ Not in Chrome browser - email will be stored when extension is installed');
       return false;
     }
   } catch (error) {
@@ -52,7 +57,7 @@ export async function storeEmailForExtension(email: string): Promise<boolean> {
  */
 export async function removeEmailFromExtension(): Promise<boolean> {
   try {
-    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+    if (typeof chrome !== 'undefined' && chrome.runtime) {
       try {
         const response = await chrome.runtime.sendMessage({
           type: "FT_REMOVE_EMAIL_FROM_WEBSITE"
@@ -64,13 +69,16 @@ export async function removeEmailFromExtension(): Promise<boolean> {
         }
         return false;
       } catch (error: any) {
-        if (error.message?.includes('Extension context invalidated') || 
-            error.message?.includes('Could not establish connection') ||
-            error.message?.includes('Receiving end does not exist')) {
+        const errorMsg = error.message || String(error);
+        if (errorMsg.includes('Extension context invalidated') || 
+            errorMsg.includes('Could not establish connection') ||
+            errorMsg.includes('Receiving end does not exist') ||
+            errorMsg.includes('message port closed')) {
           console.log('ℹ️ Extension not installed or not responding');
           return false;
         }
-        throw error;
+        console.error('Unexpected error sending message to extension:', error);
+        return false;
       }
     }
     return false;
