@@ -309,8 +309,8 @@ export async function setPlan(plan) {
 // SERVER SYNC (fetch plan from Express server)
 // ─────────────────────────────────────────────────────────────
 
-// Server URL (development)
-const SERVER_URL = "http://localhost:3000";
+// Server URL (production)
+const SERVER_URL = "https://focustube-backend-4xah.onrender.com";
 
 // Debounce: only sync once per 30 seconds
 let lastSyncTime = 0;

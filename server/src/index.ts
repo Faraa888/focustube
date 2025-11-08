@@ -692,9 +692,10 @@ app.get("/license/verify", async (req, res) => {
     const cacheKey = email.toLowerCase().trim();
     const cachedPlan = getCached<string>(planCache, cacheKey);
     if (cachedPlan !== null) {
-      // For cached plan, return it (trial days_left calculation happens client-side if needed)
+      // For cached plan, return it with exists: true (cached plans are only for existing users)
       console.log(`[License Verify] Cache hit for ${email}: ${cachedPlan}`);
       return res.json({
+        exists: true,
         plan: cachedPlan,
       });
     }
@@ -705,11 +706,12 @@ app.get("/license/verify", async (req, res) => {
     const planInfo = await getUserPlanInfo(email);
 
     if (planInfo === null) {
-      // User not found - return free plan as default
-      console.log(`[License Verify] User ${email} not found in Supabase, returning free`);
-      setCached(planCache, cacheKey, "free");
+      // User not found - return exists: false
+      // Don't cache this - we want to check again if user signs up
+      console.log(`[License Verify] User ${email} not found in Supabase, returning exists: false`);
       res.json({
-        plan: "free",
+        exists: false,
+        plan: "free", // Default for non-existent users
       });
     } else {
       const { plan, trial_expires_at } = planInfo;
@@ -726,9 +728,15 @@ app.get("/license/verify", async (req, res) => {
         days_left = Math.max(0, diffDays); // Don't return negative days
       }
 
-      const response: any = { plan };
+      const response: any = { 
+        exists: true,
+        plan 
+      };
       if (days_left !== undefined) {
         response.days_left = days_left;
+      }
+      if (trial_expires_at) {
+        response.trial_expires_at = trial_expires_at;
       }
       res.json(response);
     }

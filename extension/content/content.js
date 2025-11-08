@@ -25,9 +25,8 @@ async function getServerUrl() {
     console.warn("[FT] Error reading server URL from storage:", e.message);
   }
   
-  // Default to localhost for development
-  // Can be updated to production URL when deployed to Lovable Cloud
-  return "http://localhost:3000";
+  // Default to production backend URL
+  return "https://focustube-backend-4xah.onrender.com";
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -210,7 +209,7 @@ function showShortsBlockedOverlay() {
 
 /**
  * Shows onboarding overlay for first-time users
- * Collects user goals and sets onboarding_completed flag
+ * Prompts user to click extension icon to sign up/sign in
  */
 function showOnboardingOverlay() {
   removeOverlay(); // ensure no duplicates
@@ -222,85 +221,37 @@ function showOnboardingOverlay() {
   overlay.innerHTML = `
     <div class="ft-box ft-onboarding-box">
       <h1>🎯 Welcome to FocusTube!</h1>
-      <p class="ft-onboarding-intro">Let's set up your goals to help you stay focused.</p>
+      <p class="ft-onboarding-intro" style="font-size:16px;margin-bottom:20px;">
+        Get started by connecting your account to unlock Pro features.
+      </p>
       
-      <div class="ft-onboarding-goals-section">
-        <label for="ft-onboarding-goals-input" style="display:block;margin-bottom:8px;font-size:14px;font-weight:600;">
-          What are your goals?
-        </label>
-        <textarea 
-          id="ft-onboarding-goals-input" 
-          placeholder="e.g., learn python, build SaaS, launch MVP"
-          style="width:100%;padding:12px;border-radius:8px;border:2px solid rgba(255,255,255,0.2);font-size:14px;background:rgba(255,255,255,0.1);color:white;resize:vertical;min-height:100px;font-family:inherit;box-sizing:border-box;"
-        ></textarea>
-      </div>
-      
-      <div id="ft-onboarding-value-prop" style="margin-top:16px;padding:12px;background:rgba(100,150,255,0.1);border-radius:8px;border:1px solid rgba(100,150,255,0.3);font-size:13px;opacity:0.8;">
-        <strong>We'll help you stay focused on:</strong>
-        <div id="ft-goals-preview" style="margin-top:8px;color:#64b5f6;">Enter your goals above</div>
+      <div style="padding:20px;background:rgba(100,150,255,0.1);border-radius:8px;border:1px solid rgba(100,150,255,0.3);margin-bottom:20px;">
+        <p style="font-size:14px;line-height:1.6;color:#ffffff;">
+          <strong>Click the FocusTube extension icon</strong> (top right of your browser) to:
+        </p>
+        <ul style="margin-top:12px;padding-left:20px;font-size:14px;line-height:1.8;color:#ffffff;">
+          <li>Sign up for Pro/Trial (14-day free trial)</li>
+          <li>Sign in if you already have an account</li>
+          <li>Continue with Free plan</li>
+        </ul>
       </div>
       
       <div class="ft-button-container" style="margin-top:24px;">
-        <button id="ft-onboarding-start" class="ft-button ft-button-primary">Get Started</button>
+        <button id="ft-onboarding-dismiss" class="ft-button ft-button-primary">Got it, I'll click the icon</button>
+        <button id="ft-onboarding-skip" class="ft-button" style="margin-top:12px;background:transparent;border:1px solid rgba(255,255,255,0.3);">Skip for now</button>
       </div>
     </div>
   `;
 
-  // Auto-update value proposition as user types
-  const goalsInput = overlay.querySelector("#ft-onboarding-goals-input");
-  const goalsPreview = overlay.querySelector("#ft-goals-preview");
-  
-  if (goalsInput && goalsPreview) {
-    goalsInput.addEventListener("input", () => {
-      const goalsText = goalsInput.value.trim();
-      if (goalsText) {
-        const goalsArray = goalsText
-          .split(",")
-          .map(g => g.trim())
-          .filter(g => g.length > 0);
-        if (goalsArray.length > 0) {
-          goalsPreview.innerHTML = goalsArray.map(g => `<div style="margin:4px 0;">• ${g}</div>`).join("");
-          goalsPreview.parentElement.style.opacity = "1";
-        } else {
-          goalsPreview.textContent = "Enter your goals above";
-          goalsPreview.parentElement.style.opacity = "0.8";
-        }
-      } else {
-        goalsPreview.textContent = "Enter your goals above";
-        goalsPreview.parentElement.style.opacity = "0.8";
-      }
-    });
-  }
-
-  // Get Started button handler
-  overlay.querySelector("#ft-onboarding-start").addEventListener("click", async () => {
-    const goalsText = goalsInput?.value?.trim() || "";
-    
-    if (!goalsText) {
-      alert("Please enter at least one goal to continue.");
-      return;
-    }
-    
-    // Parse goals (comma-separated → array)
-    const goalsArray = goalsText
-      .split(",")
-      .map(g => g.trim())
-      .filter(g => g.length > 0);
-    
-    if (goalsArray.length === 0) {
-      alert("Please enter at least one valid goal.");
-      return;
-    }
-    
+  // Dismiss button - marks onboarding as completed
+  overlay.querySelector("#ft-onboarding-dismiss").addEventListener("click", async () => {
     try {
-      // Save goals and mark onboarding as completed
       if (!isChromeContextValid()) {
         alert("Extension context invalidated. Please reload the page.");
         return;
       }
       
       await chrome.storage.local.set({
-        ft_user_goals: goalsArray,
         ft_onboarding_completed: true
       });
       
@@ -310,8 +261,27 @@ function showOnboardingOverlay() {
       // Trigger navigation check to show normal extension flow
       handleNavigation().catch(console.error);
     } catch (e) {
-      console.error("[FT] Error completing onboarding:", e);
-      alert("Error saving goals. Please try again.");
+      console.error("[FT] Error dismissing onboarding:", e);
+      alert("Error saving. Please try again.");
+    }
+  });
+
+  // Skip button - also marks onboarding as completed
+  overlay.querySelector("#ft-onboarding-skip").addEventListener("click", async () => {
+    try {
+      if (!isChromeContextValid()) {
+        return;
+      }
+      
+      await chrome.storage.local.set({
+        ft_onboarding_completed: true
+      });
+      
+      removeOverlay();
+      handleNavigation().catch(console.error);
+    } catch (e) {
+      console.error("[FT] Error skipping onboarding:", e);
+      removeOverlay();
     }
   });
 

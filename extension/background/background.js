@@ -218,6 +218,27 @@ async function handleMessage(msg) {
     return { ok: true, goals };
       }
 
+  if (msg?.type === "FT_SYNC_PLAN") {
+    // Sync plan from server (triggered by popup after login)
+    const email = msg?.email?.trim() || "";
+    if (!email) {
+      // Try to get email from storage
+      const { ft_user_email } = await getLocal(["ft_user_email"]);
+      if (!ft_user_email) {
+        return { ok: false, error: "Email not provided" };
+      }
+    }
+    
+    const synced = await syncPlanFromServer(true); // Force sync
+    if (synced) {
+      const { ft_plan } = await getLocal(["ft_plan"]);
+      LOG("Plan synced from server:", ft_plan);
+      return { ok: true, plan: ft_plan };
+    } else {
+      return { ok: false, error: "Failed to sync plan" };
+    }
+      }
+
   if (msg?.type === "FT_SET_PLAN") {
     const plan = msg?.plan?.trim() || "";
     const userId = await getUserId();
@@ -232,7 +253,7 @@ async function handleMessage(msg) {
     
     try {
       // Update plan in Supabase via server
-      const SERVER_URL = "http://localhost:3000";
+      const SERVER_URL = "https://focustube-backend-4xah.onrender.com";
       const response = await fetch(`${SERVER_URL}/user/update-plan`, {
         method: "POST",
         headers: {

@@ -8,7 +8,7 @@
 
   "host_permissions": [
     "*://*.youtube.com/*",
-    "http://localhost:3000/*"
+    "https://focustube-backend-4xah.onrender.com/*"
   ],
 
   "background": {
@@ -26,6 +26,7 @@
   ],
 
   "action": {
-    "default_title": "FocusTube"
+    "default_title": "FocusTube",
+    "default_popup": "popup.html"
   }
 }

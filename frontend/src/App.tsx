@@ -8,6 +8,7 @@ import Pricing from "./pages/Pricing";
 import Download from "./pages/Download";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import Goals from "./pages/Goals";
 import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
 import Privacy from "./pages/Privacy";
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/download" element={<Download />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/goals" element={<Goals />} />
           <Route path="/app/dashboard" element={<Dashboard />} />
           <Route path="/app/settings" element={<Settings />} />
           <Route path="/privacy" element={<Privacy />} />
