@@ -9,14 +9,27 @@
   "externally_connectable": {
     "matches": [
       "https://focustube-beta.vercel.app/*",
-      "http://localhost:5173/*",
+      "http://localhost:8081/*",
+      "http://localhost:8080/*",
+      "http://localhost:8079/*",
+      "http://localhost:8078/*",
+      "http://localhost:8082/*",
+      "http://localhost:8083/*",
       "http://localhost:3000/*"
     ]
   },
 
   "host_permissions": [
     "*://*.youtube.com/*",
-    "https://focustube-backend-4xah.onrender.com/*"
+    "https://focustube-backend-4xah.onrender.com/*",
+    "https://focustube-beta.vercel.app/*",
+    "http://localhost:8081/*",
+    "http://localhost:8080/*",
+    "http://localhost:8079/*",
+    "http://localhost:8078/*",
+    "http://localhost:8082/*",
+    "http://localhost:8083/*",
+    "http://localhost:3000/*"
   ],
 
   "background": {
@@ -34,7 +47,12 @@
     {
       "matches": [
         "https://focustube-beta.vercel.app/*",
-        "http://localhost:5173/*",
+        "http://localhost:8081/*",
+        "http://localhost:8080/*",
+        "http://localhost:8079/*",
+        "http://localhost:8078/*",
+        "http://localhost:8082/*",
+        "http://localhost:8083/*",
         "http://localhost:3000/*"
       ],
       "js": ["content/website-bridge.js"],
