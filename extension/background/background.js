@@ -203,6 +203,39 @@ async function handleMessage(msg) {
     return { ok: true, email };
   }
 
+  if (msg?.type === "FT_STORE_EMAIL_FROM_WEBSITE") {
+    const email = msg?.email?.trim() || "";
+    if (!email) {
+      return { ok: false, error: "Email is required" };
+    }
+    await setLocal({ ft_user_email: email });
+    LOG("Email stored from website:", email);
+    
+    // Sync plan from server
+    const synced = await syncPlanFromServer(true).catch((err) => {
+      LOG("Failed to sync plan after website login:", err);
+      return false;
+    });
+    
+    if (synced) {
+      const { ft_plan } = await getLocal(["ft_plan"]);
+      LOG("Plan synced from server:", ft_plan);
+    }
+    
+    return { ok: true, email };
+  }
+
+  if (msg?.type === "FT_REMOVE_EMAIL_FROM_WEBSITE") {
+    await chrome.storage.local.remove([
+      "ft_user_email", 
+      "ft_plan", 
+      "ft_days_left", 
+      "ft_trial_expires_at"
+    ]);
+    LOG("Email removed from website logout");
+    return { ok: true };
+  }
+
   if (msg?.type === "FT_SET_GOALS") {
     const goals = msg?.goals || [];
     if (!Array.isArray(goals)) {
