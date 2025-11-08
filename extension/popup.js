@@ -259,6 +259,30 @@ async function handleLogout() {
     ]);
     
     console.log("✅ [POPUP] Extension storage cleared");
+    
+    // Notify all FocusTube website tabs to sign out
+    try {
+      const tabs = await chrome.tabs.query({});
+      const frontendUrl = FRONTEND_URL || 'https://focustube-beta.vercel.app';
+      
+      for (const tab of tabs) {
+        if (tab.url && (tab.url.startsWith(frontendUrl) || tab.url.startsWith('http://localhost:808'))) {
+          try {
+            await chrome.tabs.sendMessage(tab.id, {
+              type: 'FT_LOGOUT_FROM_EXTENSION'
+            });
+            console.log(`✅ [POPUP] Sent logout message to tab: ${tab.url}`);
+          } catch (e) {
+            // Tab might not have content script, ignore silently
+            console.log(`ℹ️ [POPUP] Could not send message to tab ${tab.id}: ${e.message}`);
+          }
+        }
+      }
+    } catch (error) {
+      // If we can't query tabs or send messages, continue anyway
+      console.warn("⚠️ [POPUP] Could not notify website tabs:", error);
+    }
+    
     showMessage("Disconnected successfully", "info");
     
     // Clear email input

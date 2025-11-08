@@ -35,6 +35,18 @@ window.addEventListener('message', async (event) => {
   }
 });
 
+// Listen for messages from extension (reverse direction)
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg && msg.type === 'FT_LOGOUT_FROM_EXTENSION') {
+    // Forward to webpage
+    window.postMessage({
+      type: 'FT_LOGOUT_FROM_EXTENSION'
+    }, window.location.origin);
+    sendResponse({ ok: true });
+  }
+  return true; // Keep channel open for async response
+});
+
 // Log that bridge is ready (for debugging)
 console.log('[FocusTube Bridge] Content script loaded and ready');
 

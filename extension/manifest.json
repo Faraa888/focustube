@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Blocks Shorts, limits search binges, and tracks YouTube usage for focus.",
   
-  "permissions": ["storage"], 
+  "permissions": ["storage", "tabs"], 
 
   "externally_connectable": {
     "matches": [
