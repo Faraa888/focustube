@@ -1,13 +1,74 @@
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "./ui/button";
-import { Menu } from "lucide-react";
+import { Menu, LogOut } from "lucide-react";
 import {
   Sheet,
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { supabase } from "@/lib/supabase";
+import { removeEmailFromExtension } from "@/lib/extensionStorage";
+import { toast } from "@/hooks/use-toast";
 
 const Header = () => {
+  const navigate = useNavigate();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Check auth status
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setIsAuthenticated(!!session);
+      setLoading(false);
+    };
+
+    checkAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      // Clear Supabase session
+      const { error: signOutError } = await supabase.auth.signOut();
+      
+      if (signOutError) {
+        console.error("Logout error:", signOutError);
+        toast({
+          title: "Error",
+          description: "Failed to log out. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Clear chrome.storage (for extension)
+      await removeEmailFromExtension();
+
+      // Redirect to login
+      navigate("/login");
+      
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out.",
+      });
+    } catch (err) {
+      console.error("Logout error:", err);
+      toast({
+        title: "Error",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <header className="fixed top-0 w-full z-50 bg-background/95 backdrop-blur-lg border-b border-border">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -26,15 +87,39 @@ const Header = () => {
           <Link to="/download" className="text-foreground hover:text-primary transition-colors text-sm font-medium">
             Download
           </Link>
-          <Link to="/login" className="text-foreground hover:text-primary transition-colors text-sm font-medium">
-            Login
-          </Link>
+          {!loading && (
+            isAuthenticated ? (
+              <>
+                <Link to="/app/dashboard" className="text-foreground hover:text-primary transition-colors text-sm font-medium">
+                  Dashboard
+                </Link>
+                <Link to="/app/settings" className="text-foreground hover:text-primary transition-colors text-sm font-medium">
+                  Settings
+                </Link>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={handleLogout}
+                  className="text-foreground hover:text-primary flex items-center gap-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign Out
+                </Button>
+              </>
+            ) : (
+              <Link to="/login" className="text-foreground hover:text-primary transition-colors text-sm font-medium">
+                Login
+              </Link>
+            )
+          )}
         </nav>
 
         <div className="flex items-center gap-4">
-          <Button asChild className="hidden md:inline-flex" data-evt="header_cta">
-            <Link to="/signup">Start Free Trial</Link>
-          </Button>
+          {!loading && !isAuthenticated && (
+            <Button asChild className="hidden md:inline-flex" data-evt="header_cta">
+              <Link to="/signup">Start Free Trial</Link>
+            </Button>
+          )}
           
           {/* Mobile Menu */}
           <Sheet>
@@ -54,12 +139,35 @@ const Header = () => {
                 <Link to="/download" className="text-lg font-medium hover:text-primary transition-colors">
                   Download
                 </Link>
-                <Link to="/login" className="text-lg font-medium hover:text-primary transition-colors">
-                  Login
-                </Link>
-                <Button asChild className="mt-4" data-evt="mobile_menu_cta">
-                  <Link to="/signup">Start Free Trial</Link>
-                </Button>
+                {!loading && (
+                  isAuthenticated ? (
+                    <>
+                      <Link to="/app/dashboard" className="text-lg font-medium hover:text-primary transition-colors">
+                        Dashboard
+                      </Link>
+                      <Link to="/app/settings" className="text-lg font-medium hover:text-primary transition-colors">
+                        Settings
+                      </Link>
+                      <Button 
+                        variant="outline" 
+                        onClick={handleLogout}
+                        className="mt-4 w-full flex items-center justify-center gap-2"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        Sign Out
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Link to="/login" className="text-lg font-medium hover:text-primary transition-colors">
+                        Login
+                      </Link>
+                      <Button asChild className="mt-4" data-evt="mobile_menu_cta">
+                        <Link to="/signup">Start Free Trial</Link>
+                      </Button>
+                    </>
+                  )
+                )}
               </nav>
             </SheetContent>
           </Sheet>

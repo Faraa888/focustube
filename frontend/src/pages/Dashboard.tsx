@@ -1,12 +1,52 @@
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Clock, TrendingUp, Flame, AlertCircle } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Check authentication on page load
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error("Auth check error:", error);
+          setLoading(false);
+          navigate("/login");
+          return;
+        }
+        
+        if (!session || !session.user) {
+          // No session - redirect to login
+          console.log("No session found, redirecting to login");
+          setLoading(false);
+          navigate("/login");
+          return;
+        }
+        
+        // User is authenticated
+        setIsAuthenticated(true);
+        setLoading(false);
+      } catch (err) {
+        console.error("Error checking auth:", err);
+        setLoading(false);
+        navigate("/login");
+      }
+    };
+    
+    checkAuth();
+  }, [navigate]);
+  
   // TODO: Replace with real data from extension
   const isExtensionConnected = false;
   
@@ -21,6 +61,22 @@ const Dashboard = () => {
     ],
     weeklyTrend: [65, 72, 68, 75, 78, 82, 78],
   };
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+  
+  // If not authenticated, redirect will happen (this shouldn't render)
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

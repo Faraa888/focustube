@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,13 +12,17 @@ import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabase";
+import { removeEmailFromExtension } from "@/lib/extensionStorage";
 
 const Settings = () => {
+  const navigate = useNavigate();
   const [blockShorts, setBlockShorts] = useState(true);
   const [hideRecommendations, setHideRecommendations] = useState(false);
   const [dailyLimit, setDailyLimit] = useState([90]);
   const [goals, setGoals] = useState("Learn web development\nImprove public speaking");
   const [antiGoals, setAntiGoals] = useState("Gaming content\nViral entertainment");
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const handleSave = () => {
     // TODO: Save settings to backend/extension
@@ -26,6 +30,44 @@ const Settings = () => {
       title: "Settings saved",
       description: "Your preferences have been updated.",
     });
+  };
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      // Clear Supabase session
+      const { error: signOutError } = await supabase.auth.signOut();
+      
+      if (signOutError) {
+        console.error("Logout error:", signOutError);
+        toast({
+          title: "Error",
+          description: "Failed to log out. Please try again.",
+          variant: "destructive",
+        });
+        setLoggingOut(false);
+        return;
+      }
+
+      // Clear chrome.storage (for extension)
+      await removeEmailFromExtension();
+
+      // Redirect to login
+      navigate("/login");
+      
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out.",
+      });
+    } catch (err) {
+      console.error("Logout error:", err);
+      toast({
+        title: "Error",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+      setLoggingOut(false);
+    }
   };
 
   return (
@@ -241,6 +283,28 @@ const Settings = () => {
                     Clear History
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Sign Out</CardTitle>
+                <CardDescription>
+                  Sign out of your FocusTube account
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={handleLogout}
+                  disabled={loggingOut}
+                >
+                  {loggingOut ? "Signing out..." : "Sign Out"}
+                </Button>
+                <p className="text-xs text-center text-muted-foreground mt-2">
+                  This will sign you out of both the website and extension
+                </p>
               </CardContent>
             </Card>
 

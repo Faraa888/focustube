@@ -68,17 +68,31 @@ function showStatus() {
 // Load current email from storage
 async function loadCurrentEmail() {
   try {
+    console.log("🔍 [POPUP] Checking for email in chrome.storage...");
     const result = await chrome.storage.local.get(["ft_user_email", "ft_plan"]);
     const email = result.ft_user_email;
     const plan = result.ft_plan || "free";
     
+    console.log("🔍 [POPUP] Storage result:", { 
+      hasEmail: !!email, 
+      email: email ? email.substring(0, 10) + "..." : null,
+      plan 
+    });
+    
     if (email && email.trim() !== "") {
+      console.log("✅ [POPUP] Email found in storage, verifying with backend...");
       // Email exists - verify with backend to get latest plan
       try {
         const planData = await verifyEmail(email);
         
+        console.log("🔍 [POPUP] Backend verification result:", { 
+          exists: planData?.exists, 
+          plan: planData?.plan 
+        });
+        
         if (planData && planData.exists !== false) {
           // User exists in database - show logged-in status
+          console.log("✅ [POPUP] User verified, showing status screen");
           const currentPlan = planData.plan || plan;
           statusEmail.textContent = email;
           statusPlan.textContent = `Plan: ${currentPlan.toUpperCase()}`;
@@ -94,14 +108,14 @@ async function loadCurrentEmail() {
           return email;
         } else {
           // Email in storage but not in database - clear and show onboarding
-          console.warn("Email in storage but not in database, clearing...");
+          console.warn("⚠️ [POPUP] Email in storage but not in database, clearing...");
           await chrome.storage.local.remove(["ft_user_email", "ft_plan"]);
           showOnboarding();
           return null;
         }
       } catch (error) {
         // Network error - show cached status
-        console.warn("Failed to verify email, showing cached status:", error);
+        console.warn("⚠️ [POPUP] Failed to verify email, showing cached status:", error);
         statusEmail.textContent = email;
         statusPlan.textContent = `Plan: ${plan.toUpperCase()}`;
         statusIcon.className = "status-icon connected";
@@ -112,10 +126,11 @@ async function loadCurrentEmail() {
     }
     
     // User not logged in - show onboarding
+    console.log("ℹ️ [POPUP] No email in storage, showing onboarding");
     showOnboarding();
     return null;
   } catch (error) {
-    console.error("Error loading email:", error);
+    console.error("🔴 [POPUP] Error loading email:", error);
     showOnboarding();
     return null;
   }
@@ -233,12 +248,26 @@ async function handleLogin() {
 // Handle logout
 async function handleLogout() {
   try {
-    await chrome.storage.local.remove(["ft_user_email", "ft_plan", "ft_days_left", "ft_trial_expires_at"]);
+    console.log("🔓 [POPUP] Logging out...");
+    
+    // Clear all extension storage
+    await chrome.storage.local.remove([
+      "ft_user_email", 
+      "ft_plan", 
+      "ft_days_left", 
+      "ft_trial_expires_at"
+    ]);
+    
+    console.log("✅ [POPUP] Extension storage cleared");
     showMessage("Disconnected successfully", "info");
+    
+    // Clear email input
+    if (emailInput) emailInput.value = "";
+    
+    // Reload to show onboarding screen
     await loadCurrentEmail();
-    emailInput.value = "";
   } catch (error) {
-    console.error("Logout error:", error);
+    console.error("🔴 [POPUP] Logout error:", error);
     showMessage("Error disconnecting. Please try again.", "error");
   }
 }

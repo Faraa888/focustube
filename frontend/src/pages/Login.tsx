@@ -91,17 +91,23 @@ const Login = () => {
         await storeEmailForExtension(user.email);
       }
 
-      // If coming from extension, show success and close after delay
+      // If coming from extension, show success message and try to close
       if (returnToExtension) {
         setError(""); // Clear any errors
-        // Show success message
+        // Show success - extension will detect email automatically
+        // Try to close window (only works if opened by extension)
         setTimeout(() => {
-          window.close(); // Close tab if opened by extension
-        }, 2000);
+          try {
+            window.close();
+          } catch (e) {
+            // Window might not close if not opened by extension - that's okay
+            console.log("Could not close window (not opened by extension)");
+          }
+        }, 1500);
         return;
       }
 
-      // Redirect to dashboard
+      // Normal login - redirect to dashboard
       navigate("/app/dashboard");
     } catch (err) {
       console.error("Login error:", err);
