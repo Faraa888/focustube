@@ -107,18 +107,18 @@ const Header = () => {
                 </Button>
               </>
             ) : (
-              <Link to="/login" className="text-foreground hover:text-primary transition-colors text-sm font-medium">
-                Login
-              </Link>
+          <Link to="/login" className="text-foreground hover:text-primary transition-colors text-sm font-medium">
+            Login
+          </Link>
             )
           )}
         </nav>
 
         <div className="flex items-center gap-4">
           {!loading && !isAuthenticated && (
-            <Button asChild className="hidden md:inline-flex" data-evt="header_cta">
-              <Link to="/signup">Start Free Trial</Link>
-            </Button>
+          <Button asChild className="hidden md:inline-flex" data-evt="header_cta">
+            <Link to="/signup">Start Free Trial</Link>
+          </Button>
           )}
           
           {/* Mobile Menu */}
@@ -159,12 +159,12 @@ const Header = () => {
                     </>
                   ) : (
                     <>
-                      <Link to="/login" className="text-lg font-medium hover:text-primary transition-colors">
-                        Login
-                      </Link>
-                      <Button asChild className="mt-4" data-evt="mobile_menu_cta">
-                        <Link to="/signup">Start Free Trial</Link>
-                      </Button>
+                <Link to="/login" className="text-lg font-medium hover:text-primary transition-colors">
+                  Login
+                </Link>
+                <Button asChild className="mt-4" data-evt="mobile_menu_cta">
+                  <Link to="/signup">Start Free Trial</Link>
+                </Button>
                     </>
                   )
                 )}

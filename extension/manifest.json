@@ -30,6 +30,15 @@
       "js": ["content/content.js"],
       "css": ["content/overlay.css"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://focustube-beta.vercel.app/*",
+        "http://localhost:5173/*",
+        "http://localhost:3000/*"
+      ],
+      "js": ["content/website-bridge.js"],
+      "run_at": "document_start"
     }
   ],
 
