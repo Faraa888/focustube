@@ -18,6 +18,8 @@ import {
   resetCounters,
   setPlan,
   syncPlanFromServer,      // sync plan from server
+  loadExtensionDataFromServer, // load extension data from server
+  saveExtensionDataToServer, // save extension data to server
 } from "../lib/state.js";
 
 import { evaluateBlock } from "../lib/rules.js";
@@ -47,6 +49,11 @@ async function boot() {
   // Sync plan from server on startup
   await syncPlanFromServer(true).catch((err) => {
     console.warn("[FT] Failed to sync plan on startup:", err);
+  });
+  
+  // Load extension data from server on startup (blocked channels, watch history, etc.)
+  await loadExtensionDataFromServer().catch((err) => {
+    console.warn("[FT] Failed to load extension data on startup:", err);
   });
   
   const snap = await getSnapshot();
@@ -407,6 +414,39 @@ async function handleMessage(msg) {
       return { ok: true, classification: result };
     } catch (err) {
       console.error("[FT] Classify video error:", err);
+      return { ok: false, error: String(err) };
+    }
+  }
+
+  if (msg?.type === "FT_LOAD_EXTENSION_DATA") {
+    // Load extension data from server (for testing)
+    try {
+      const data = await loadExtensionDataFromServer();
+      if (data) {
+        LOG("Extension data loaded:", data);
+        return { ok: true, data };
+      } else {
+        return { ok: false, error: "Failed to load extension data" };
+      }
+    } catch (err) {
+      console.error("[FT] Load extension data error:", err);
+      return { ok: false, error: String(err) };
+    }
+  }
+
+  if (msg?.type === "FT_SAVE_EXTENSION_DATA") {
+    // Save extension data to server (for testing)
+    try {
+      const data = msg?.data || null; // Optional: pass data, or use local storage
+      const saved = await saveExtensionDataToServer(data);
+      if (saved) {
+        LOG("Extension data saved to server");
+        return { ok: true };
+      } else {
+        return { ok: false, error: "Failed to save extension data" };
+      }
+    } catch (err) {
+      console.error("[FT] Save extension data error:", err);
       return { ok: false, error: String(err) };
     }
   }

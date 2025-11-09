@@ -21,6 +21,7 @@ import {
   updateVideoWatchTime,
   insertJournalEntry,
   UserPlanInfo,
+  supabase,
 } from "./supabase";
 
 const app = express();
@@ -762,6 +763,130 @@ app.get("/license/verify", async (req, res) => {
     }
   } catch (error) {
     console.error("Error in /license/verify:", error);
+    res.status(500).json({
+      ok: false,
+      error: "Internal server error",
+    });
+  }
+});
+
+/**
+ * Get extension data endpoint
+ * GET /extension/get-data?email=user@example.com
+ * 
+ * Returns extension data (blocked channels, watch history, etc.) from Supabase
+ */
+app.get("/extension/get-data", async (req, res) => {
+  try {
+    const email = req.query.email as string;
+
+    if (!email) {
+      return res.status(400).json({
+        ok: false,
+        error: "Email parameter required",
+      });
+    }
+
+    // Get extension data from Supabase
+    const { data, error } = await supabase
+      .from("extension_data")
+      .select("*")
+      .eq("user_id", email.toLowerCase().trim())
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        // No data found - return empty/default data
+        return res.json({
+          ok: true,
+          data: {
+            blocked_channels: [],
+            watch_history: [],
+            channel_spiral_count: {},
+            settings: {},
+          },
+        });
+      }
+      console.error("[Extension Data] Error fetching:", error);
+      return res.status(500).json({
+        ok: false,
+        error: "Failed to fetch extension data",
+      });
+    }
+
+    res.json({
+      ok: true,
+      data: {
+        blocked_channels: data.blocked_channels || [],
+        watch_history: data.watch_history || [],
+        channel_spiral_count: data.channel_spiral_count || {},
+        settings: data.settings || {},
+      },
+    });
+  } catch (error) {
+    console.error("Error in /extension/get-data:", error);
+    res.status(500).json({
+      ok: false,
+      error: "Internal server error",
+    });
+  }
+});
+
+/**
+ * Save extension data endpoint
+ * POST /extension/save-data
+ * 
+ * Saves extension data (blocked channels, watch history, etc.) to Supabase
+ * Body: { email: "user@example.com", data: { blocked_channels: [...], ... } }
+ */
+app.post("/extension/save-data", async (req, res) => {
+  try {
+    const { email, data } = req.body;
+
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({
+        ok: false,
+        error: "Email is required",
+      });
+    }
+
+    if (!data || typeof data !== "object") {
+      return res.status(400).json({
+        ok: false,
+        error: "Data object is required",
+      });
+    }
+
+    const userId = email.toLowerCase().trim();
+
+    // Upsert extension data (insert or update)
+    const { error } = await supabase
+      .from("extension_data")
+      .upsert({
+        user_id: userId,
+        blocked_channels: data.blocked_channels || [],
+        watch_history: data.watch_history || [],
+        channel_spiral_count: data.channel_spiral_count || {},
+        settings: data.settings || {},
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: "user_id",
+      });
+
+    if (error) {
+      console.error("[Extension Data] Error saving:", error);
+      return res.status(500).json({
+        ok: false,
+        error: "Failed to save extension data",
+      });
+    }
+
+    res.json({
+      ok: true,
+      message: "Extension data saved successfully",
+    });
+  } catch (error) {
+    console.error("Error in /extension/save-data:", error);
     res.status(500).json({
       ok: false,
       error: "Internal server error",

@@ -54,7 +54,13 @@ const DEFAULTS = {
   ft_current_video_classification: null,  // { videoId, category, startTime, title } or null
   
   // Watch event queue (batched analytics)
-  ft_watch_event_queue: []  // Array of watch session objects
+  ft_watch_event_queue: [],  // Array of watch session objects
+  
+  // Extension data (synced with Supabase)
+  ft_blocked_channels: [],           // Array of blocked channel names
+  ft_watch_history: [],              // Array of watch events (last 7 days)
+  ft_channel_spiral_count: {},       // Object: {channel: count}
+  ft_extension_settings: {}          // Other extension settings
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -445,6 +451,129 @@ export async function isTemporarilyUnlocked(now = Date.now()) {
 export async function setTemporaryUnlock(minutes = 10) {
   const until = Date.now() + minutes * 60 * 1000;
   await setLocal({ ft_unlock_until_epoch: until });
+}
+
+// ─────────────────────────────────────────────────────────────
+// EXTENSION DATA SYNC (blocked channels, watch history, etc.)
+// ─────────────────────────────────────────────────────────────
+
+const SERVER_URL = "https://focustube-backend-4xah.onrender.com";
+
+/**
+ * Load extension data from server (blocked channels, watch history, etc.)
+ * @returns {Promise<Object|null>} Extension data or null if failed
+ */
+export async function loadExtensionDataFromServer() {
+  try {
+    const { ft_user_email } = await getLocal(["ft_user_email"]);
+    
+    if (!ft_user_email || ft_user_email.trim() === "") {
+      console.log("[FT] No email set, skipping extension data load");
+      return null;
+    }
+
+    const response = await fetch(
+      `${SERVER_URL}/extension/get-data?email=${encodeURIComponent(ft_user_email)}`
+    );
+
+    if (!response.ok) {
+      console.warn("[FT] Failed to load extension data:", response.status);
+      return null;
+    }
+
+    const result = await response.json();
+    
+    if (!result.ok || !result.data) {
+      console.warn("[FT] Invalid extension data response:", result);
+      return null;
+    }
+
+    // Save to local storage
+    const { blocked_channels, watch_history, channel_spiral_count, settings } = result.data;
+    
+    await setLocal({
+      ft_blocked_channels: blocked_channels || [],
+      ft_watch_history: watch_history || [],
+      ft_channel_spiral_count: channel_spiral_count || {},
+      ft_extension_settings: settings || {},
+    });
+
+    console.log("[FT] Extension data loaded from server:", {
+      blockedChannels: (blocked_channels || []).length,
+      watchHistory: (watch_history || []).length,
+    });
+
+    return result.data;
+  } catch (error) {
+    console.warn("[FT] Error loading extension data:", error.message);
+    return null;
+  }
+}
+
+/**
+ * Save extension data to server (blocked channels, watch history, etc.)
+ * @param {Object} data - Data to save (optional, will use local storage if not provided)
+ * @returns {Promise<boolean>} True if saved successfully
+ */
+export async function saveExtensionDataToServer(data = null) {
+  try {
+    const { ft_user_email } = await getLocal(["ft_user_email"]);
+    
+    if (!ft_user_email || ft_user_email.trim() === "") {
+      console.log("[FT] No email set, skipping extension data save");
+      return false;
+    }
+
+    // Get current local data
+    const {
+      ft_blocked_channels = [],
+      ft_watch_history = [],
+      ft_channel_spiral_count = {},
+      ft_extension_settings = {},
+    } = await getLocal([
+      "ft_blocked_channels",
+      "ft_watch_history",
+      "ft_channel_spiral_count",
+      "ft_extension_settings",
+    ]);
+
+    // Use provided data or fall back to local storage
+    const toSave = data || {
+      blocked_channels: ft_blocked_channels,
+      watch_history: ft_watch_history,
+      channel_spiral_count: ft_channel_spiral_count,
+      settings: ft_extension_settings,
+    };
+
+    const response = await fetch(`${SERVER_URL}/extension/save-data`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: ft_user_email,
+        data: toSave,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn("[FT] Failed to save extension data:", response.status);
+      return false;
+    }
+
+    const result = await response.json();
+    
+    if (!result.ok) {
+      console.warn("[FT] Extension data save failed:", result.error);
+      return false;
+    }
+
+    console.log("[FT] Extension data saved to server");
+    return true;
+  } catch (error) {
+    console.warn("[FT] Error saving extension data:", error.message);
+    return false;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
