@@ -821,11 +821,46 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     "ft_block_shorts_today",
     "ft_unlock_until_epoch",
     "ft_allowance_videos_left",
-    "ft_allowance_seconds_left"
+    "ft_allowance_seconds_left",
+    "ft_blocked_channels"
   ]);
 
   // 6. Read plan + limits
   const { plan, config } = await getPlanConfig();
+
+  // 6.5. Check channel blocking BEFORE AI classification (early exit)
+  if (pageType === "WATCH" && videoMetadata && videoMetadata.channel) {
+    const blockedChannels = state.ft_blocked_channels || [];
+    if (Array.isArray(blockedChannels) && blockedChannels.length > 0) {
+      const channel = videoMetadata.channel.trim();
+      const channelLower = channel.toLowerCase();
+      const isBlocked = blockedChannels.some(blocked => blocked.toLowerCase().trim() === channelLower);
+      if (isBlocked) {
+        // Channel is blocked - return early, skip AI classification
+        LOG("Channel blocked:", { channel, blockedChannels });
+        return {
+          ok: true,
+          pageType,
+          blocked: true,
+          scope: "watch",
+          reason: "channel_blocked",
+          plan,
+          counters: {
+            searches: Number(state.ft_searches_today || 0),
+            watchSeconds: Number(state.ft_watch_seconds_today || 0),
+            watchVisits: Number(state.ft_watch_visits_today || 0),
+            shortsVisits: Number(state.ft_short_visits_today || 0),
+            shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
+            shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
+            allowanceVideosLeft: Number(state.ft_allowance_videos_left || 1),
+            allowanceSecondsLeft: Number(state.ft_allowance_seconds_left || 600)
+          },
+          unlocked: await isTemporarilyUnlocked(Date.now()),
+          aiClassification: null
+        };
+      }
+    }
+  }
 
   // 7. AI Classification (Pro users only)
   // Strategy: Search = logging only, Watch = primary action point (block/warn)
@@ -956,6 +991,9 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   const unlocked = await isTemporarilyUnlocked(now);
 
   // 9. Build context for evaluateBlock()
+  const channel = (pageType === "WATCH" && videoMetadata) ? videoMetadata.channel : null;
+  const blockedChannels = state.ft_blocked_channels || [];
+  
   const ctx = {
     plan,
     config,
@@ -966,6 +1004,8 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     ft_block_shorts_today: state.ft_block_shorts_today || false,
     unlocked,
     now,
+    channel,
+    blockedChannels,
     aiClassification, // Add AI classification to context
   };
 

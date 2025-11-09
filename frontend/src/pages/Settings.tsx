@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { removeEmailFromExtension } from "@/lib/extensionStorage";
+import { X } from "lucide-react";
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -23,6 +24,10 @@ const Settings = () => {
   const [goals, setGoals] = useState("Learn web development\nImprove public speaking");
   const [antiGoals, setAntiGoals] = useState("Gaming content\nViral entertainment");
   const [loggingOut, setLoggingOut] = useState(false);
+  const [blockedChannels, setBlockedChannels] = useState<string[]>([]);
+  const [newChannelName, setNewChannelName] = useState("");
+  const [loadingChannels, setLoadingChannels] = useState(true);
+  const [savingChannel, setSavingChannel] = useState(false);
 
   const handleSave = () => {
     // TODO: Save settings to backend/extension
@@ -30,6 +35,155 @@ const Settings = () => {
       title: "Settings saved",
       description: "Your preferences have been updated.",
     });
+  };
+
+  // Load blocked channels on mount
+  useEffect(() => {
+    const loadBlockedChannels = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.email) {
+          setLoadingChannels(false);
+          return;
+        }
+
+        const response = await fetch(
+          `https://focustube-backend-4xah.onrender.com/extension/get-data?email=${encodeURIComponent(user.email)}`
+        );
+
+        if (response.ok) {
+          const result = await response.json();
+          if (result.ok && result.data?.blocked_channels) {
+            setBlockedChannels(result.data.blocked_channels || []);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading blocked channels:", error);
+      } finally {
+        setLoadingChannels(false);
+      }
+    };
+
+    loadBlockedChannels();
+  }, []);
+
+  const handleAddChannel = async () => {
+    if (!newChannelName.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a channel name",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSavingChannel(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to block channels",
+          variant: "destructive",
+        });
+        setSavingChannel(false);
+        return;
+      }
+
+      // Check if already blocked (case-insensitive)
+      const channelLower = newChannelName.trim().toLowerCase();
+      const isAlreadyBlocked = blockedChannels.some(
+        ch => ch.toLowerCase().trim() === channelLower
+      );
+
+      if (isAlreadyBlocked) {
+        toast({
+          title: "Already blocked",
+          description: "This channel is already in your blocklist",
+        });
+        setSavingChannel(false);
+        setNewChannelName("");
+        return;
+      }
+
+      // Add to list
+      const updatedChannels = [...blockedChannels, newChannelName.trim()];
+
+      // Save to backend
+      const response = await fetch("https://focustube-backend-4xah.onrender.com/extension/save-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: user.email,
+          blocked_channels: updatedChannels,
+        }),
+      });
+
+      if (response.ok) {
+        setBlockedChannels(updatedChannels);
+        setNewChannelName("");
+        toast({
+          title: "Channel blocked",
+          description: "Well done! Eliminating distractions helps you stay focused.",
+        });
+      } else {
+        throw new Error("Failed to save");
+      }
+    } catch (error) {
+      console.error("Error adding blocked channel:", error);
+      toast({
+        title: "Error",
+        description: "Failed to block channel. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingChannel(false);
+    }
+  };
+
+  const handleRemoveChannel = async (channelToRemove: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to manage blocked channels",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const updatedChannels = blockedChannels.filter(
+        ch => ch.toLowerCase().trim() !== channelToRemove.toLowerCase().trim()
+      );
+
+      // Save to backend
+      const response = await fetch("https://focustube-backend-4xah.onrender.com/extension/save-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: user.email,
+          blocked_channels: updatedChannels,
+        }),
+      });
+
+      if (response.ok) {
+        setBlockedChannels(updatedChannels);
+        toast({
+          title: "Channel unblocked",
+          description: "Channel removed from blocklist",
+        });
+      } else {
+        throw new Error("Failed to save");
+      }
+    } catch (error) {
+      console.error("Error removing blocked channel:", error);
+      toast({
+        title: "Error",
+        description: "Failed to unblock channel. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleLogout = async () => {
@@ -212,6 +366,61 @@ const Settings = () => {
                     Limit YouTube access to specific times
                   </p>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Blocked Channels</CardTitle>
+                <CardDescription>
+                  Well done! Eliminating distractions helps you stay focused. Blocked channels will be automatically redirected.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter channel name (e.g., Eddie Hall)"
+                    value={newChannelName}
+                    onChange={(e) => setNewChannelName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleAddChannel();
+                      }
+                    }}
+                    disabled={savingChannel || loadingChannels}
+                  />
+                  <Button
+                    onClick={handleAddChannel}
+                    disabled={savingChannel || loadingChannels || !newChannelName.trim()}
+                  >
+                    {savingChannel ? "Adding..." : "Add"}
+                  </Button>
+                </div>
+                
+                {loadingChannels ? (
+                  <p className="text-sm text-muted-foreground">Loading blocked channels...</p>
+                ) : blockedChannels.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No channels blocked yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {blockedChannels.map((channel, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 border rounded-lg"
+                      >
+                        <span className="font-medium">{channel}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveChannel(channel)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
 

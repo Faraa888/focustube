@@ -457,8 +457,6 @@ export async function setTemporaryUnlock(minutes = 10) {
 // EXTENSION DATA SYNC (blocked channels, watch history, etc.)
 // ─────────────────────────────────────────────────────────────
 
-const SERVER_URL = "https://focustube-backend-4xah.onrender.com";
-
 /**
  * Load extension data from server (blocked channels, watch history, etc.)
  * @returns {Promise<Object|null>} Extension data or null if failed

@@ -38,7 +38,8 @@ const REASONS = Object.freeze({
   UNLOCKED: "temporarily_unlocked",
   STRICT_SHORTS: "strict_shorts",
   SEARCH_THRESHOLD: "search_threshold",
-  TIME_LIMIT: "time_limit"
+  TIME_LIMIT: "time_limit",
+  CHANNEL_BLOCKED: "channel_blocked"
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -49,8 +50,9 @@ const REASONS = Object.freeze({
 //   searchesToday, watchSecondsToday,       // numbers
 //   ft_blocked_today,                       // boolean (global block latched)
 //   unlocked, now                           // boolean, number
+//   channel, blockedChannels               // string, array (for channel blocking)
 // }
-// Returns: { blocked: boolean, scope: "none"|"shorts"|"search"|"global", reason: string }
+// Returns: { blocked: boolean, scope: "none"|"shorts"|"search"|"global"|"watch", reason: string }
 // ─────────────────────────────────────────────────────────────
 export function evaluateBlock(ctx) {
   const {
@@ -60,7 +62,9 @@ export function evaluateBlock(ctx) {
     searchesToday = 0,
     watchSecondsToday = 0,
     ft_blocked_today = false,
-    unlocked = false
+    unlocked = false,
+    channel = null,           // Channel name (for watch pages)
+    blockedChannels = []      // Array of blocked channel names
   } = ctx;
 
   // TEST plan: never block (used for QA/dev)
@@ -71,6 +75,16 @@ export function evaluateBlock(ctx) {
   // If user has a temporary unlock → allow everything
   if (unlocked) {
     return { blocked: false, scope: "none", reason: REASONS.UNLOCKED };
+  }
+
+  // Channel blocking check (early, before other blocking logic)
+  if (pageType === "WATCH" && channel && Array.isArray(blockedChannels) && blockedChannels.length > 0) {
+    // Case-insensitive comparison
+    const channelLower = channel.toLowerCase().trim();
+    const isBlocked = blockedChannels.some(blocked => blocked.toLowerCase().trim() === channelLower);
+    if (isBlocked) {
+      return { blocked: true, scope: "watch", reason: REASONS.CHANNEL_BLOCKED };
+    }
   }
 
   // Global daily time limit (only if you enable it later)

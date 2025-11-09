@@ -1536,6 +1536,182 @@ async function showShortsMilestonePopup(engaged, scrolled, totalSeconds) {
 }
 
 /**
+ * Shows block channel confirmation dialog with positive messaging
+ * @param {string} channelName - Name of channel to block
+ * @param {Function} onConfirm - Callback when user confirms
+ * @param {Function} onCancel - Callback when user cancels
+ */
+function showBlockChannelConfirmation(channelName, onConfirm, onCancel) {
+  // Remove any existing confirmation
+  const existing = document.getElementById("ft-block-channel-confirmation");
+  if (existing) existing.remove();
+  
+  // Pause video before showing dialog
+  pauseAndMuteVideo();
+  
+  const confirmation = document.createElement("div");
+  confirmation.id = "ft-block-channel-confirmation";
+  
+  confirmation.innerHTML = `
+    <div class="ft-milestone-box">
+      <h2>Block Channel?</h2>
+      <p class="ft-milestone-intro">Well done! Eliminating distractions helps you stay focused.</p>
+      <p style="margin-top: 12px; font-weight: 500;">Block "${channelName}"?</p>
+      <div class="ft-milestone-buttons">
+        <button id="ft-block-cancel" class="ft-button ft-button-secondary">Cancel</button>
+        <button id="ft-block-confirm" class="ft-button ft-button-primary">Block Channel</button>
+      </div>
+    </div>
+  `;
+  
+  confirmation.querySelector("#ft-block-confirm").addEventListener("click", () => {
+    confirmation.remove();
+    restoreVideoState();
+    onConfirm();
+  });
+  
+  confirmation.querySelector("#ft-block-cancel").addEventListener("click", () => {
+    confirmation.remove();
+    restoreVideoState();
+    if (onCancel) onCancel();
+  });
+  
+  document.body.appendChild(confirmation);
+}
+
+/**
+ * Injects "Block Channel" button on watch pages
+ * @param {string} channelName - Name of channel to block
+ */
+async function injectBlockChannelButton(channelName) {
+  // Check if button already exists
+  if (document.getElementById("ft-block-channel-btn")) {
+    return;
+  }
+  
+  // Try multiple selectors for channel name element
+  const channelSelectors = [
+    "ytd-channel-name a",
+    "#owner-sub-count a",
+    "ytd-video-owner-renderer #channel-name a",
+    "ytd-watch-metadata ytd-channel-name a"
+  ];
+  
+  let channelElement = null;
+  for (const selector of channelSelectors) {
+    channelElement = document.querySelector(selector);
+    if (channelElement) break;
+  }
+  
+  if (!channelElement) {
+    // Retry after a short delay (YouTube's DOM might not be ready)
+    setTimeout(() => injectBlockChannelButton(channelName), 500);
+    return;
+  }
+  
+  // Find parent container (usually ytd-channel-name or owner-sub-count)
+  let container = channelElement.closest("ytd-channel-name") || 
+                  channelElement.closest("#owner-sub-count") ||
+                  channelElement.parentElement;
+  
+  if (!container) {
+    console.warn("[FT] Could not find container for block button");
+    return;
+  }
+  
+  // Create button
+  const button = document.createElement("button");
+  button.id = "ft-block-channel-btn";
+  button.className = "ft-block-channel-btn";
+  button.textContent = "Block Channel";
+  button.style.cssText = `
+    margin-left: 12px;
+    padding: 6px 12px;
+    background-color: #ff4444;
+    color: white;
+    border: none;
+    border-radius: 18px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  `;
+  
+  button.addEventListener("mouseenter", () => {
+    button.style.backgroundColor = "#cc0000";
+  });
+  
+  button.addEventListener("mouseleave", () => {
+    button.style.backgroundColor = "#ff4444";
+  });
+  
+  button.addEventListener("click", async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Show confirmation dialog
+    showBlockChannelConfirmation(
+      channelName,
+      async () => {
+        // On confirm: block channel
+        try {
+          const { ft_blocked_channels = [], ft_user_email } = await chrome.storage.local.get([
+            "ft_blocked_channels",
+            "ft_user_email"
+          ]);
+          
+          // Add channel if not already in list
+          const channelLower = channelName.toLowerCase().trim();
+          const isAlreadyBlocked = Array.isArray(ft_blocked_channels) && 
+            ft_blocked_channels.some(b => b.toLowerCase().trim() === channelLower);
+          
+          if (!isAlreadyBlocked) {
+            const updatedBlocked = [...(ft_blocked_channels || []), channelName.trim()];
+            
+            // Save to local storage
+            await chrome.storage.local.set({ ft_blocked_channels: updatedBlocked });
+            
+            // Save to server
+            if (ft_user_email) {
+              const serverUrl = await getServerUrl();
+              try {
+                await fetch(`${serverUrl}/extension/save-data`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    email: ft_user_email,
+                    blocked_channels: updatedBlocked
+                  })
+                });
+                console.log("[FT] Blocked channel saved to server:", channelName);
+              } catch (err) {
+                console.warn("[FT] Failed to save blocked channel to server:", err);
+              }
+            }
+            
+            // Show success notification
+            console.log(`[FT] ✅ Channel blocked: ${channelName}`);
+            
+            // Remove button and refresh page to trigger redirect
+            button.remove();
+            window.location.reload();
+          }
+        } catch (error) {
+          console.error("[FT] Error blocking channel:", error);
+        }
+      },
+      () => {
+        // On cancel: do nothing
+        console.log("[FT] Block channel cancelled");
+      }
+    );
+  });
+  
+  // Insert button after channel name element
+  container.appendChild(button);
+}
+
+/**
  * Shows journal nudge popup (1 minute into distracting content)
  * Temporary, dismissible popup asking "What pulled you off track?"
  * @param {Object} videoMetadata - Video metadata (title, channel, url, etc.)
@@ -2761,6 +2937,12 @@ async function handleNavigation() {
     pauseVideos();
     await stopShortsTimeTracking(); // Stop tracking if blocked
 
+    // Channel blocking: hard redirect immediately (no overlay)
+    if (resp.scope === "watch" && resp.reason === "channel_blocked") {
+      window.location.href = "https://www.youtube.com/";
+      return;
+    }
+
     // Shorts-specific: set redirect flag, then redirect to home if blocked
     if (resp.scope === "shorts") {
       // Set flag so home page knows to show overlay
@@ -2802,6 +2984,25 @@ async function handleNavigation() {
     }
   } else {
     removeOverlay(); // clear if allowed
+  }
+
+  // Inject "Block Channel" button on watch pages (if channel is not already blocked)
+  if (pageType === "WATCH" && videoMetadata && videoMetadata.channel) {
+    try {
+      const { ft_blocked_channels = [] } = await chrome.storage.local.get(["ft_blocked_channels"]);
+      const channelName = videoMetadata.channel.trim();
+      const channelLower = channelName.toLowerCase();
+      const isBlocked = Array.isArray(ft_blocked_channels) && ft_blocked_channels.some(
+        blocked => blocked.toLowerCase().trim() === channelLower
+      );
+      
+      if (!isBlocked) {
+        // Channel is not blocked - inject button
+        await injectBlockChannelButton(channelName);
+      }
+    } catch (e) {
+      console.warn("[FT] Error checking blocked channels for button injection:", e.message);
+    }
   }
 }
 
