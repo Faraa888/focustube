@@ -1542,6 +1542,8 @@ async function showShortsMilestonePopup(engaged, scrolled, totalSeconds) {
  * @param {Function} onCancel - Callback when user cancels
  */
 function showBlockChannelConfirmation(channelName, onConfirm, onCancel) {
+  console.log("[FT] 📋 Showing confirmation dialog for:", channelName);
+  
   // Remove any existing confirmation
   const existing = document.getElementById("ft-block-channel-confirmation");
   if (existing) existing.remove();
@@ -1565,27 +1567,34 @@ function showBlockChannelConfirmation(channelName, onConfirm, onCancel) {
   `;
   
   confirmation.querySelector("#ft-block-confirm").addEventListener("click", () => {
+    console.log("[FT] ✅ User confirmed blocking:", channelName);
     confirmation.remove();
     restoreVideoState();
     onConfirm();
   });
   
   confirmation.querySelector("#ft-block-cancel").addEventListener("click", () => {
+    console.log("[FT] ❌ User cancelled blocking:", channelName);
     confirmation.remove();
     restoreVideoState();
     if (onCancel) onCancel();
   });
   
   document.body.appendChild(confirmation);
+  console.log("[FT] ✅ Confirmation dialog added to DOM");
 }
 
 /**
  * Injects "Block Channel" button on watch pages
  * @param {string} channelName - Name of channel to block
+ * @param {number} retryCount - Current retry attempt (internal)
  */
-async function injectBlockChannelButton(channelName) {
+async function injectBlockChannelButton(channelName, retryCount = 0) {
+  const maxRetries = 5; // Maximum 5 retries (2.5 seconds total)
+  
   // Check if button already exists
   if (document.getElementById("ft-block-channel-btn")) {
+    console.log("[FT] Block button already exists, skipping injection");
     return;
   }
   
@@ -1604,9 +1613,14 @@ async function injectBlockChannelButton(channelName) {
   }
   
   if (!channelElement) {
-    // Retry after a short delay (YouTube's DOM might not be ready)
-    setTimeout(() => injectBlockChannelButton(channelName), 500);
-    return;
+    if (retryCount < maxRetries) {
+      console.log(`[FT] Channel element not found, retrying (${retryCount + 1}/${maxRetries})...`);
+      setTimeout(() => injectBlockChannelButton(channelName, retryCount + 1), 500);
+      return;
+    } else {
+      console.warn("[FT] Could not find channel element after", maxRetries, "attempts");
+      return;
+    }
   }
   
   // Find parent container (usually ytd-channel-name or owner-sub-count)
@@ -1618,6 +1632,8 @@ async function injectBlockChannelButton(channelName) {
     console.warn("[FT] Could not find container for block button");
     return;
   }
+  
+  console.log("[FT] ✅ Injecting Block Channel button for:", channelName);
   
   // Create button
   const button = document.createElement("button");
@@ -1646,6 +1662,7 @@ async function injectBlockChannelButton(channelName) {
   });
   
   button.addEventListener("click", async (e) => {
+    console.log("[FT] 🔴 Block Channel button clicked for:", channelName);
     e.preventDefault();
     e.stopPropagation();
     
@@ -1654,11 +1671,15 @@ async function injectBlockChannelButton(channelName) {
       channelName,
       async () => {
         // On confirm: block channel
+        console.log("[FT] 🔵 Starting channel blocking process for:", channelName);
         try {
           const { ft_blocked_channels = [], ft_user_email } = await chrome.storage.local.get([
             "ft_blocked_channels",
             "ft_user_email"
           ]);
+          
+          console.log("[FT] Current blocked channels:", ft_blocked_channels);
+          console.log("[FT] User email:", ft_user_email ? "present" : "missing");
           
           // Add channel if not already in list
           const channelLower = channelName.toLowerCase().trim();
@@ -1668,14 +1689,18 @@ async function injectBlockChannelButton(channelName) {
           if (!isAlreadyBlocked) {
             const updatedBlocked = [...(ft_blocked_channels || []), channelName.trim()];
             
+            console.log("[FT] Adding channel to blocklist:", channelName);
+            console.log("[FT] Updated blocklist:", updatedBlocked);
+            
             // Save to local storage
             await chrome.storage.local.set({ ft_blocked_channels: updatedBlocked });
+            console.log("[FT] ✅ Channel saved to local storage");
             
             // Save to server
             if (ft_user_email) {
               const serverUrl = await getServerUrl();
               try {
-                await fetch(`${serverUrl}/extension/save-data`, {
+                const response = await fetch(`${serverUrl}/extension/save-data`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
@@ -1683,10 +1708,17 @@ async function injectBlockChannelButton(channelName) {
                     blocked_channels: updatedBlocked
                   })
                 });
-                console.log("[FT] Blocked channel saved to server:", channelName);
+                
+                if (response.ok) {
+                  console.log("[FT] ✅ Blocked channel saved to server:", channelName);
+                } else {
+                  console.warn("[FT] ⚠️ Server save failed with status:", response.status);
+                }
               } catch (err) {
-                console.warn("[FT] Failed to save blocked channel to server:", err);
+                console.warn("[FT] ⚠️ Failed to save blocked channel to server:", err);
               }
+            } else {
+              console.warn("[FT] ⚠️ No user email, skipping server save");
             }
             
             // Show success notification
@@ -1694,21 +1726,25 @@ async function injectBlockChannelButton(channelName) {
             
             // Remove button and refresh page to trigger redirect
             button.remove();
+            console.log("[FT] Reloading page to trigger redirect...");
             window.location.reload();
+          } else {
+            console.log("[FT] Channel already blocked, skipping");
           }
         } catch (error) {
-          console.error("[FT] Error blocking channel:", error);
+          console.error("[FT] ❌ Error blocking channel:", error);
         }
       },
       () => {
         // On cancel: do nothing
-        console.log("[FT] Block channel cancelled");
+        console.log("[FT] ❌ Block channel cancelled");
       }
     );
   });
   
   // Insert button after channel name element
   container.appendChild(button);
+  console.log("[FT] ✅ Block Channel button injected successfully");
 }
 
 /**
@@ -2990,15 +3026,18 @@ async function handleNavigation() {
   if (pageType === "WATCH" && videoMetadata && videoMetadata.channel) {
     try {
       const { ft_blocked_channels = [] } = await chrome.storage.local.get(["ft_blocked_channels"]);
-      const channelName = videoMetadata.channel.trim();
+      const channelName = videoMetadata.channel.trim(); // Use exact name from metadata
       const channelLower = channelName.toLowerCase();
       const isBlocked = Array.isArray(ft_blocked_channels) && ft_blocked_channels.some(
         blocked => blocked.toLowerCase().trim() === channelLower
       );
       
       if (!isBlocked) {
-        // Channel is not blocked - inject button
+        // Channel is not blocked - inject button with EXACT channel name
+        console.log("[FT] Channel not blocked, injecting button for:", channelName);
         await injectBlockChannelButton(channelName);
+      } else {
+        console.log("[FT] Channel already blocked:", channelName);
       }
     } catch (e) {
       console.warn("[FT] Error checking blocked channels for button injection:", e.message);

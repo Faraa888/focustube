@@ -517,6 +517,50 @@
   }
 }
 
+/* Block Channel Confirmation popup (same style as milestone popup) */
+#ft-block-channel-confirmation {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  padding: 20px;
+}
+
+#ft-block-channel-confirmation .ft-milestone-box {
+  max-width: 500px;
+  background: #121212;
+  padding: 32px;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+#ft-block-channel-confirmation h2 {
+  font-size: 24px;
+  margin: 0 0 16px 0;
+  color: #ff6666;
+  line-height: 1.4;
+}
+
+#ft-block-channel-confirmation .ft-milestone-intro {
+  font-size: 16px;
+  margin: 16px 0 12px 0;
+  color: #ccc;
+  font-weight: 500;
+}
+
+#ft-block-channel-confirmation .ft-milestone-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
 #ft-journal-nudge .ft-journal-nudge-box {
   background: #1a1a1a;
   border: 1px solid #333;
