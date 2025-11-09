@@ -79,9 +79,16 @@ export function evaluateBlock(ctx) {
 
   // Channel blocking check (early, before other blocking logic)
   if (pageType === "WATCH" && channel && Array.isArray(blockedChannels) && blockedChannels.length > 0) {
-    // Case-insensitive comparison
+    // Case-insensitive comparison with substring matching
+    // Handles "Eddie Hall" blocking "Eddie Hall The Beast"
     const channelLower = channel.toLowerCase().trim();
-    const isBlocked = blockedChannels.some(blocked => blocked.toLowerCase().trim() === channelLower);
+    const isBlocked = blockedChannels.some(blocked => {
+      const blockedLower = blocked.toLowerCase().trim();
+      // Exact match or substring match
+      return blockedLower === channelLower || 
+             channelLower.includes(blockedLower) || 
+             blockedLower.includes(channelLower);
+    });
     if (isBlocked) {
       return { blocked: true, scope: "watch", reason: REASONS.CHANNEL_BLOCKED };
     }
@@ -116,6 +123,27 @@ export function evaluateBlock(ctx) {
 
   // Search threshold (block search page after N searches)
   const threshold = Number(config?.search_threshold ?? 5);
+  if (pageType === "SEARCH" && searchesToday >= threshold) {
+    return { blocked: true, scope: "search", reason: REASONS.SEARCH_THRESHOLD };
+  }
+
+  // Otherwise allow
+  return { blocked: false, scope: "none", reason: REASONS.OK };
+}
+  if (pageType === "SEARCH" && searchesToday >= threshold) {
+    return { blocked: true, scope: "search", reason: REASONS.SEARCH_THRESHOLD };
+  }
+
+  // Otherwise allow
+  return { blocked: false, scope: "none", reason: REASONS.OK };
+}
+  if (pageType === "SEARCH" && searchesToday >= threshold) {
+    return { blocked: true, scope: "search", reason: REASONS.SEARCH_THRESHOLD };
+  }
+
+  // Otherwise allow
+  return { blocked: false, scope: "none", reason: REASONS.OK };
+}
   if (pageType === "SEARCH" && searchesToday >= threshold) {
     return { blocked: true, scope: "search", reason: REASONS.SEARCH_THRESHOLD };
   }

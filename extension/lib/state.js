@@ -28,6 +28,7 @@ const DEFAULTS = {
   ft_trial_expires_at: null,      // ISO timestamp when trial expires (null if not trial)
   ft_days_left: null,             // number of days left in trial (null if not trial)
   ft_user_goals: [],              // user goals array (for AI classification)
+  ft_user_anti_goals: [],         // user anti-goals array (what distracts them)
   ft_onboarding_completed: false, // true = user has completed onboarding
   ft_reset_period: "daily",       // daily | weekly | monthly
   ft_last_reset_key: "",          // stores last date/week/month key
@@ -487,18 +488,39 @@ export async function loadExtensionDataFromServer() {
     }
 
     // Save to local storage
-    const { blocked_channels, watch_history, channel_spiral_count, settings } = result.data;
+    const { 
+      blocked_channels, 
+      watch_history, 
+      channel_spiral_count, 
+      settings,
+      goals,
+      anti_goals
+    } = result.data;
     
-    await setLocal({
+    const storageUpdate = {
       ft_blocked_channels: blocked_channels || [],
       ft_watch_history: watch_history || [],
       ft_channel_spiral_count: channel_spiral_count || {},
       ft_extension_settings: settings || {},
-    });
+    };
+
+    // Load goals if provided (from users table)
+    if (goals !== undefined) {
+      storageUpdate.ft_user_goals = Array.isArray(goals) ? goals : [];
+    }
+
+    // Load anti_goals if provided (from users table)
+    if (anti_goals !== undefined) {
+      storageUpdate.ft_user_anti_goals = Array.isArray(anti_goals) ? anti_goals : [];
+    }
+    
+    await setLocal(storageUpdate);
 
     console.log("[FT] Extension data loaded from server:", {
       blockedChannels: (blocked_channels || []).length,
       watchHistory: (watch_history || []).length,
+      goals: (goals || []).length,
+      antiGoals: (anti_goals || []).length,
     });
 
     return result.data;
@@ -528,11 +550,15 @@ export async function saveExtensionDataToServer(data = null) {
       ft_watch_history = [],
       ft_channel_spiral_count = {},
       ft_extension_settings = {},
+      ft_user_goals = [],
+      ft_user_anti_goals = [],
     } = await getLocal([
       "ft_blocked_channels",
       "ft_watch_history",
       "ft_channel_spiral_count",
       "ft_extension_settings",
+      "ft_user_goals",
+      "ft_user_anti_goals",
     ]);
 
     // Use provided data or fall back to local storage
@@ -541,7 +567,18 @@ export async function saveExtensionDataToServer(data = null) {
       watch_history: ft_watch_history,
       channel_spiral_count: ft_channel_spiral_count,
       settings: ft_extension_settings,
+      goals: ft_user_goals,
+      anti_goals: ft_user_anti_goals,
     };
+
+    // Always include goals and anti_goals if they exist in local storage (even if data is provided)
+    // This ensures goals are synced whenever we save
+    if (!data || data.goals === undefined) {
+      toSave.goals = ft_user_goals;
+    }
+    if (!data || data.anti_goals === undefined) {
+      toSave.anti_goals = ft_user_anti_goals;
+    }
 
     const response = await fetch(`${SERVER_URL}/extension/save-data`, {
       method: "POST",

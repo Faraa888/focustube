@@ -229,6 +229,11 @@ async function handleMessage(msg) {
       LOG("Plan synced from server:", ft_plan);
     }
     
+    // Load extension data from server (blocked channels, watch history, etc.)
+    await loadExtensionDataFromServer().catch((err) => {
+      LOG("Failed to load extension data after website login:", err);
+    });
+    
     return { ok: true, email };
   }
 
@@ -237,9 +242,15 @@ async function handleMessage(msg) {
       "ft_user_email", 
       "ft_plan", 
       "ft_days_left", 
-      "ft_trial_expires_at"
+      "ft_trial_expires_at",
+      "ft_blocked_channels",
+      "ft_watch_history",
+      "ft_channel_spiral_count",
+      "ft_extension_settings",
+      "ft_user_goals",
+      "ft_user_anti_goals"
     ]);
-    LOG("Email removed from website logout");
+    LOG("Email and user data removed from website logout");
     return { ok: true };
   }
 
@@ -249,7 +260,13 @@ async function handleMessage(msg) {
       return { ok: false, error: "Goals must be an array" };
     }
     await setLocal({ ft_user_goals: goals });
-    LOG("Goals saved:", { count: goals.length, goals });
+    LOG("Goals saved locally:", { count: goals.length, goals });
+    
+    // Save goals to server
+    await saveExtensionDataToServer({ goals }).catch((err) => {
+      LOG("Failed to save goals to server:", err);
+      // Don't fail the request if server save fails
+    });
     
     // Verify they were saved
     const { ft_user_goals: savedGoals } = await getLocal(["ft_user_goals"]);
@@ -273,6 +290,14 @@ async function handleMessage(msg) {
     if (synced) {
       const { ft_plan } = await getLocal(["ft_plan"]);
       LOG("Plan synced from server:", ft_plan);
+    }
+    
+    // Load extension data from server (blocked channels, watch history, etc.)
+    await loadExtensionDataFromServer().catch((err) => {
+      LOG("Failed to load extension data after popup login:", err);
+    });
+    
+    if (synced) {
       return { ok: true, plan: ft_plan };
     } else {
       return { ok: false, error: "Failed to sync plan" };
@@ -834,10 +859,17 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     if (Array.isArray(blockedChannels) && blockedChannels.length > 0) {
       const channel = videoMetadata.channel.trim();
       const channelLower = channel.toLowerCase();
-      const isBlocked = blockedChannels.some(blocked => blocked.toLowerCase().trim() === channelLower);
+      // More robust matching: check if blocked channel name is contained in current channel or vice versa
+      const isBlocked = blockedChannels.some(blocked => {
+        const blockedLower = blocked.toLowerCase().trim();
+        // Exact match or substring match (handles "Eddie Hall" vs "Eddie Hall The Beast")
+        return blockedLower === channelLower || 
+               channelLower.includes(blockedLower) || 
+               blockedLower.includes(channelLower);
+      });
       if (isBlocked) {
         // Channel is blocked - return early, skip AI classification
-        LOG("Channel blocked:", { channel, blockedChannels });
+        LOG("Channel blocked:", { channel, blockedChannels, matched: true });
         return {
           ok: true,
           pageType,

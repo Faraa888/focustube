@@ -1724,10 +1724,13 @@ async function injectBlockChannelButton(channelName, retryCount = 0) {
             // Show success notification
             console.log(`[FT] ✅ Channel blocked: ${channelName}`);
             
-            // Remove button and refresh page to trigger redirect
+            // Remove button and redirect immediately (no reload needed)
             button.remove();
-            console.log("[FT] Reloading page to trigger redirect...");
-            window.location.reload();
+            console.log("[FT] Redirecting to YouTube home...");
+            
+            // Small delay to ensure storage is saved, then redirect
+            await new Promise(resolve => setTimeout(resolve, 100));
+            window.location.href = "https://www.youtube.com/";
           } else {
             console.log("[FT] Channel already blocked, skipping");
           }
@@ -2748,6 +2751,15 @@ async function handleNavigation() {
       videoMetadata: videoMetadata // Pass full video metadata for AI classification (Pro users only)
     });
     
+    // Log response for debugging
+    if (resp && resp.blocked && resp.reason === "channel_blocked") {
+      console.log("[FT] 🚫 Background says channel is blocked:", {
+        channel: videoMetadata?.channel,
+        reason: resp.reason,
+        scope: resp.scope
+      });
+    }
+    
     // Immediate console log for AI classification results with validation
     if (resp && resp.aiClassification) {
       const ai = resp.aiClassification;
@@ -2975,6 +2987,8 @@ async function handleNavigation() {
 
     // Channel blocking: hard redirect immediately (no overlay)
     if (resp.scope === "watch" && resp.reason === "channel_blocked") {
+      console.log("[FT] 🚫 Channel blocked - redirecting immediately to YouTube home");
+      // Redirect immediately, don't wait for anything
       window.location.href = "https://www.youtube.com/";
       return;
     }
@@ -3028,16 +3042,20 @@ async function handleNavigation() {
       const { ft_blocked_channels = [] } = await chrome.storage.local.get(["ft_blocked_channels"]);
       const channelName = videoMetadata.channel.trim(); // Use exact name from metadata
       const channelLower = channelName.toLowerCase();
-      const isBlocked = Array.isArray(ft_blocked_channels) && ft_blocked_channels.some(
-        blocked => blocked.toLowerCase().trim() === channelLower
-      );
+      // Use same substring matching as blocking logic
+      const isBlocked = Array.isArray(ft_blocked_channels) && ft_blocked_channels.some(blocked => {
+        const blockedLower = blocked.toLowerCase().trim();
+        return blockedLower === channelLower || 
+               channelLower.includes(blockedLower) || 
+               blockedLower.includes(channelLower);
+      });
       
       if (!isBlocked) {
         // Channel is not blocked - inject button with EXACT channel name
         console.log("[FT] Channel not blocked, injecting button for:", channelName);
         await injectBlockChannelButton(channelName);
       } else {
-        console.log("[FT] Channel already blocked:", channelName);
+        console.log("[FT] Channel already blocked (substring match):", channelName);
       }
     } catch (e) {
       console.warn("[FT] Error checking blocked channels for button injection:", e.message);
@@ -3616,6 +3634,60 @@ function scheduleNav(delay = 150) {
     });
   }, delay);
 }
+
+let lastUrl = location.href;
+
+const observer = new MutationObserver(() => {
+  if (location.href !== lastUrl) {
+    lastUrl = location.href;
+    scheduleNav(150); // debounce SPA navigations
+  }
+});
+
+observer.observe(document.body, { childList: true, subtree: true });
+
+// Initialize global time tracking (tracks time on all YouTube pages)
+// Start tracking immediately when script loads
+startGlobalTimeTracking().catch(console.error);
+
+// Initial run (debounced for consistency)
+scheduleNav(0);
+
+let lastUrl = location.href;
+
+const observer = new MutationObserver(() => {
+  if (location.href !== lastUrl) {
+    lastUrl = location.href;
+    scheduleNav(150); // debounce SPA navigations
+  }
+});
+
+observer.observe(document.body, { childList: true, subtree: true });
+
+// Initialize global time tracking (tracks time on all YouTube pages)
+// Start tracking immediately when script loads
+startGlobalTimeTracking().catch(console.error);
+
+// Initial run (debounced for consistency)
+scheduleNav(0);
+
+let lastUrl = location.href;
+
+const observer = new MutationObserver(() => {
+  if (location.href !== lastUrl) {
+    lastUrl = location.href;
+    scheduleNav(150); // debounce SPA navigations
+  }
+});
+
+observer.observe(document.body, { childList: true, subtree: true });
+
+// Initialize global time tracking (tracks time on all YouTube pages)
+// Start tracking immediately when script loads
+startGlobalTimeTracking().catch(console.error);
+
+// Initial run (debounced for consistency)
+scheduleNav(0);
 
 let lastUrl = location.href;
 

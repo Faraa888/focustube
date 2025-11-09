@@ -250,12 +250,18 @@ async function handleLogout() {
   try {
     console.log("🔓 [POPUP] Logging out...");
     
-    // Clear all extension storage
+    // Clear all extension storage (including blocked channels and other user data)
     await chrome.storage.local.remove([
       "ft_user_email", 
       "ft_plan", 
       "ft_days_left", 
-      "ft_trial_expires_at"
+      "ft_trial_expires_at",
+      "ft_blocked_channels",
+      "ft_watch_history",
+      "ft_channel_spiral_count",
+      "ft_extension_settings",
+      "ft_user_goals",
+      "ft_user_anti_goals"
     ]);
     
     console.log("✅ [POPUP] Extension storage cleared");
@@ -342,6 +348,18 @@ loadCurrentEmail().catch(console.error);
 chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace === 'local' && changes.ft_user_email) {
     // Email was added/changed - reload to show logged-in status
+    loadCurrentEmail().catch(console.error);
+  }
+});
+
+    loadCurrentEmail().catch(console.error);
+  }
+});
+
+    loadCurrentEmail().catch(console.error);
+  }
+});
+
     loadCurrentEmail().catch(console.error);
   }
 });

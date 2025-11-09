@@ -774,7 +774,7 @@ app.get("/license/verify", async (req, res) => {
  * Get extension data endpoint
  * GET /extension/get-data?email=user@example.com
  * 
- * Returns extension data (blocked channels, watch history, etc.) from Supabase
+ * Returns extension data (blocked channels, watch history, goals, etc.) from Supabase
  */
 app.get("/extension/get-data", async (req, res) => {
   try {
@@ -787,40 +787,81 @@ app.get("/extension/get-data", async (req, res) => {
       });
     }
 
+    const userId = email.toLowerCase().trim();
+
     // Get extension data from Supabase
-    const { data, error } = await supabase
+    const { data: extensionData, error: extensionError } = await supabase
       .from("extension_data")
       .select("*")
-      .eq("user_id", email.toLowerCase().trim())
+      .eq("user_id", userId)
       .single();
 
-    if (error) {
-      if (error.code === "PGRST116") {
-        // No data found - return empty/default data
-        return res.json({
-          ok: true,
-          data: {
-            blocked_channels: [],
-            watch_history: [],
-            channel_spiral_count: {},
-            settings: {},
-          },
-        });
+    // Get user goals from users table
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .select("goals, anti_goals")
+      .eq("email", userId)
+      .single();
+
+    // Parse goals (stored as TEXT in database, should be JSON array)
+    let goals: string[] = [];
+    if (userData?.goals) {
+      try {
+        goals = typeof userData.goals === "string" 
+          ? JSON.parse(userData.goals) 
+          : (Array.isArray(userData.goals) ? userData.goals : []);
+      } catch (e) {
+        console.warn("[Extension Data] Failed to parse goals:", e);
+        goals = [];
       }
-      console.error("[Extension Data] Error fetching:", error);
+    }
+
+    // Parse anti_goals (stored as TEXT in database, should be JSON array)
+    let anti_goals: string[] = [];
+    if (userData?.anti_goals) {
+      try {
+        anti_goals = typeof userData.anti_goals === "string"
+          ? JSON.parse(userData.anti_goals)
+          : (Array.isArray(userData.anti_goals) ? userData.anti_goals : []);
+      } catch (e) {
+        console.warn("[Extension Data] Failed to parse anti_goals:", e);
+        anti_goals = [];
+      }
+    }
+
+    if (extensionError && extensionError.code !== "PGRST116") {
+      // PGRST116 = no rows found (acceptable)
+      console.error("[Extension Data] Error fetching extension_data:", extensionError);
       return res.status(500).json({
         ok: false,
         error: "Failed to fetch extension data",
       });
     }
 
+    // If no extension_data found, return defaults (but still include goals if available)
+    if (extensionError && extensionError.code === "PGRST116") {
+      return res.json({
+        ok: true,
+        data: {
+          blocked_channels: [],
+          watch_history: [],
+          channel_spiral_count: {},
+          settings: {},
+          goals: goals,
+          anti_goals: anti_goals,
+        },
+      });
+    }
+
     res.json({
       ok: true,
       data: {
-        blocked_channels: data.blocked_channels || [],
-        watch_history: data.watch_history || [],
-        channel_spiral_count: data.channel_spiral_count || {},
-        settings: data.settings || {},
+        blocked_channels: extensionData.blocked_channels || [],
+        watch_history: extensionData.watch_history || [],
+        channel_spiral_count: extensionData.channel_spiral_count || {},
+        settings: extensionData.settings || {},
+        goals: goals,
+        anti_goals: anti_goals,
       },
     });
   } catch (error) {
@@ -836,8 +877,8 @@ app.get("/extension/get-data", async (req, res) => {
  * Save extension data endpoint
  * POST /extension/save-data
  * 
- * Saves extension data (blocked channels, watch history, etc.) to Supabase
- * Body: { email: "user@example.com", data: { blocked_channels: [...], ... } }
+ * Saves extension data (blocked channels, watch history, goals, etc.) to Supabase
+ * Body: { email: "user@example.com", data: { blocked_channels: [...], goals: [...], ... } }
  */
 app.post("/extension/save-data", async (req, res) => {
   try {
@@ -860,7 +901,7 @@ app.post("/extension/save-data", async (req, res) => {
     const userId = email.toLowerCase().trim();
 
     // Upsert extension data (insert or update)
-    const { error } = await supabase
+    const { error: extensionError } = await supabase
       .from("extension_data")
       .upsert({
         user_id: userId,
@@ -873,12 +914,47 @@ app.post("/extension/save-data", async (req, res) => {
         onConflict: "user_id",
       });
 
-    if (error) {
-      console.error("[Extension Data] Error saving:", error);
+    if (extensionError) {
+      console.error("[Extension Data] Error saving extension_data:", extensionError);
       return res.status(500).json({
         ok: false,
         error: "Failed to save extension data",
       });
+    }
+
+    // Save goals and anti_goals to users table if provided
+    if (data.goals !== undefined || data.anti_goals !== undefined) {
+      const updateData: any = {};
+      
+      if (data.goals !== undefined) {
+        // Store goals as JSON string in TEXT column
+        updateData.goals = Array.isArray(data.goals) 
+          ? JSON.stringify(data.goals) 
+          : (data.goals || null);
+      }
+      
+      if (data.anti_goals !== undefined) {
+        // Store anti_goals as JSON string in TEXT column
+        updateData.anti_goals = Array.isArray(data.anti_goals)
+          ? JSON.stringify(data.anti_goals)
+          : (data.anti_goals || null);
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        updateData.updated_at = new Date().toISOString();
+        
+        const { error: userError } = await supabase
+          .from("users")
+          .update(updateData)
+          .eq("email", userId);
+
+        if (userError) {
+          console.error("[Extension Data] Error saving goals:", userError);
+          // Don't fail the whole request if goals save fails, but log it
+        } else {
+          console.log("[Extension Data] Goals saved successfully for", userId);
+        }
+      }
     }
 
     res.json({
