@@ -970,6 +970,167 @@ app.post("/extension/save-data", async (req, res) => {
   }
 });
 
+
+/**
+ * GET /dashboard/stats?email=
+ * Returns aggregated dashboard statistics for the user
+ */
+app.get("/dashboard/stats", async (req, res) => {
+  try {
+    const email = (req.query.email as string)?.trim();
+    if (!email) {
+      return res.status(400).json({ ok: false, error: "email query parameter required" });
+    }
+
+    // Look up user in Supabase
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .select("id, email, plan")
+      .eq("email", email)
+      .single();
+
+    if (userError || !userData) {
+      return res.status(404).json({ ok: false, error: "User not found" });
+    }
+
+    // Pull extension data blob (contains watch_history + lifetime stats + settings)
+    const { data: extData, error: extError } = await supabase
+      .from("extension_data")
+      .select("*")
+      .eq("user_id", userData.id)
+      .single();
+
+    if (extError && extError.code !== "PGRST116") {
+      console.error("[Dashboard] Failed to load extension_data:", extError);
+      return res.status(500).json({ ok: false, error: "Failed to load dashboard data" });
+    }
+
+    const extensionData = extData || {};
+    const watchHistory = Array.isArray(extensionData.watch_history) ? extensionData.watch_history : [];
+    const channelLifetimeStats = extensionData.channel_lifetime_stats || {};
+
+    const now = new Date();
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    // Helper accumulators
+    let watchSecondsToday = 0;
+    let watchSecondsWeek = 0;
+
+    const breakdownToday = { productive: 0, neutral: 0, distracting: 0 };
+    const breakdownWeek = { productive: 0, neutral: 0, distracting: 0 };
+
+    const productiveWeekVideos = { total: 0, productive: 0 };
+
+    const distractionsMap: Record<string, { seconds: number; videos: number }> = {};
+
+    watchHistory.forEach((entry: any) => {
+      if (!entry?.watched_at) return;
+
+      const watchedAt = new Date(entry.watched_at);
+      const seconds = Number(entry.seconds || 0);
+      const category = (entry.category || "neutral").toLowerCase();
+      const channel = (entry.channel || "Unknown").trim();
+
+      if (!Number.isFinite(seconds) || seconds <= 0) return;
+
+      // Today stats
+      if (watchedAt >= startOfToday) {
+        watchSecondsToday += seconds;
+        if (breakdownToday[category as keyof typeof breakdownToday] !== undefined) {
+          breakdownToday[category as keyof typeof breakdownToday] += seconds;
+        }
+      }
+
+      // 7-day rolling window ("this week")
+      if (watchedAt >= sevenDaysAgo) {
+        watchSecondsWeek += seconds;
+        if (breakdownWeek[category as keyof typeof breakdownWeek] !== undefined) {
+          breakdownWeek[category as keyof typeof breakdownWeek] += seconds;
+        }
+
+        productiveWeekVideos.total += 1;
+        if (category === "productive") {
+          productiveWeekVideos.productive += 1;
+        }
+
+        // Track top distractions within week window
+        if (category === "distracting") {
+          if (!distractionsMap[channel]) {
+            distractionsMap[channel] = { seconds: 0, videos: 0 };
+          }
+          distractionsMap[channel].seconds += seconds;
+          distractionsMap[channel].videos += 1;
+        }
+      }
+    });
+
+    // Convert to minutes for display
+    const watchTimeTodayMinutes = Math.round(watchSecondsToday / 60);
+    const watchTimeWeekMinutes = Math.round(watchSecondsWeek / 60);
+
+    // Focus score (rolling 7 days)
+    const focusScore7Day =
+      productiveWeekVideos.total > 0
+        ? Math.round((productiveWeekVideos.productive / productiveWeekVideos.total) * 100)
+        : 0;
+
+    // Biggest distractions (top 5 channels by seconds)
+    const topDistractionsThisWeek = Object.entries(distractionsMap)
+      .map(([channel, stats]) => ({
+        channel,
+        seconds: stats.seconds,
+        minutes: Math.round(stats.seconds / 60),
+        videos: stats.videos,
+      }))
+      .sort((a, b) => b.seconds - a.seconds)
+      .slice(0, 5);
+
+    const cleanupSuggestionSeconds = topDistractionsThisWeek.reduce((sum, item) => sum + item.seconds, 0);
+    const cleanupSuggestionMinutes = Math.round(cleanupSuggestionSeconds / 60);
+
+    // Most viewed channels (lifetime stats already aggregated in extension)
+    const topChannels = Object.entries(channelLifetimeStats)
+      .map(([channel, stats]: [string, any]) => ({
+        channel,
+        videos: Number(stats?.total_videos || 0),
+        seconds: Number(stats?.total_seconds || 0),
+        minutes: Math.round(Number(stats?.total_seconds || 0) / 60),
+        firstWatched: stats?.first_watched || null,
+        lastWatched: stats?.last_watched || null,
+      }))
+      .sort((a, b) => b.videos - a.videos)
+      .slice(0, 5);
+
+    return res.json({
+      ok: true,
+      focusScore7Day,
+      watchTime: {
+        todayMinutes: watchTimeTodayMinutes,
+        thisWeekMinutes: watchTimeWeekMinutes,
+        breakdownToday,
+        breakdownWeek,
+      },
+      topDistractionsThisWeek,
+      topChannels,
+      cleanupSuggestion: {
+        seconds: cleanupSuggestionSeconds,
+        minutes: cleanupSuggestionMinutes,
+        hasDistractions: cleanupSuggestionSeconds > 0,
+      },
+      // Streak + weekly trend can be added later when we persist more history
+      streakDays: 0,
+      weeklyTrendMinutes: [0, 0, 0, 0, 0, 0, 0],
+    });
+  } catch (error: any) {
+    console.error("Error in /dashboard/stats:", error);
+    return res.status(500).json({ ok: false, error: error.message || "Failed to load dashboard stats" });
+  }
+});
+
 /**
  * Update user plan endpoint (dev/testing)
  * POST /user/update-plan
