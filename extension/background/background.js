@@ -855,14 +855,14 @@ async function finalizeVideoWatch(videoId, startTime, category) {
       };
       history.push(watchHistoryEntry);
 
-      // 3. Filter out entries older than 7 days (rolling window)
-      const sevenDaysAgo = Date.now() - (SPIRAL_HISTORY_DAYS * 24 * 60 * 60 * 1000);
+      // 3. Filter out entries older than 30 days (rolling window)
+      const thirtyDaysAgo = Date.now() - (SPIRAL_HISTORY_DAYS * 24 * 60 * 60 * 1000);
       const recentHistory = history.filter(item => {
         const itemTime = new Date(item.watched_at).getTime();
-        return itemTime > sevenDaysAgo;
+        return itemTime > thirtyDaysAgo;
       });
 
-      // 4. Calculate counts (today + last 7 days)
+      // 4. Calculate counts (today + last 30 days)
       const today = new Date().toDateString(); // "Mon Jan 15 2025"
       const todayHistory = recentHistory.filter(item => {
         return new Date(item.watched_at).toDateString() === today;
@@ -936,15 +936,50 @@ async function finalizeVideoWatch(videoId, startTime, category) {
       lifetimeStats[channelKey].total_seconds += durationSeconds;
       lifetimeStats[channelKey].last_watched = new Date().toISOString();
 
-      // 8. Save all updates
+      // 8. Persist spiral event to history (if detected)
+      let spiralEvents = [];
+      if (spiralDetected) {
+        const { ft_spiral_events = [] } = await getLocal(["ft_spiral_events"]);
+        const events = Array.isArray(ft_spiral_events) ? ft_spiral_events : [];
+        
+        // Add new event
+        events.push({
+          channel: spiralDetected.channel,
+          count: spiralDetected.count,
+          type: spiralDetected.type,  // "today" or "week"
+          detected_at: new Date().toISOString(),
+          message: spiralDetected.message
+        });
+        
+        // Keep last 30 days
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        spiralEvents = events.filter(e => {
+          const eventTime = new Date(e.detected_at).getTime();
+          return eventTime > thirtyDaysAgo;
+        });
+        
+        LOG("Spiral event added to history:", { totalEvents: spiralEvents.length });
+      } else {
+        // No new spiral, but still need to clean up old events
+        const { ft_spiral_events = [] } = await getLocal(["ft_spiral_events"]);
+        const events = Array.isArray(ft_spiral_events) ? ft_spiral_events : [];
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        spiralEvents = events.filter(e => {
+          const eventTime = new Date(e.detected_at).getTime();
+          return eventTime > thirtyDaysAgo;
+        });
+      }
+
+      // 9. Save all updates
       await setLocal({
         ft_watch_history: recentHistory,
         ft_channel_spiral_count: spiralCounts,
         ft_channel_lifetime_stats: lifetimeStats,
+        ft_spiral_events: spiralEvents,
         ...(spiralDetected ? { ft_spiral_detected: spiralDetected } : {})
       });
 
-      // 9. Sync to server (debounced - will be called elsewhere, but ensure data is ready)
+      // 10. Sync to server (debounced - will be called elsewhere, but ensure data is ready)
       if (spiralDetected) {
         LOG("Spiral flag set, will trigger nudge on next video from this channel");
       }
@@ -1051,6 +1086,58 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
 
   // 6. Read plan + limits
   const { plan, config } = await getPlanConfig();
+
+  // 6.4. Check focus window (if enabled) - BEFORE other blocking logic
+  const { 
+    ft_focus_window_enabled, 
+    ft_focus_window_start, 
+    ft_focus_window_end 
+  } = await getLocal([
+    "ft_focus_window_enabled",
+    "ft_focus_window_start",
+    "ft_focus_window_end"
+  ]);
+
+  if (ft_focus_window_enabled) {
+    const now = new Date();
+    const currentHours = now.getHours();
+    const currentMinutes = now.getMinutes();
+    const currentTime = `${currentHours.toString().padStart(2, '0')}:${currentMinutes.toString().padStart(2, '0')}`;
+    
+    const startTime = ft_focus_window_start || "13:00";
+    const endTime = ft_focus_window_end || "18:00";
+    
+    const isWithinWindow = currentTime >= startTime && currentTime <= endTime;
+    
+    if (!isWithinWindow) {
+      LOG("Outside focus window:", { currentTime, startTime, endTime, blocked: true });
+      return {
+        ok: true,
+        pageType,
+        blocked: true,
+        scope: "focus_window",
+        reason: "outside_focus_window",
+        plan,
+        counters: {
+          searches: Number(state.ft_searches_today || 0),
+          watchSeconds: Number(state.ft_watch_seconds_today || 0),
+          watchVisits: Number(state.ft_watch_visits_today || 0),
+          shortsVisits: Number(state.ft_short_visits_today || 0),
+          shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
+          shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
+          allowanceVideosLeft: Number(state.ft_allowance_videos_left || 1),
+          allowanceSecondsLeft: Number(state.ft_allowance_seconds_left || 600)
+        },
+        unlocked: await isTemporarilyUnlocked(Date.now()),
+        aiClassification: null,
+        focusWindowInfo: {
+          start: startTime,
+          end: endTime,
+          current: currentTime
+        }
+      };
+    }
+  }
 
   // 6.5. Check channel blocking BEFORE AI classification (early exit)
   if (pageType === "WATCH" && videoMetadata && videoMetadata.channel) {

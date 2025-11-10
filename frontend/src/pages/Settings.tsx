@@ -28,6 +28,10 @@ const Settings = () => {
   const [newChannelName, setNewChannelName] = useState("");
   const [loadingChannels, setLoadingChannels] = useState(true);
   const [savingChannel, setSavingChannel] = useState(false);
+  const [focusWindowEnabled, setFocusWindowEnabled] = useState(false);
+  const [focusWindowStart, setFocusWindowStart] = useState("1:00 PM");
+  const [focusWindowEnd, setFocusWindowEnd] = useState("6:00 PM");
+  const [savingFocusWindow, setSavingFocusWindow] = useState(false);
 
   const handleSave = () => {
     // TODO: Save settings to backend/extension
@@ -37,9 +41,9 @@ const Settings = () => {
     });
   };
 
-  // Load blocked channels on mount
+  // Load blocked channels and focus window settings on mount
   useEffect(() => {
-    const loadBlockedChannels = async () => {
+    const loadSettings = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user?.email) {
@@ -53,19 +57,106 @@ const Settings = () => {
 
         if (response.ok) {
           const result = await response.json();
-          if (result.ok && result.data?.blocked_channels) {
-            setBlockedChannels(result.data.blocked_channels || []);
+          if (result.ok && result.data) {
+            if (result.data.blocked_channels) {
+              setBlockedChannels(result.data.blocked_channels || []);
+            }
+            
+            // Load focus window settings
+            const settings = result.data.settings || {};
+            if (settings.focus_window_enabled !== undefined) {
+              setFocusWindowEnabled(settings.focus_window_enabled);
+            }
+            if (settings.focus_window_start) {
+              setFocusWindowStart(convert24hTo12h(settings.focus_window_start));
+            }
+            if (settings.focus_window_end) {
+              setFocusWindowEnd(convert24hTo12h(settings.focus_window_end));
+            }
           }
         }
       } catch (error) {
-        console.error("Error loading blocked channels:", error);
+        console.error("Error loading settings:", error);
       } finally {
         setLoadingChannels(false);
       }
     };
 
-    loadBlockedChannels();
+    loadSettings();
   }, []);
+
+  // Helper: Convert 24h format (13:00) to 12h format (1:00 PM)
+  const convert24hTo12h = (time24: string): string => {
+    const [hours, minutes] = time24.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours % 12 || 12;
+    return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+  };
+
+  // Helper: Convert 12h format (1:00 PM) to 24h format (13:00)
+  const convert12hTo24h = (time12: string): string => {
+    const [time, period] = time12.split(' ');
+    const [hours, minutes] = time.split(':').map(Number);
+    let hours24 = hours;
+    if (period === 'PM' && hours !== 12) {
+      hours24 = hours + 12;
+    } else if (period === 'AM' && hours === 12) {
+      hours24 = 0;
+    }
+    return `${hours24.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
+
+  // Save focus window settings
+  const handleSaveFocusWindow = async () => {
+    setSavingFocusWindow(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to save settings",
+          variant: "destructive",
+        });
+        setSavingFocusWindow(false);
+        return;
+      }
+
+      const settings = {
+        focus_window_enabled: focusWindowEnabled,
+        focus_window_start: convert12hTo24h(focusWindowStart),
+        focus_window_end: convert12hTo24h(focusWindowEnd),
+      };
+
+      const response = await fetch("https://focustube-backend-4xah.onrender.com/extension/save-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: user.email,
+          data: {
+            settings: settings,
+          },
+        }),
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Focus window saved",
+          description: "Your focus window settings have been updated.",
+        });
+      } else {
+        throw new Error("Failed to save");
+      }
+    } catch (error) {
+      console.error("Error saving focus window:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save focus window settings. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingFocusWindow(false);
+    }
+  };
 
   const handleAddChannel = async () => {
     if (!newChannelName.trim()) {
@@ -355,17 +446,74 @@ const Settings = () => {
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="allowed-hours">Allowed hours (optional)</Label>
-                  <Input
-                    id="allowed-hours"
-                    placeholder="e.g., 6pm-10pm"
-                    type="text"
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Focus Window</CardTitle>
+                <CardDescription>
+                  Set specific hours when YouTube is accessible. Outside these hours, YouTube will be blocked.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">Enable Focus Window</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Restrict YouTube access to specific hours
+                    </p>
+                  </div>
+                  <Switch
+                    checked={focusWindowEnabled}
+                    onCheckedChange={setFocusWindowEnabled}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Limit YouTube access to specific times
-                  </p>
                 </div>
+
+                {focusWindowEnabled && (
+                  <div className="space-y-4 pt-4 border-t">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="focus-window-start">From</Label>
+                        <Input
+                          id="focus-window-start"
+                          type="text"
+                          value={focusWindowStart}
+                          onChange={(e) => setFocusWindowStart(e.target.value)}
+                          placeholder="1:00 PM"
+                          pattern="^([1-9]|1[0-2]):[0-5][0-9] (AM|PM)$"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Start time (e.g., 1:00 PM)
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="focus-window-end">Until</Label>
+                        <Input
+                          id="focus-window-end"
+                          type="text"
+                          value={focusWindowEnd}
+                          onChange={(e) => setFocusWindowEnd(e.target.value)}
+                          placeholder="6:00 PM"
+                          pattern="^([1-9]|1[0-2]):[0-5][0-9] (AM|PM)$"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          End time (e.g., 6:00 PM)
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={handleSaveFocusWindow}
+                      disabled={savingFocusWindow}
+                      className="w-full"
+                    >
+                      {savingFocusWindow ? "Saving..." : "Save Focus Window"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      YouTube will be blocked outside these hours. Come back during your focus window to stay on track with your goals.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

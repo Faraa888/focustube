@@ -1008,6 +1008,8 @@ app.get("/dashboard/stats", async (req, res) => {
     const extensionData = extData || {};
     const watchHistory = Array.isArray(extensionData.watch_history) ? extensionData.watch_history : [];
     const channelLifetimeStats = extensionData.channel_lifetime_stats || {};
+    const settings = extensionData.settings || {};
+    const spiralEvents = Array.isArray(settings.spiral_events) ? settings.spiral_events : [];
 
     const now = new Date();
     const startOfToday = new Date(now);
@@ -1092,6 +1094,31 @@ app.get("/dashboard/stats", async (req, res) => {
     const cleanupSuggestionSeconds = topDistractionsThisWeek.reduce((sum, item) => sum + item.seconds, 0);
     const cleanupSuggestionMinutes = Math.round(cleanupSuggestionSeconds / 60);
 
+    // Hourly breakdown (0-23 hours) - aggregate all watch history by hour
+    const hourlyBreakdown = Array(24).fill(0).map((_, hour) => {
+      return watchHistory
+        .filter((w: any) => {
+          if (!w?.watched_at) return false;
+          const watchedAt = new Date(w.watched_at);
+          return watchedAt.getHours() === hour;
+        })
+        .reduce((sum: number, w: any) => sum + (Number(w.seconds) || 0), 0);
+    });
+
+    // Spiral events (last 30 days, top 20 most recent)
+    const recentSpiralEvents = spiralEvents
+      .filter((e: any) => {
+        if (!e?.detected_at) return false;
+        const eventDate = new Date(e.detected_at);
+        return eventDate >= sevenDaysAgo; // Show last 7 days in dashboard
+      })
+      .sort((a: any, b: any) => {
+        const timeA = new Date(a.detected_at).getTime();
+        const timeB = new Date(b.detected_at).getTime();
+        return timeB - timeA; // Most recent first
+      })
+      .slice(0, 20); // Top 20 most recent
+
     // Most viewed channels (lifetime stats already aggregated in extension)
     const topChannels = Object.entries(channelLifetimeStats)
       .map(([channel, stats]: [string, any]) => ({
@@ -1121,6 +1148,8 @@ app.get("/dashboard/stats", async (req, res) => {
         minutes: cleanupSuggestionMinutes,
         hasDistractions: cleanupSuggestionSeconds > 0,
       },
+      hourlyWatchTime: hourlyBreakdown, // Array of 24 numbers (seconds per hour, 0-23)
+      spiralEvents: recentSpiralEvents, // Array of spiral detection events (last 7 days, top 20)
       // Streak + weekly trend can be added later when we persist more history
       streakDays: 0,
       weeklyTrendMinutes: [0, 0, 0, 0, 0, 0, 0],

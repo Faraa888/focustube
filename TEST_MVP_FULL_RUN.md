@@ -175,7 +175,118 @@
 
 ---
 
-### 5. Quick Wrap-Up
+### 5. Focus Windows
+
+1. **Settings page: Enable focus window**
+   - Go to Settings → Controls → Focus Window section.
+   - Toggle "Enable Focus Window" ON.
+   - Set start time: "1:00 PM", end time: "6:00 PM".
+   - Click "Save Focus Window".
+   - Verify toast: "Focus window saved".
+
+2. **Verify settings save to Supabase**
+   ```bash
+   curl "https://focustube-backend-4xah.onrender.com/extension/get-data?email=YOUR_EMAIL"
+   ```
+   - Check `settings.focus_window_enabled` = `true`.
+   - Check `settings.focus_window_start` = `"13:00"`.
+   - Check `settings.focus_window_end` = `"18:00"`.
+
+3. **Test outside window**
+   - Set system time to 10:00 AM (or adjust focus window to current time + 1 hour).
+   - Visit YouTube → should see overlay: "You're Outside Your Focus Window".
+   - Overlay shows: "Your YouTube window is 1:00 PM - 6:00 PM".
+   - Click "Go to Settings" → opens settings page in new tab.
+
+4. **Test inside window**
+   - Set system time to 2:00 PM (or within focus window).
+   - Visit YouTube → normal access, no overlay.
+
+5. **Test edge cases**
+   - Exactly at start time (1:00 PM) → should allow access.
+   - Exactly at end time (6:00 PM) → should allow access.
+   - 1 minute before start (12:59 PM) → should block.
+   - 1 minute after end (6:01 PM) → should block.
+
+6. **Extension popup: Settings sync**
+   - Reload extension.
+   - Check `chrome.storage.local.get(['ft_focus_window_enabled', 'ft_focus_window_start', 'ft_focus_window_end'], console.log);`
+   - Should show enabled=true, start="13:00", end="18:00".
+
+7. **Disable focus window**
+   - Settings → toggle OFF → save.
+   - Visit YouTube outside previous window → overlay no longer appears.
+   - Normal access restored.
+
+8. **Time format conversion**
+   - Set times in 12h format (e.g., "9:00 AM", "11:30 PM").
+   - Verify they save correctly in 24h format to backend.
+   - Reload settings page → times display correctly in 12h format.
+
+---
+
+### 6. Dashboard
+
+1. **Dashboard loads with real data**
+   - After watching videos (with extension), visit `/app/dashboard`.
+   - Should fetch from `/dashboard/stats` endpoint.
+   - No "Extension not connected" message if data exists.
+
+2. **Focus Score displays correctly**
+   - Circular meter shows 0-100%.
+   - Color: red (0-50), yellow (50-75), green (75-100).
+   - Percentage number displayed in center.
+   - Description: "Based on % of time spent on goal-aligned content vs distractions over past 7 days".
+
+3. **Watch-Time Map shows hourly bars**
+   - Bar chart displays 24 hours (0-23).
+   - X-axis shows hour labels (12 AM, 2 AM, ..., 10 PM).
+   - Bars show watch time in minutes (hover tooltip).
+   - Color coding visible (green/yellow/red based on hour).
+   - Breakdown summary shows productive/neutral/distracting percentages.
+
+4. **Spiral Feed shows recent events**
+   - If spiral events exist, list displays chronologically (most recent first).
+   - Each event shows: channel name, count, type badge ("Today" or "This Week"), time detected.
+   - Empty state: "No spirals detected recently. Keep up the good focus!"
+
+5. **Channel Audit: Block button works**
+   - Top 5 channels displayed with rank, videos count, minutes.
+   - Click "Block" on a channel → channel added to blocklist.
+   - Toast: "Channel blocked".
+   - Page refreshes, channel removed from list (now blocked).
+
+6. **Weekly Summary calculates correctly**
+   - Shows total watch time this week (hours + minutes).
+   - Shows % educational vs entertainment.
+   - Insight sentence: "Most productive viewing: [time]. Most waste: [time]."
+   - If distracting % > 50%, shows cleanup suggestion with "Block All Distractions" button.
+
+7. **Top Distractions section**
+   - If `topDistractionsThisWeek` has data, shows list with rank badges.
+   - Each item shows: channel name, videos count, minutes.
+   - "Block" button works (same as Channel Audit).
+
+8. **Cleanup Suggestion**
+   - If `cleanupSuggestion.hasDistractions` is true, shows card.
+   - Message: "You watched X minutes of content from channels you've marked as distracting this week."
+   - "Block All Distractions" button links to Settings.
+
+9. **Empty state**
+   - If no watch history, shows "Extension not connected" message.
+   - Or shows components with zero/empty data gracefully.
+
+10. **Loading state**
+    - While fetching, shows "Loading dashboard data...".
+    - No flash of empty content.
+
+11. **Error state**
+    - If API fails, shows error card with message and "Retry" button.
+    - Retry button reloads page.
+
+---
+
+### 7. Quick Wrap-Up
 
 - Confirm no console errors in background/popup/content.  
 - `git status` should show only intended changes (or clean if already committed).  

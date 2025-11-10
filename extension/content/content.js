@@ -1598,6 +1598,66 @@ function showBlockChannelConfirmation(channelName, onConfirm, onCancel) {
  * Show spiral detection nudge overlay
  * @param {Object} spiralInfo - Spiral detection info {channel, count, type, message}
  */
+/**
+ * Show overlay when user is outside their focus window
+ * @param {Object} focusWindowInfo - { start, end, current }
+ */
+function showFocusWindowOverlay(focusWindowInfo) {
+  const { start, end } = focusWindowInfo;
+  
+  console.log("[FT] 🕐 Showing focus window overlay:", focusWindowInfo);
+  
+  // Remove any existing overlay
+  const existing = document.getElementById("ft-focus-window-overlay");
+  if (existing) existing.remove();
+  
+  // Pause video before showing overlay
+  pauseAndMuteVideo();
+  
+  // Convert 24h to 12h for display
+  const convert24hTo12h = (time24) => {
+    const [hours, minutes] = time24.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours % 12 || 12;
+    return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+  };
+  
+  const startDisplay = convert24hTo12h(start);
+  const endDisplay = convert24hTo12h(end);
+  
+  const overlay = document.createElement("div");
+  overlay.id = "ft-focus-window-overlay";
+  
+  overlay.innerHTML = `
+    <div class="ft-milestone-box">
+      <h2>🕐 You're Outside Your Focus Window</h2>
+      <p class="ft-milestone-intro">
+        Your YouTube window is <strong>${startDisplay} - ${endDisplay}</strong>.
+      </p>
+      <p class="ft-milestone-intro" style="margin-top: 12px;">
+        Come back during those hours to stay focused on your goals.
+      </p>
+      <div class="ft-milestone-buttons">
+        <button id="ft-focus-window-settings" class="ft-button ft-button-primary">Go to Settings</button>
+      </div>
+    </div>
+  `;
+  
+  // Button handler
+  const settingsBtn = overlay.querySelector("#ft-focus-window-settings");
+  if (settingsBtn) {
+    settingsBtn.addEventListener("click", () => {
+      overlay.remove();
+      restoreVideoState();
+      // Open settings page in new tab
+      window.open("https://focustube-beta.vercel.app/app/settings", "_blank");
+    });
+  }
+  
+  document.body.appendChild(overlay);
+  console.log("[FT] ✅ Focus window overlay added to DOM");
+}
+
 function showSpiralNudge(spiralInfo) {
   const { channel, count, type, message } = spiralInfo;
   
@@ -3110,6 +3170,15 @@ async function handleNavigation() {
     } else {
       console.warn("[FT] Dev panel: Classification video_id mismatch, not updating");
     }
+  }
+
+  // Handle focus window blocking (before other checks)
+  if (resp.blocked && resp.reason === "outside_focus_window" && resp.focusWindowInfo) {
+    console.log("[FT] 🕐 Outside focus window, showing overlay");
+    showFocusWindowOverlay(resp.focusWindowInfo);
+    pauseVideos();
+    await stopShortsTimeTracking();
+    return; // Don't continue with other blocking logic
   }
 
   // Handle spiral detection (before blocking checks)

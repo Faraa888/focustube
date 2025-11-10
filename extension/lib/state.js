@@ -63,10 +63,16 @@ const DEFAULTS = {
   ft_channel_spiral_count: {},       // Object: {channel: {today, this_week, last_watched}}
   ft_extension_settings: {},         // Other extension settings
   
+  // Focus Window (time-based blocking)
+  ft_focus_window_enabled: false,    // true = focus window is active
+  ft_focus_window_start: "13:00",    // Start time in 24h format (1:00 PM)
+  ft_focus_window_end: "18:00",      // End time in 24h format (6:00 PM)
+  
   // Spiral detection
   ft_blocked_channels_today: [],     // Temporary blocks (reset at midnight)
   ft_channel_lifetime_stats: {},     // Lifetime stats per channel for dashboard
-  ft_spiral_detected: null           // Current spiral flag {channel, count, type, message, detected_at}
+  ft_spiral_detected: null,          // Current spiral flag {channel, count, type, message, detected_at}
+  ft_spiral_events: []               // Array of spiral detection events (last 30 days)
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -510,6 +516,22 @@ export async function loadExtensionDataFromServer() {
       ft_channel_spiral_count: channel_spiral_count || {},
       ft_extension_settings: settings || {},
     };
+    
+    // Load focus window settings and spiral events from settings object if present
+    if (settings && typeof settings === 'object') {
+      if (settings.focus_window_enabled !== undefined) {
+        storageUpdate.ft_focus_window_enabled = settings.focus_window_enabled;
+      }
+      if (settings.focus_window_start !== undefined) {
+        storageUpdate.ft_focus_window_start = settings.focus_window_start;
+      }
+      if (settings.focus_window_end !== undefined) {
+        storageUpdate.ft_focus_window_end = settings.focus_window_end;
+      }
+      if (settings.spiral_events !== undefined) {
+        storageUpdate.ft_spiral_events = Array.isArray(settings.spiral_events) ? settings.spiral_events : [];
+      }
+    }
 
     // Load goals if provided (from users table)
     if (goals !== undefined) {
@@ -560,6 +582,10 @@ export async function saveExtensionDataToServer(data = null) {
       ft_user_goals = [],
       ft_user_anti_goals = [],
       ft_channel_lifetime_stats = {},
+      ft_focus_window_enabled = false,
+      ft_focus_window_start = "13:00",
+      ft_focus_window_end = "18:00",
+      ft_spiral_events = [],
     } = await getLocal([
       "ft_blocked_channels",
       "ft_watch_history",
@@ -568,18 +594,49 @@ export async function saveExtensionDataToServer(data = null) {
       "ft_user_goals",
       "ft_user_anti_goals",
       "ft_channel_lifetime_stats",
+      "ft_focus_window_enabled",
+      "ft_focus_window_start",
+      "ft_focus_window_end",
+      "ft_spiral_events",
     ]);
+
+    // Merge focus window settings and spiral events into settings object
+    const settingsToSave = {
+      ...ft_extension_settings,
+      focus_window_enabled: ft_focus_window_enabled,
+      focus_window_start: ft_focus_window_start,
+      focus_window_end: ft_focus_window_end,
+      spiral_events: ft_spiral_events, // Store in settings JSONB for now
+    };
 
     // Use provided data or fall back to local storage
     const toSave = data || {
       blocked_channels: ft_blocked_channels,
       watch_history: ft_watch_history,
       channel_spiral_count: ft_channel_spiral_count,
-      settings: ft_extension_settings,
+      settings: settingsToSave,
       goals: ft_user_goals,
       anti_goals: ft_user_anti_goals,
       channel_lifetime_stats: ft_channel_lifetime_stats,
     };
+    
+    // Always ensure settings include focus window and spiral_events (even if data is provided)
+    if (!data || !data.settings) {
+      toSave.settings = settingsToSave;
+    } else {
+      // Merge focus window and spiral_events into provided settings
+      toSave.settings = {
+        ...data.settings,
+        focus_window_enabled: data.settings.focus_window_enabled !== undefined 
+          ? data.settings.focus_window_enabled 
+          : ft_focus_window_enabled,
+        focus_window_start: data.settings.focus_window_start || ft_focus_window_start,
+        focus_window_end: data.settings.focus_window_end || ft_focus_window_end,
+        spiral_events: data.settings.spiral_events !== undefined 
+          ? data.settings.spiral_events 
+          : ft_spiral_events,
+      };
+    }
 
     // Always include goals, anti_goals, and lifetime stats if they exist in local storage (even if data is provided)
     // This ensures they are synced whenever we save

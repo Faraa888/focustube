@@ -7,6 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Clock, TrendingUp, Flame, AlertCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import FocusScore from "@/components/dashboard/FocusScore";
+import WatchTimeMap from "@/components/dashboard/WatchTimeMap";
+import SpiralFeed from "@/components/dashboard/SpiralFeed";
+import ChannelAudit from "@/components/dashboard/ChannelAudit";
+import WeeklySummary from "@/components/dashboard/WeeklySummary";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -47,20 +52,50 @@ const Dashboard = () => {
     checkAuth();
   }, [navigate]);
   
-  // TODO: Replace with real data from extension
-  const isExtensionConnected = false;
-  
-  const mockData = {
-    watchTime: "2h 34m",
-    focusScore: 78,
-    streak: 5,
-    topDistractingChannels: [
-      { name: "Random Entertainment", views: 24 },
-      { name: "Gaming Clips", views: 18 },
-      { name: "Viral Videos", views: 12 },
-    ],
-    weeklyTrend: [65, 72, 68, 75, 78, 82, 78],
-  };
+  const [stats, setStats] = useState<any>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  // Fetch dashboard stats
+  useEffect(() => {
+    const fetchStats = async () => {
+      if (!isAuthenticated) return;
+      
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.email) {
+          setStatsLoading(false);
+          return;
+        }
+
+        const response = await fetch(
+          `https://focustube-backend-4xah.onrender.com/dashboard/stats?email=${encodeURIComponent(user.email)}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch stats: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.ok) {
+          setStats(data);
+        } else {
+          throw new Error(data.error || "Failed to load stats");
+        }
+      } catch (error: any) {
+        console.error("Error fetching dashboard stats:", error);
+        setStatsError(error.message || "Failed to load dashboard data");
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+
+    if (isAuthenticated) {
+      fetchStats();
+    }
+  }, [isAuthenticated]);
+
+  const isExtensionConnected = stats !== null;
 
   // Show loading state while checking auth
   if (loading) {
@@ -90,7 +125,26 @@ const Dashboard = () => {
           </p>
         </div>
 
-        {!isExtensionConnected && (
+        {statsError && (
+          <Card className="mb-8 border-destructive/50 bg-destructive/5">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-4">
+                <AlertCircle className="h-6 w-6 text-destructive flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h3 className="font-semibold mb-1">Error loading dashboard</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {statsError}
+                  </p>
+                  <Button onClick={() => window.location.reload()}>
+                    Retry
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {!isExtensionConnected && !statsLoading && !statsError && (
           <Card className="mb-8 border-primary/50 bg-primary/5">
             <CardContent className="pt-6">
               <div className="flex items-start gap-4">
@@ -109,128 +163,126 @@ const Dashboard = () => {
           </Card>
         )}
 
-        <div className="grid gap-6 md:grid-cols-3 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Watch Time Today
-              </CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{mockData.watchTime}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {isExtensionConnected ? "45m below your goal" : "Connect extension to track"}
-              </p>
-            </CardContent>
-          </Card>
+        {statsLoading && (
+          <div className="text-center py-12">
+            <div className="text-muted-foreground">Loading dashboard data...</div>
+          </div>
+        )}
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Focus Score
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{mockData.focusScore}%</div>
-              <p className="text-xs text-green-500 mt-1">
-                {isExtensionConnected ? "+5% from last week" : "Connect extension to track"}
-              </p>
-            </CardContent>
-          </Card>
+        {!statsLoading && stats && (
+          <>
+            {/* Focus Score - Large, centered at top */}
+            <div className="mb-8 flex justify-center">
+              <div className="w-full max-w-md">
+                <FocusScore score={stats.focusScore7Day || 0} />
+              </div>
+            </div>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Streak
-              </CardTitle>
-              <Flame className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{mockData.streak} days</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {isExtensionConnected ? "Keep it going!" : "Connect extension to track"}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+            {/* Watch-Time Map - Full width */}
+            <div className="mb-8">
+              <WatchTimeMap
+                hourlyData={stats.hourlyWatchTime || Array(24).fill(0)}
+                breakdownWeek={stats.watchTime?.breakdownWeek || { productive: 0, neutral: 0, distracting: 0 }}
+              />
+            </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>7-Day Focus Trend</CardTitle>
-              <CardDescription>
-                Your focus score over the past week
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {/* TODO: Replace with actual chart library (recharts or similar) */}
-              <div className="h-48 flex items-end justify-between gap-2">
-                {mockData.weeklyTrend.map((score, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 bg-primary/20 rounded-t hover:bg-primary/40 transition-colors relative group"
-                    style={{ height: `${score}%` }}
-                  >
-                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                      {score}%
+            {/* Two-column layout: Spiral Feed + Channel Audit */}
+            <div className="grid gap-6 md:grid-cols-2 mb-8">
+              <SpiralFeed events={stats.spiralEvents || []} />
+              <ChannelAudit channels={stats.topChannels || []} />
+            </div>
+
+            {/* Weekly Summary - Full width at bottom */}
+            <div className="mb-8">
+              <WeeklySummary
+                thisWeekMinutes={stats.watchTime?.thisWeekMinutes || 0}
+                breakdownWeek={stats.watchTime?.breakdownWeek || { productive: 0, neutral: 0, distracting: 0 }}
+                hourlyWatchTime={stats.hourlyWatchTime || Array(24).fill(0)}
+              />
+            </div>
+
+            {/* Top Distractions (if any) */}
+            {stats.topDistractionsThisWeek && stats.topDistractionsThisWeek.length > 0 && (
+              <Card className="mb-8">
+                <CardHeader>
+                  <CardTitle>Biggest Distractions This Week</CardTitle>
+                  <CardDescription>
+                    Top channels pulling you off-track
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {stats.topDistractionsThisWeek.map((distraction: any, index: number) => (
+                      <div key={index} className="flex items-center justify-between p-3 rounded-lg border bg-card">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="destructive" className="rounded-full w-8 h-8 flex items-center justify-center">
+                            {index + 1}
+                          </Badge>
+                          <div>
+                            <div className="font-medium">{distraction.channel}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {distraction.videos} {distraction.videos === 1 ? "video" : "videos"} · {distraction.minutes} min
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            // Block channel logic (similar to ChannelAudit)
+                            const { data: { user } } = await supabase.auth.getUser();
+                            if (!user?.email) return;
+                            
+                            const response = await fetch(
+                              `https://focustube-backend-4xah.onrender.com/extension/get-data?email=${encodeURIComponent(user.email)}`
+                            );
+                            const result = await response.json();
+                            const currentBlocked = result.ok && result.data?.blocked_channels ? result.data.blocked_channels : [];
+                            const updatedBlocked = [...currentBlocked, distraction.channel];
+                            
+                            await fetch("https://focustube-backend-4xah.onrender.com/extension/save-data", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                email: user.email,
+                                data: { blocked_channels: updatedBlocked },
+                              }),
+                            });
+                            
+                            window.location.reload();
+                          }}
+                        >
+                          Block
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Cleanup Suggestion */}
+            {stats.cleanupSuggestion?.hasDistractions && (
+              <Card className="mb-8 border-primary/50 bg-primary/5">
+                <CardContent className="pt-6">
+                  <div className="flex items-start gap-4">
+                    <AlertCircle className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold mb-1">Consider Cleaning Up?</h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        You watched {stats.cleanupSuggestion.minutes} minutes of content from channels you've marked as distracting this week.
+                      </p>
+                      <Button asChild variant="outline">
+                        <Link to="/app/settings">Block All Distractions</Link>
+                      </Button>
                     </div>
                   </div>
-                ))}
-              </div>
-              <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                <span>Mon</span>
-                <span>Tue</span>
-                <span>Wed</span>
-                <span>Thu</span>
-                <span>Fri</span>
-                <span>Sat</span>
-                <span>Sun</span>
-              </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Top Distracting Channels</CardTitle>
-              <CardDescription>
-                Channels pulling you off-track this week
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {mockData.topDistractingChannels.map((channel, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="secondary" className="rounded-full w-8 h-8 flex items-center justify-center">
-                        {i + 1}
-                      </Badge>
-                      <span className="font-medium">{channel.name}</span>
-                    </div>
-                    <span className="text-sm text-muted-foreground">
-                      {channel.views} views
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {!isExtensionConnected && (
-                <p className="text-sm text-muted-foreground text-center mt-6">
-                  Connect extension to see real data
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="mt-8 flex justify-center gap-4">
-          <Button variant="outline" asChild>
-            <Link to="/app/settings">Adjust Settings</Link>
-          </Button>
-          <Button variant="ghost" disabled>
-            View Journal (Coming Soon)
-          </Button>
-        </div>
       </main>
 
       <Footer />
