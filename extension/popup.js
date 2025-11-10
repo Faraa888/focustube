@@ -20,6 +20,20 @@ const messageDiv = document.getElementById("message");
 const statusIcon = document.getElementById("statusIcon");
 const statusEmail = document.getElementById("statusEmail");
 const statusPlan = document.getElementById("statusPlan");
+const trialBanner = document.getElementById("trialBanner");
+const trialBannerTitle = document.getElementById("trialBannerTitle");
+const trialBannerSubtitle = document.getElementById("trialBannerSubtitle");
+const trialUpgradeBtn = document.getElementById("trialUpgradeBtn");
+
+if (trialUpgradeBtn) {
+  trialUpgradeBtn.addEventListener("click", () => {
+    try {
+      window.open(`${FRONTEND_URL}/pricing`, "_blank", "noopener");
+    } catch (error) {
+      console.warn("⚠️ [POPUP] Failed to open pricing page:", error);
+    }
+  });
+}
 
 // Show message
 function showMessage(text, type = "info") {
@@ -46,6 +60,7 @@ function showOnboarding() {
   loginForm.classList.add("hidden");
   statusContainer.classList.add("hidden");
   headerSubtitle.textContent = "Get started";
+  renderTrialBanner(null);
 }
 
 // Show login form
@@ -55,6 +70,7 @@ function showLoginForm() {
   statusContainer.classList.add("hidden");
   headerSubtitle.textContent = "Sign in";
   emailInput.focus();
+  renderTrialBanner(null);
 }
 
 // Show status (logged in)
@@ -63,6 +79,31 @@ function showStatus() {
   loginForm.classList.add("hidden");
   statusContainer.classList.remove("hidden");
   headerSubtitle.textContent = "Account";
+}
+
+function renderTrialBanner(plan, daysLeft) {
+  if (!trialBanner) return;
+
+  const normalizedPlan = (plan || "").toLowerCase();
+  if (normalizedPlan !== "trial") {
+    trialBanner.classList.add("hidden");
+    return;
+  }
+
+  const numericDays = Number(daysLeft);
+  const hasValidDays = Number.isFinite(numericDays) && numericDays >= 0;
+
+  if (trialBannerTitle) {
+    trialBannerTitle.textContent = hasValidDays
+      ? `Pro trial: ${numericDays} day${numericDays === 1 ? "" : "s"} left`
+      : "Pro trial active";
+  }
+
+  if (trialBannerSubtitle) {
+    trialBannerSubtitle.textContent = "Keep AI filtering and insights by upgrading.";
+  }
+
+  trialBanner.classList.remove("hidden");
 }
 
 // Load current email from storage
@@ -94,11 +135,21 @@ async function loadCurrentEmail() {
           // User exists in database - show logged-in status
           console.log("✅ [POPUP] User verified, showing status screen");
           const currentPlan = planData.plan || plan;
+          const daysLeft =
+            typeof planData.days_left === "number"
+              ? planData.days_left
+              : (result.ft_days_left ?? null);
           statusEmail.textContent = email;
           statusPlan.textContent = `Plan: ${currentPlan.toUpperCase()}`;
           statusIcon.className = "status-icon connected";
           statusIcon.textContent = "✓";
           showStatus();
+          renderTrialBanner(currentPlan, daysLeft);
+          
+          // Update stored days left if backend returned a value
+          if (typeof planData.days_left === "number") {
+            await chrome.storage.local.set({ ft_days_left: planData.days_left });
+          }
           
           // Update plan in storage if it changed
           if (planData.plan && planData.plan !== plan) {
@@ -121,6 +172,7 @@ async function loadCurrentEmail() {
         statusIcon.className = "status-icon connected";
         statusIcon.textContent = "✓";
         showStatus();
+        renderTrialBanner(plan, result.ft_days_left ?? null);
         return email;
       }
     }

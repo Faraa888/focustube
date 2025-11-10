@@ -53,6 +53,16 @@ function detectPageType() {
   return "OTHER";
 }
 
+/**
+ * Returns true if the given plan should unlock the full Pro experience.
+ * Trial users get the same feature set as paying Pro users.
+ * @param {string} plan
+ * @returns {boolean}
+ */
+function isProExperience(plan) {
+  return plan === "pro" || plan === "trial";
+}
+
 /* COMMENTED OUT: Generic block overlay - removed per user request
  * Simple overlay creator. Shown when user is blocked (search/global scope).
  * Uses CSS classes from overlay.css instead of inline styles.
@@ -2329,8 +2339,8 @@ async function startGlobalTimeTracking() {
         console.warn("[FT] Failed to get plan for limit check:", chrome.runtime.lastError.message);
       } else {
         const plan = ft_plan || "free";
-        // Get limit from config (2 mins Free = 120s, 3 mins Pro = 180s) - testing values
-        const limitSeconds = plan === "pro" ? 180 : 120;
+        // Get limit from config (2 mins Free = 120s, 3 mins Pro/Trial = 180s) - testing values
+        const limitSeconds = isProExperience(plan) ? 180 : 120;
         
         // Check if limit reached
         if (currentTotalSeconds >= limitSeconds) {
@@ -2603,7 +2613,7 @@ async function handleNavigation() {
         }
         
         // Check if this is a Pro manual block or Free plan block
-        if (ft_pro_manual_block_shorts && ft_plan === "pro") {
+        if (ft_pro_manual_block_shorts && isProExperience(ft_plan)) {
           // Show Pro manual block overlay (encouraging message)
           // Keep ft_pro_manual_block_shorts flag set so it persists for all redirects
           showProManualBlockOverlay();
@@ -2648,7 +2658,7 @@ async function handleNavigation() {
             if (distraction === "distracting") {
               // Check if Pro/Trial plan
               const { ft_plan } = await chrome.storage.local.get(["ft_plan"]);
-              if (ft_plan === "pro" || ft_plan === "trial") {
+              if (isProExperience(ft_plan)) {
                 // Extract metadata now for nudge
                 const meta = extractVideoMetadata();
                 if (meta) {
@@ -2670,7 +2680,7 @@ async function handleNavigation() {
                                   currentVideoAIClassification.category || "neutral";
                 if (distraction === "distracting") {
                   const { ft_plan } = await chrome.storage.local.get(["ft_plan"]);
-                  if (ft_plan === "pro" || ft_plan === "trial") {
+                  if (isProExperience(ft_plan)) {
                     const meta = extractVideoMetadata();
                     if (meta) {
                       meta.video_id = videoId;
@@ -2897,7 +2907,7 @@ async function handleNavigation() {
         // Check if content is distracting - if not, cancel the journal nudge timer
         chrome.storage.local.get(["ft_plan"]).then(({ ft_plan }) => {
           const isDistracting = (distraction === "distracting" || category === "distracting");
-          const isProOrTrial = (ft_plan === "pro" || ft_plan === "trial");
+          const isProOrTrial = isProExperience(ft_plan);
           
           // If not distracting or not Pro/Trial, cancel the nudge timer
           if (!isDistracting || !isProOrTrial) {
@@ -2978,7 +2988,7 @@ async function handleNavigation() {
   // Handle search counter badge (show on all search pages)
   if (pageType === "SEARCH") {
     // Get search limit from plan config (Free: 5, Pro: 15)
-    const searchLimit = resp.plan === "pro" ? 15 : 5;
+    const searchLimit = isProExperience(resp.plan) ? 15 : 5;
     const searchesToday = resp.counters?.searches || 0;
     
     // Show or update search counter
@@ -2997,7 +3007,7 @@ async function handleNavigation() {
   }
 
   // Handle Pro plan Shorts counter badge (only on Shorts pages, not blocked)
-  if (pageType === "SHORTS" && resp.plan === "pro" && !resp.blocked) {
+  if (pageType === "SHORTS" && isProExperience(resp.plan) && !resp.blocked) {
     // If we were already tracking, save accumulated time before updating badge
     if (shortsTimeTracker) {
       await stopShortsTimeTracking();
@@ -3663,7 +3673,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
         }
         const searchesToday = Number(storage.ft_searches_today || 0);
         const plan = storage.ft_plan || "free";
-        const searchLimit = plan === "pro" ? 15 : 5;
+        const searchLimit = isProExperience(plan) ? 15 : 5;
         
         updateSearchCounter(searchesToday, searchLimit);
         

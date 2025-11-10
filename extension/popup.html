@@ -252,6 +252,52 @@
       color: #aaaaaa;
     }
 
+    .trial-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+      padding: 12px 14px;
+      background: rgba(62, 166, 255, 0.12);
+      border: 1px solid rgba(62, 166, 255, 0.35);
+      border-radius: 8px;
+    }
+
+    .trial-banner.hidden {
+      display: none;
+    }
+
+    .trial-banner-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 13px;
+      color: #dbeafe;
+    }
+
+    .trial-banner-copy strong {
+      font-size: 13px;
+      color: #bfdbfe;
+    }
+
+    .trial-banner-button {
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid #3ea6ff;
+      background: #3ea6ff;
+      color: #0f0f0f;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, border 0.2s;
+    }
+
+    .trial-banner-button:hover {
+      background: #60b7ff;
+      border-color: #60b7ff;
+    }
+
     .btn-danger {
       background: #dc2626;
       color: #ffffff;
@@ -394,6 +440,13 @@
             <div class="status-email" id="statusEmail"></div>
             <div class="status-plan" id="statusPlan"></div>
           </div>
+        </div>
+        <div id="trialBanner" class="trial-banner hidden">
+          <div class="trial-banner-copy">
+            <strong id="trialBannerTitle">Pro trial active</strong>
+            <span id="trialBannerSubtitle">Keep AI filtering and insights by upgrading.</span>
+          </div>
+          <button id="trialUpgradeBtn" class="trial-banner-button">Upgrade</button>
         </div>
         <button id="logoutBtn" class="btn-danger" style="margin-top: 12px;">Disconnect</button>
       </div>

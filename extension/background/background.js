@@ -45,6 +45,10 @@ async function LOG(...a) {
     ...a
   );
 }
+
+function isProExperience(plan) {
+  return plan === "pro" || plan === "trial";
+}
 // ─────────────────────────────────────────────────────────────
 // BOOT: Called on install or startup
 // ─────────────────────────────────────────────────────────────
@@ -1169,7 +1173,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   // 7. AI Classification (Pro users only)
   // Strategy: Search = logging only, Watch = primary action point (block/warn)
   let aiClassification = null;
-  if (plan === "pro") {
+  if (isProExperience(plan)) {
     if (pageType === "SEARCH" && url) {
       // Search classification: Log only (no blocking)
       // This helps with context but doesn't block search results
