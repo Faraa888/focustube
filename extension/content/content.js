@@ -2805,19 +2805,50 @@ async function handleNavigation() {
       let attempts = 0;
       const maxAttempts = 10; // 5 seconds max (10 × 500ms)
 
+      let lastSeenVideoId = initialVideoId;      
       while (attempts < maxAttempts) {
-        videoMetadata = extractVideoMetadata();
+        const currentVideoId = extractVideoIdFromUrl();
+        
+        // If video ID changed during extraction, reset and start over
+        if (currentVideoId !== lastSeenVideoId && currentVideoId) {
+          console.log("[FT] Video ID changed during extraction, resetting:", {
+            old: lastSeenVideoId,
+            new: currentVideoId
+          });
+          lastSeenVideoId = currentVideoId;
+          attempts = 0; // Reset attempts for new video
+          await new Promise((resolve) => setTimeout(resolve, 500)); // Wait for DOM to update
+          continue;
+        }
+        
+        videoMetadata = extractVideoMetadata(); 
 
         if (videoMetadata) {
-          const currentVideoId = extractVideoIdFromUrl();
           videoMetadata.video_id = currentVideoId;
+        }
+
+        // Verify channel element is actually on the current page (not stale)
+        if (videoMetadata?.channel) {
+          const channelElement = document.querySelector("ytd-channel-name a, #owner-sub-count a, ytd-video-owner-renderer #channel-name a");
+          if (channelElement) {
+            const extractedChannel = channelElement.textContent?.trim();
+            // If channel doesn't match what we extracted, it might be stale
+            if (extractedChannel && extractedChannel !== videoMetadata.channel) {
+              console.log("[FT] Channel mismatch detected, updating:", {
+                old: videoMetadata.channel,
+                new: extractedChannel
+              });
+              videoMetadata.channel = extractedChannel;
+            }
+          }
         }
 
         const allReady = Boolean(
           videoMetadata &&
           videoMetadata.video_id &&
           videoMetadata.title &&
-          videoMetadata.channel
+          videoMetadata.channel &&
+          videoMetadata.video_id === currentVideoId // Ensure video ID matches
         );
 
         if (allReady) {

@@ -297,3 +297,49 @@
 
 Once all sections pass, the MVP regression is complete.
 
+
+
+---
+
+## Known Issues (To Fix)
+
+### Issue 1: Test 1.7 - Session Persistence
+**Status:** ⚠️ FAILING  
+**Description:** After closing browser completely and reopening, dashboard requires re-login (session doesn't persist). Extension and website seem out of sync.
+
+**Expected:** Dashboard should remain accessible after browser restart (Supabase session cookies should persist).
+
+**Actual:** Dashboard redirects to login page.
+
+**Impact:** Users have to log in again after closing browser.
+
+**Fix needed:** Check Supabase session cookie persistence and extension sync on browser restart.
+
+---
+
+### Issue 2: Test 2.6 - Goals Sync Format Mismatch
+**Status:** ⚠️ FAILING  
+**Description:** Goals entered during signup/onboarding are stored as plain text (e.g., `"Run, Learn to code"`) instead of JSON array format (e.g., `["Run", "Learn programming"]`).
+
+**Root cause:** `frontend/src/pages/Goals.tsx` line 99-100 saves goals as:ript
+goals: goals.trim(),  // Plain text string
+anti_goals: antiGoals.trim(),  // Plain text string**Expected:** Goals should be stored as JSON array string: `JSON.stringify(["Run", "Learn programming"])`
+
+**Impact:**
+- AI classifier won't receive goals properly (expects array)
+- Dashboard won't display goals correctly
+- Extension won't sync goals from server
+- Backend parsing fails (expects JSON array, gets plain text)
+
+**Fix needed:** Update `Goals.tsx` to:
+1. Split textarea input by newlines
+2. Filter empty lines
+3. Convert to array: `goals.split('\n').filter(g => g.trim()).map(g => g.trim())`
+4. Save as JSON string: `JSON.stringify(goalsArray)`
+
+**Files to fix:**
+- `frontend/src/pages/Goals.tsx` (lines 99-100, 126-127)
+
+---
+
+**Last updated:** During MVP testing session

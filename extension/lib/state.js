@@ -620,6 +620,20 @@ export async function saveExtensionDataToServer(data = null) {
       channel_lifetime_stats: ft_channel_lifetime_stats,
     };
     
+    // Always merge missing fields from local storage (even if data is provided)
+    if (data) {
+      // Merge core fields if not provided
+      if (data.blocked_channels === undefined) {
+        toSave.blocked_channels = ft_blocked_channels;
+      }
+      if (data.watch_history === undefined) {
+        toSave.watch_history = ft_watch_history;
+      }
+      if (data.channel_spiral_count === undefined) {
+        toSave.channel_spiral_count = ft_channel_spiral_count;
+      }
+    }
+    
     // Always ensure settings include focus window and spiral_events (even if data is provided)
     if (!data || !data.settings) {
       toSave.settings = settingsToSave;

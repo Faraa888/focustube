@@ -168,6 +168,15 @@ setInterval(() => {
   });
 }, 15 * 60 * 1000); // 15 minutes
 
+// ─────────────────────────────────────────────────────────────
+// BACKGROUND SYNC: Sync extension data every hour
+// ─────────────────────────────────────────────────────────────
+setInterval(() => {
+  saveExtensionDataToServer(null).catch((err) => {
+    console.warn("[FT] Background extension data sync failed:", err);
+  });
+}, 60 * 60 * 1000); // 1 hour
+
 // Send batch on extension unload (fire-and-forget)
 chrome.runtime.onSuspend.addListener(() => {
   sendWatchEventBatch().catch((err) => {
