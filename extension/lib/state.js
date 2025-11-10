@@ -60,8 +60,13 @@ const DEFAULTS = {
   // Extension data (synced with Supabase)
   ft_blocked_channels: [],           // Array of blocked channel names
   ft_watch_history: [],              // Array of watch events (last 7 days)
-  ft_channel_spiral_count: {},       // Object: {channel: count}
-  ft_extension_settings: {}          // Other extension settings
+  ft_channel_spiral_count: {},       // Object: {channel: {today, this_week, last_watched}}
+  ft_extension_settings: {},         // Other extension settings
+  
+  // Spiral detection
+  ft_blocked_channels_today: [],     // Temporary blocks (reset at midnight)
+  ft_channel_lifetime_stats: {},     // Lifetime stats per channel for dashboard
+  ft_spiral_detected: null           // Current spiral flag {channel, count, type, message, detected_at}
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -191,7 +196,9 @@ export async function maybeRotateCounters(now = new Date()) {
     // Reset counters
     await setLocal({
       ...resetShape(),
-      ft_last_reset_key: currentKey
+      ft_last_reset_key: currentKey,
+      ft_blocked_channels_today: []  // Clear temporary blocks on daily reset
+      // Note: ft_channel_lifetime_stats is NOT reset (lifetime tracking)
     });
   }
 }
@@ -552,6 +559,7 @@ export async function saveExtensionDataToServer(data = null) {
       ft_extension_settings = {},
       ft_user_goals = [],
       ft_user_anti_goals = [],
+      ft_channel_lifetime_stats = {},
     } = await getLocal([
       "ft_blocked_channels",
       "ft_watch_history",
@@ -559,6 +567,7 @@ export async function saveExtensionDataToServer(data = null) {
       "ft_extension_settings",
       "ft_user_goals",
       "ft_user_anti_goals",
+      "ft_channel_lifetime_stats",
     ]);
 
     // Use provided data or fall back to local storage
@@ -569,15 +578,19 @@ export async function saveExtensionDataToServer(data = null) {
       settings: ft_extension_settings,
       goals: ft_user_goals,
       anti_goals: ft_user_anti_goals,
+      channel_lifetime_stats: ft_channel_lifetime_stats,
     };
 
-    // Always include goals and anti_goals if they exist in local storage (even if data is provided)
-    // This ensures goals are synced whenever we save
+    // Always include goals, anti_goals, and lifetime stats if they exist in local storage (even if data is provided)
+    // This ensures they are synced whenever we save
     if (!data || data.goals === undefined) {
       toSave.goals = ft_user_goals;
     }
     if (!data || data.anti_goals === undefined) {
       toSave.anti_goals = ft_user_anti_goals;
+    }
+    if (!data || data.channel_lifetime_stats === undefined) {
+      toSave.channel_lifetime_stats = ft_channel_lifetime_stats;
     }
 
     const response = await fetch(`${SERVER_URL}/extension/save-data`, {

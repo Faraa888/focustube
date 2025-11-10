@@ -561,6 +561,130 @@
   margin-top: 24px;
 }
 
+/* Spiral Detection Nudge popup (same style as milestone popup) */
+#ft-spiral-nudge {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  padding: 20px;
+}
+
+#ft-spiral-nudge .ft-milestone-box {
+  max-width: 500px;
+  background: #121212;
+  padding: 32px;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+#ft-spiral-nudge h2 {
+  font-size: 24px;
+  margin: 0 0 16px 0;
+  color: #ffaa00;
+  line-height: 1.4;
+}
+
+#ft-spiral-nudge .ft-milestone-intro {
+  font-size: 16px;
+  margin: 16px 0 24px 0;
+  color: #ccc;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+#ft-spiral-nudge .ft-spiral-timer {
+  display: flex;
+  justify-content: center;
+  margin: 24px 0;
+}
+
+#ft-spiral-nudge .ft-timer-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 4px solid #ffaa00;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: rgba(255, 170, 0, 0.1);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 170, 0, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(255, 170, 0, 0);
+  }
+}
+
+#ft-spiral-nudge .ft-timer-circle #ft-timer-count {
+  font-size: 32px;
+  font-weight: 700;
+  color: #ffaa00;
+  line-height: 1;
+}
+
+#ft-spiral-nudge .ft-milestone-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+
+#ft-spiral-nudge .ft-button {
+  padding: 12px 24px;
+  font-size: 15px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+  font-weight: 500;
+  font-family: inherit;
+}
+
+#ft-spiral-nudge .ft-button:active {
+  transform: scale(0.98);
+}
+
+#ft-spiral-nudge .ft-button-secondary {
+  background: #333;
+  color: #fff;
+  border: 1px solid #555;
+}
+
+#ft-spiral-nudge .ft-button-secondary:hover {
+  background: #444;
+}
+
+#ft-spiral-nudge .ft-button-warning {
+  background: #ff8800;
+  color: #fff;
+}
+
+#ft-spiral-nudge .ft-button-warning:hover {
+  background: #ff9900;
+}
+
+#ft-spiral-nudge .ft-button-danger {
+  background: #ff4444;
+  color: #fff;
+}
+
+#ft-spiral-nudge .ft-button-danger:hover {
+  background: #ff6666;
+}
+
 #ft-journal-nudge .ft-journal-nudge-box {
   background: #1a1a1a;
   border: 1px solid #333;

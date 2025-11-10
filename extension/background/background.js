@@ -24,6 +24,12 @@ import {
 
 import { evaluateBlock } from "../lib/rules.js";
 import { getServerUrlForBackground } from "../lib/config.js";
+import {
+  SPIRAL_MIN_WATCH_SECONDS,
+  SPIRAL_THRESHOLD_DAY,
+  SPIRAL_THRESHOLD_WEEK,
+  SPIRAL_HISTORY_DAYS
+} from "../lib/constants.js";
 
 // ─────────────────────────────────────────────────────────────
 // DEBUG MODE (set false when you ship)
@@ -273,7 +279,69 @@ async function handleMessage(msg) {
     LOG("Goals verification:", { saved: savedGoals });
     
     return { ok: true, goals };
-      }
+  }
+
+  if (msg?.type === "FT_CLEAR_SPIRAL_FLAG") {
+    await setLocal({ ft_spiral_detected: null });
+    LOG("Spiral flag cleared");
+    return { ok: true };
+  }
+
+  if (msg?.type === "FT_BLOCK_CHANNEL_TODAY") {
+    const channel = msg?.channel?.trim();
+    if (!channel) {
+      return { ok: false, error: "Channel is required" };
+    }
+    
+    const { ft_blocked_channels_today = [] } = await getLocal(["ft_blocked_channels_today"]);
+    const blockedToday = Array.isArray(ft_blocked_channels_today) ? [...ft_blocked_channels_today] : [];
+    
+    if (!blockedToday.includes(channel)) {
+      blockedToday.push(channel);
+      await setLocal({ 
+        ft_blocked_channels_today: blockedToday,
+        ft_spiral_detected: null  // Clear spiral flag
+      });
+      LOG("Channel blocked for today:", channel);
+      
+      // Sync to server
+      await saveExtensionDataToServer({
+        blocked_channels_today: blockedToday
+      }).catch((err) => {
+        LOG("Failed to save temporary block to server:", err);
+      });
+    }
+    
+    return { ok: true, channel };
+  }
+
+  if (msg?.type === "FT_BLOCK_CHANNEL_PERMANENT") {
+    const channel = msg?.channel?.trim();
+    if (!channel) {
+      return { ok: false, error: "Channel is required" };
+    }
+    
+    const { ft_blocked_channels = [] } = await getLocal(["ft_blocked_channels"]);
+    const blockedChannels = Array.isArray(ft_blocked_channels) ? [...ft_blocked_channels] : [];
+    
+    if (!blockedChannels.includes(channel)) {
+      blockedChannels.push(channel);
+      await setLocal({ 
+        ft_blocked_channels: blockedChannels,
+        ft_spiral_detected: null  // Clear spiral flag
+      });
+      LOG("Channel blocked permanently:", channel);
+      
+      // Sync to server
+      await saveExtensionDataToServer({
+        blocked_channels: blockedChannels
+      }).catch((err) => {
+        LOG("Failed to save permanent block to server:", err);
+      });
+    }
+    
+    return { ok: true, channel };
+  }
 
   if (msg?.type === "FT_SYNC_PLAN") {
     // Sync plan from server (triggered by popup after login)
@@ -763,6 +831,131 @@ async function finalizeVideoWatch(videoId, startTime, category) {
     console.warn("[FT] Failed to send watch time to server:", err?.message || err);
   });
 
+  // ─────────────────────────────────────────────────────────────
+  // SPIRAL DETECTION: Track watch history and detect patterns
+  // ─────────────────────────────────────────────────────────────
+  // Only count videos watched for minimum duration
+  if (durationSeconds >= SPIRAL_MIN_WATCH_SECONDS && channel && channel !== "Unknown") {
+    try {
+      // 1. Get current watch history
+      const { ft_watch_history = [] } = await getLocal(["ft_watch_history"]);
+      const history = Array.isArray(ft_watch_history) ? ft_watch_history : [];
+
+      // 2. Add new entry to history
+      const watchHistoryEntry = {
+        channel: channel.trim(),
+        video_id: videoId,
+        watched_at: new Date().toISOString(),
+        seconds: durationSeconds,
+        category: category || "neutral"
+      };
+      history.push(watchHistoryEntry);
+
+      // 3. Filter out entries older than 7 days (rolling window)
+      const sevenDaysAgo = Date.now() - (SPIRAL_HISTORY_DAYS * 24 * 60 * 60 * 1000);
+      const recentHistory = history.filter(item => {
+        const itemTime = new Date(item.watched_at).getTime();
+        return itemTime > sevenDaysAgo;
+      });
+
+      // 4. Calculate counts (today + last 7 days)
+      const today = new Date().toDateString(); // "Mon Jan 15 2025"
+      const todayHistory = recentHistory.filter(item => {
+        return new Date(item.watched_at).toDateString() === today;
+      });
+
+      // Count videos from same channel
+      const todayCounts = {};
+      const weekCounts = {};
+
+      todayHistory.forEach(item => {
+        const ch = item.channel.trim();
+        todayCounts[ch] = (todayCounts[ch] || 0) + 1;
+      });
+
+      recentHistory.forEach(item => {
+        const ch = item.channel.trim();
+        weekCounts[ch] = (weekCounts[ch] || 0) + 1;
+      });
+
+      // 5. Update channel spiral counts
+      const { ft_channel_spiral_count = {} } = await getLocal(["ft_channel_spiral_count"]);
+      const spiralCounts = { ...ft_channel_spiral_count };
+      
+      const channelKey = channel.trim();
+      spiralCounts[channelKey] = {
+        today: todayCounts[channelKey] || 0,
+        this_week: weekCounts[channelKey] || 0,
+        last_watched: new Date().toISOString()
+      };
+
+      // 6. Check thresholds and set spiral flag
+      const currentChannelCount = spiralCounts[channelKey];
+      let spiralDetected = null;
+
+      if (currentChannelCount.today >= SPIRAL_THRESHOLD_DAY) {
+        // 3+ videos today - urgent nudge
+        spiralDetected = {
+          channel: channelKey,
+          count: currentChannelCount.today,
+          type: "today",
+          message: "Are you sure you aren't spiralling?",
+          detected_at: Date.now()
+        };
+        LOG("🚨 Spiral detected (today):", spiralDetected);
+      } else if (currentChannelCount.this_week >= SPIRAL_THRESHOLD_WEEK) {
+        // 5+ videos this week - warning nudge
+        spiralDetected = {
+          channel: channelKey,
+          count: currentChannelCount.this_week,
+          type: "week",
+          message: "You've watched this channel a lot recently",
+          detected_at: Date.now()
+        };
+        LOG("⚠️ Spiral detected (week):", spiralDetected);
+      }
+
+      // 7. Update lifetime stats
+      const { ft_channel_lifetime_stats = {} } = await getLocal(["ft_channel_lifetime_stats"]);
+      const lifetimeStats = { ...ft_channel_lifetime_stats };
+
+      if (!lifetimeStats[channelKey]) {
+        lifetimeStats[channelKey] = {
+          total_videos: 0,
+          total_seconds: 0,
+          first_watched: new Date().toISOString(),
+          last_watched: new Date().toISOString()
+        };
+      }
+
+      lifetimeStats[channelKey].total_videos += 1;
+      lifetimeStats[channelKey].total_seconds += durationSeconds;
+      lifetimeStats[channelKey].last_watched = new Date().toISOString();
+
+      // 8. Save all updates
+      await setLocal({
+        ft_watch_history: recentHistory,
+        ft_channel_spiral_count: spiralCounts,
+        ft_channel_lifetime_stats: lifetimeStats,
+        ...(spiralDetected ? { ft_spiral_detected: spiralDetected } : {})
+      });
+
+      // 9. Sync to server (debounced - will be called elsewhere, but ensure data is ready)
+      if (spiralDetected) {
+        LOG("Spiral flag set, will trigger nudge on next video from this channel");
+      }
+    } catch (error) {
+      console.warn("[FT] Error in spiral detection:", error);
+      // Don't fail the entire function if spiral detection fails
+    }
+  } else if (durationSeconds < SPIRAL_MIN_WATCH_SECONDS) {
+    LOG("Video watch too short for spiral tracking:", {
+      videoId: videoId.substring(0, 10),
+      seconds: durationSeconds,
+      minRequired: SPIRAL_MIN_WATCH_SECONDS
+    });
+  }
+
   return durationSeconds;
 }
 
@@ -847,7 +1040,9 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     "ft_unlock_until_epoch",
     "ft_allowance_videos_left",
     "ft_allowance_seconds_left",
-    "ft_blocked_channels"
+    "ft_blocked_channels",
+    "ft_blocked_channels_today",
+    "ft_spiral_detected"
   ]);
 
   // 6. Read plan + limits
@@ -889,6 +1084,83 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
           },
           unlocked: await isTemporarilyUnlocked(Date.now()),
           aiClassification: null
+        };
+      }
+    }
+
+    // 6.6. Check temporary blocks (blocked for today)
+    const blockedChannelsToday = state.ft_blocked_channels_today || [];
+    if (Array.isArray(blockedChannelsToday) && blockedChannelsToday.length > 0) {
+      const channel = videoMetadata.channel.trim();
+      const channelLower = channel.toLowerCase();
+      const isBlockedToday = blockedChannelsToday.some(blocked => {
+        const blockedLower = blocked.toLowerCase().trim();
+        return blockedLower === channelLower || 
+               channelLower.includes(blockedLower) || 
+               blockedLower.includes(channelLower);
+      });
+      if (isBlockedToday) {
+        LOG("Channel blocked for today:", { channel, blockedChannelsToday, matched: true });
+        return {
+          ok: true,
+          pageType,
+          blocked: true,
+          scope: "watch",
+          reason: "channel_blocked_today",
+          plan,
+          counters: {
+            searches: Number(state.ft_searches_today || 0),
+            watchSeconds: Number(state.ft_watch_seconds_today || 0),
+            watchVisits: Number(state.ft_watch_visits_today || 0),
+            shortsVisits: Number(state.ft_short_visits_today || 0),
+            shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
+            shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
+            allowanceVideosLeft: Number(state.ft_allowance_videos_left || 1),
+            allowanceSecondsLeft: Number(state.ft_allowance_seconds_left || 600)
+          },
+          unlocked: await isTemporarilyUnlocked(Date.now()),
+          aiClassification: null
+        };
+      }
+    }
+
+    // 6.7. Check spiral detection flag (before AI classification to save API calls)
+    const spiralDetected = state.ft_spiral_detected;
+    if (spiralDetected && spiralDetected.channel && videoMetadata.channel) {
+      const channel = videoMetadata.channel.trim();
+      const channelLower = channel.toLowerCase();
+      const spiralChannelLower = spiralDetected.channel.toLowerCase().trim();
+      
+      // Check if current channel matches spiral-detected channel
+      if (channelLower === spiralChannelLower || 
+          channelLower.includes(spiralChannelLower) || 
+          spiralChannelLower.includes(channelLower)) {
+        LOG("🚨 Spiral detected for current channel:", spiralDetected);
+        return {
+          ok: true,
+          pageType,
+          blocked: false,  // Don't block, but show nudge
+          scope: "none",
+          reason: "spiral_detected",
+          spiralInfo: {
+            channel: spiralDetected.channel,
+            count: spiralDetected.count,
+            type: spiralDetected.type,
+            message: spiralDetected.message
+          },
+          plan,
+          counters: {
+            searches: Number(state.ft_searches_today || 0),
+            watchSeconds: Number(state.ft_watch_seconds_today || 0),
+            watchVisits: Number(state.ft_watch_visits_today || 0),
+            shortsVisits: Number(state.ft_short_visits_today || 0),
+            shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
+            shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
+            allowanceVideosLeft: Number(state.ft_allowance_videos_left || 1),
+            allowanceSecondsLeft: Number(state.ft_allowance_seconds_left || 600)
+          },
+          unlocked: await isTemporarilyUnlocked(Date.now()),
+          aiClassification: null  // Skip AI classification
         };
       }
     }

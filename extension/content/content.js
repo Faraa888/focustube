@@ -1585,6 +1585,127 @@ function showBlockChannelConfirmation(channelName, onConfirm, onCancel) {
 }
 
 /**
+ * Show spiral detection nudge overlay
+ * @param {Object} spiralInfo - Spiral detection info {channel, count, type, message}
+ */
+function showSpiralNudge(spiralInfo) {
+  const { channel, count, type, message } = spiralInfo;
+  
+  console.log("[FT] 🚨 Showing spiral nudge:", spiralInfo);
+  
+  // Remove any existing nudge
+  const existing = document.getElementById("ft-spiral-nudge");
+  if (existing) existing.remove();
+  
+  // Pause video before showing nudge
+  pauseAndMuteVideo();
+  
+  const overlay = document.createElement("div");
+  overlay.id = "ft-spiral-nudge";
+  
+  const timePeriod = type === "today" ? "today" : "this week";
+  
+  overlay.innerHTML = `
+    <div class="ft-milestone-box">
+      <h2>⚠️ ${message}</h2>
+      <p class="ft-milestone-intro">
+        You've watched ${count} ${count === 1 ? 'video' : 'videos'} from <strong>${channel}</strong> ${timePeriod}.
+      </p>
+      
+      <div class="ft-spiral-timer">
+        <div class="ft-timer-circle">
+          <span id="ft-timer-count">10</span>
+        </div>
+      </div>
+      
+      <div class="ft-milestone-buttons">
+        <button id="ft-spiral-continue" class="ft-button ft-button-secondary">Continue</button>
+        <button id="ft-spiral-block-today" class="ft-button ft-button-warning">Block for Today</button>
+        <button id="ft-spiral-block-permanent" class="ft-button ft-button-danger">Block Permanently</button>
+      </div>
+    </div>
+  `;
+  
+  // 10-second countdown timer
+  let timeLeft = 10;
+  const timerEl = overlay.querySelector("#ft-timer-count");
+  let timerInterval = setInterval(() => {
+    timeLeft--;
+    if (timerEl) {
+      timerEl.textContent = timeLeft;
+    }
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      // Auto-dismiss after 10 seconds (same as "Continue")
+      overlay.remove();
+      restoreVideoState();
+      chrome.runtime.sendMessage({
+        type: "FT_CLEAR_SPIRAL_FLAG"
+      }).catch((err) => {
+        console.warn("[FT] Failed to clear spiral flag:", err);
+      });
+    }
+  }, 1000);
+  
+  // Button handlers
+  const continueBtn = overlay.querySelector("#ft-spiral-continue");
+  const blockTodayBtn = overlay.querySelector("#ft-spiral-block-today");
+  const blockPermanentBtn = overlay.querySelector("#ft-spiral-block-permanent");
+  
+  if (continueBtn) {
+    continueBtn.addEventListener("click", () => {
+      clearInterval(timerInterval);
+      overlay.remove();
+      restoreVideoState();
+      chrome.runtime.sendMessage({
+        type: "FT_CLEAR_SPIRAL_FLAG"
+      }).catch((err) => {
+        console.warn("[FT] Failed to clear spiral flag:", err);
+      });
+    });
+  }
+  
+  if (blockTodayBtn) {
+    blockTodayBtn.addEventListener("click", () => {
+      clearInterval(timerInterval);
+      overlay.remove();
+      restoreVideoState();
+      chrome.runtime.sendMessage({
+        type: "FT_BLOCK_CHANNEL_TODAY",
+        channel: channel
+      }).then(() => {
+        console.log("[FT] Channel blocked for today:", channel);
+        // Redirect to home after blocking
+        window.location.href = "https://www.youtube.com/";
+      }).catch((err) => {
+        console.warn("[FT] Failed to block channel for today:", err);
+      });
+    });
+  }
+  
+  if (blockPermanentBtn) {
+    blockPermanentBtn.addEventListener("click", () => {
+      clearInterval(timerInterval);
+      overlay.remove();
+      restoreVideoState();
+      chrome.runtime.sendMessage({
+        type: "FT_BLOCK_CHANNEL_PERMANENT",
+        channel: channel
+      }).then(() => {
+        console.log("[FT] Channel blocked permanently:", channel);
+        // Redirect to home after blocking
+        window.location.href = "https://www.youtube.com/";
+      }).catch((err) => {
+        console.warn("[FT] Failed to block channel permanently:", err);
+      });
+    });
+  }
+  
+  document.body.appendChild(overlay);
+  console.log("[FT] ✅ Spiral nudge added to DOM");
+}
+
+/**
  * Injects "Block Channel" button on watch pages
  * @param {string} channelName - Name of channel to block
  * @param {number} retryCount - Current retry attempt (internal)
@@ -2981,6 +3102,22 @@ async function handleNavigation() {
     }
   }
 
+  // Handle spiral detection (before blocking checks)
+  if (resp.reason === "spiral_detected" && resp.spiralInfo) {
+    console.log("[FT] 🚨 Spiral detected, showing nudge:", resp.spiralInfo);
+    showSpiralNudge(resp.spiralInfo);
+    // Don't return - continue to check for blocking
+  }
+
+  // Handle channel blocked for today
+  if (resp.blocked && resp.reason === "channel_blocked_today") {
+    pauseVideos();
+    await stopShortsTimeTracking();
+    console.log("[FT] 🚫 Channel blocked for today - redirecting to YouTube home");
+    window.location.href = "https://www.youtube.com/";
+    return;
+  }
+
   if (resp.blocked) {
     pauseVideos();
     await stopShortsTimeTracking(); // Stop tracking if blocked
@@ -3634,60 +3771,6 @@ function scheduleNav(delay = 150) {
     });
   }, delay);
 }
-
-let lastUrl = location.href;
-
-const observer = new MutationObserver(() => {
-  if (location.href !== lastUrl) {
-    lastUrl = location.href;
-    scheduleNav(150); // debounce SPA navigations
-  }
-});
-
-observer.observe(document.body, { childList: true, subtree: true });
-
-// Initialize global time tracking (tracks time on all YouTube pages)
-// Start tracking immediately when script loads
-startGlobalTimeTracking().catch(console.error);
-
-// Initial run (debounced for consistency)
-scheduleNav(0);
-
-let lastUrl = location.href;
-
-const observer = new MutationObserver(() => {
-  if (location.href !== lastUrl) {
-    lastUrl = location.href;
-    scheduleNav(150); // debounce SPA navigations
-  }
-});
-
-observer.observe(document.body, { childList: true, subtree: true });
-
-// Initialize global time tracking (tracks time on all YouTube pages)
-// Start tracking immediately when script loads
-startGlobalTimeTracking().catch(console.error);
-
-// Initial run (debounced for consistency)
-scheduleNav(0);
-
-let lastUrl = location.href;
-
-const observer = new MutationObserver(() => {
-  if (location.href !== lastUrl) {
-    lastUrl = location.href;
-    scheduleNav(150); // debounce SPA navigations
-  }
-});
-
-observer.observe(document.body, { childList: true, subtree: true });
-
-// Initialize global time tracking (tracks time on all YouTube pages)
-// Start tracking immediately when script loads
-startGlobalTimeTracking().catch(console.error);
-
-// Initial run (debounced for consistency)
-scheduleNav(0);
 
 let lastUrl = location.href;
 

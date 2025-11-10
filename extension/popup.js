@@ -351,15 +351,3 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     loadCurrentEmail().catch(console.error);
   }
 });
-
-    loadCurrentEmail().catch(console.error);
-  }
-});
-
-    loadCurrentEmail().catch(console.error);
-  }
-});
-
-    loadCurrentEmail().catch(console.error);
-  }
-});

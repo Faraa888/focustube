@@ -130,24 +130,3 @@ export function evaluateBlock(ctx) {
   // Otherwise allow
   return { blocked: false, scope: "none", reason: REASONS.OK };
 }
-  if (pageType === "SEARCH" && searchesToday >= threshold) {
-    return { blocked: true, scope: "search", reason: REASONS.SEARCH_THRESHOLD };
-  }
-
-  // Otherwise allow
-  return { blocked: false, scope: "none", reason: REASONS.OK };
-}
-  if (pageType === "SEARCH" && searchesToday >= threshold) {
-    return { blocked: true, scope: "search", reason: REASONS.SEARCH_THRESHOLD };
-  }
-
-  // Otherwise allow
-  return { blocked: false, scope: "none", reason: REASONS.OK };
-}
-  if (pageType === "SEARCH" && searchesToday >= threshold) {
-    return { blocked: true, scope: "search", reason: REASONS.SEARCH_THRESHOLD };
-  }
-
-  // Otherwise allow
-  return { blocked: false, scope: "none", reason: REASONS.OK };
-}
