@@ -156,6 +156,10 @@ app.use(cors({
     if (origin.includes('youtube.com')) {
       return callback(null, true);
     }
+    // Allow Vercel frontend
+    if (origin.includes('focustube-beta.vercel.app') || origin.includes('vercel.app')) {
+      return callback(null, true);
+    }
     // Reject other origins
     callback(new Error('Not allowed by CORS'));
   },
