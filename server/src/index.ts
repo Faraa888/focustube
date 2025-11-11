@@ -775,6 +775,103 @@ app.get("/license/verify", async (req, res) => {
 });
 
 /**
+ * Normalize YouTube channel names endpoint
+ * POST /ai/normalize-channels
+ * 
+ * Takes user-typed channel names and returns exact canonical names as they appear in YouTube metadata
+ */
+app.post("/ai/normalize-channels", async (req, res) => {
+  try {
+    const { channel_names } = req.body;
+
+    if (!channel_names || !Array.isArray(channel_names) || channel_names.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "channel_names array is required",
+      });
+    }
+
+    // If OpenAI not configured, return original names (no normalization)
+    if (!openaiClient) {
+      console.warn("[Normalize Channels] OpenAI not configured, returning original names");
+      return res.json({
+        ok: true,
+        normalized_names: channel_names,
+      });
+    }
+
+    // Build prompt
+    const prompt = `Given these YouTube channel names that a user typed, return the exact canonical channel name as it appears in YouTube metadata. Return a JSON array with the normalized names in the same order.
+
+User typed: ${JSON.stringify(channel_names)}
+
+Return only a JSON array like: ["Vikkstar123", "Eddie Hall The Beast", "Mr Beast"]
+
+Important:
+- Return the exact channel name as it appears in YouTube (including numbers, suffixes, etc.)
+- Keep the same order as input
+- Return only the JSON array, no other text`;
+
+    try {
+      const completion = await openaiClient.chat.completions.create({
+        model: "gpt-4o-mini", // Use cheaper model for simple normalization
+        messages: [
+          {
+            role: "system",
+            content: "You are a YouTube channel name normalizer. Return only valid JSON arrays.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        temperature: 0.3, // Lower temperature for more consistent results
+        max_tokens: 200,
+      });
+
+      const responseText = completion.choices[0]?.message?.content?.trim() || "";
+      
+      // Try to parse JSON array from response
+      let normalizedNames: string[] = channel_names; // Fallback to original
+      
+      try {
+        // Remove markdown code blocks if present
+        const cleaned = responseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        const parsed = JSON.parse(cleaned);
+        
+        if (Array.isArray(parsed) && parsed.length === channel_names.length) {
+          normalizedNames = parsed.map((name: any) => String(name).trim()).filter(Boolean);
+        } else {
+          console.warn("[Normalize Channels] Response format invalid, using original names");
+        }
+      } catch (parseError) {
+        console.warn("[Normalize Channels] Failed to parse OpenAI response:", parseError);
+        // Fallback to original names
+      }
+
+      return res.json({
+        ok: true,
+        normalized_names: normalizedNames,
+      });
+    } catch (openaiError: any) {
+      console.error("[Normalize Channels] OpenAI error:", openaiError.message);
+      // Return original names on error (graceful degradation)
+      return res.json({
+        ok: true,
+        normalized_names: channel_names,
+        warning: "Normalization failed, using original names",
+      });
+    }
+  } catch (error) {
+    console.error("Error in /ai/normalize-channels:", error);
+    return res.status(500).json({
+      ok: false,
+      error: "Internal server error",
+    });
+  }
+});
+
+/**
  * Get extension data endpoint
  * GET /extension/get-data?email=user@example.com
  * 

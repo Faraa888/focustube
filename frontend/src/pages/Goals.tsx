@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import { storeEmailForExtension } from "@/lib/extensionStorage";
-import { X } from "lucide-react";
+import { X, Info } from "lucide-react";
 
 const Goals = () => {
   const navigate = useNavigate();
@@ -17,7 +18,9 @@ const Goals = () => {
   const [goalInput, setGoalInput] = useState("");
   const [antiGoalInput, setAntiGoalInput] = useState("");
   const [channelInput, setChannelInput] = useState("");
+  const [autoBlockChannels, setAutoBlockChannels] = useState(false);
   const [loading, setLoading] = useState(true); // Start with loading true
+  const [normalizingChannels, setNormalizingChannels] = useState(false);
   const [error, setError] = useState("");
   const [checkingAuth, setCheckingAuth] = useState(true);
 
@@ -119,6 +122,80 @@ const Goals = () => {
         .eq("email", user.email)
         .single();
 
+      // Normalize channel names if any exist
+      let normalizedChannels = distractingChannels;
+      if (distractingChannels.length > 0) {
+        setNormalizingChannels(true);
+        try {
+          const normalizeResponse = await fetch("https://focustube-backend-4xah.onrender.com/ai/normalize-channels", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ channel_names: distractingChannels }),
+          });
+
+          if (normalizeResponse.ok) {
+            const normalizeData = await normalizeResponse.json();
+            if (normalizeData.ok && normalizeData.normalized_names) {
+              normalizedChannels = normalizeData.normalized_names;
+              console.log("Channel names normalized:", {
+                original: distractingChannels,
+                normalized: normalizedChannels,
+              });
+            }
+          } else {
+            console.warn("Failed to normalize channels, using original names");
+          }
+        } catch (normalizeError) {
+          console.error("Error normalizing channels:", normalizeError);
+          // Continue with original names
+        } finally {
+          setNormalizingChannels(false);
+        }
+      }
+
+      // If auto-block is enabled, add normalized channels to blocked_channels
+      if (autoBlockChannels && normalizedChannels.length > 0) {
+        try {
+          // Get current blocked channels
+          const getDataResponse = await fetch(
+            `https://focustube-backend-4xah.onrender.com/extension/get-data?email=${encodeURIComponent(user.email)}`
+          );
+          
+          let currentBlocked: string[] = [];
+          if (getDataResponse.ok) {
+            const getData = await getDataResponse.json();
+            if (getData.ok && getData.data?.blocked_channels) {
+              currentBlocked = Array.isArray(getData.data.blocked_channels) ? getData.data.blocked_channels : [];
+            }
+          }
+
+          // Merge normalized channels with existing blocked channels (deduplicate)
+          const allBlocked = [...currentBlocked];
+          normalizedChannels.forEach((channel: string) => {
+            const channelLower = channel.toLowerCase().trim();
+            if (!allBlocked.some(b => b.toLowerCase().trim() === channelLower)) {
+              allBlocked.push(channel);
+            }
+          });
+
+          // Save updated blocked channels
+          await fetch("https://focustube-backend-4xah.onrender.com/extension/save-data", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: user.email,
+              data: {
+                blocked_channels: allBlocked,
+              },
+            }),
+          });
+          console.log("Channels auto-blocked:", normalizedChannels);
+        } catch (blockError) {
+          console.error("Error auto-blocking channels:", blockError);
+          // Don't fail the whole submission if blocking fails
+        }
+      }
+
       if (!existingUser) {
         // User doesn't exist in users table (OAuth signup), create them
         const trialStart = new Date();
@@ -132,7 +209,7 @@ const Goals = () => {
           trial_expires_at: trialEnd.toISOString(),
           goals: arrayToJsonString(goals),
           anti_goals: arrayToJsonString(antiGoals),
-          distracting_channels: arrayToJsonString(distractingChannels),
+          distracting_channels: arrayToJsonString(normalizedChannels),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }, {
@@ -160,7 +237,7 @@ const Goals = () => {
           .update({
             goals: arrayToJsonString(goals),
             anti_goals: arrayToJsonString(antiGoals),
-            distracting_channels: arrayToJsonString(distractingChannels),
+            distracting_channels: arrayToJsonString(normalizedChannels),
             updated_at: new Date().toISOString(),
           })
           .eq("email", user.email);
@@ -198,6 +275,21 @@ const Goals = () => {
             </div>
           ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Clear Helper Text */}
+            <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <Info className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-primary mb-1">
+                    How to add items:
+                  </p>
+                  <p className="text-sm text-foreground">
+                    Type an item in the input field, then <strong>press the "Add" button or press Enter</strong> to confirm your entry. Each item will appear as a badge below. You can remove items by clicking the X on any badge.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Focus Goals */}
             <div className="space-y-2">
               <Label htmlFor="goals">
@@ -352,6 +444,23 @@ const Goals = () => {
                   ))}
                 </div>
               )}
+              
+              {/* Auto-block checkbox */}
+              {distractingChannels.length > 0 && (
+                <div className="flex items-center gap-3 mt-4 p-3 bg-muted/50 rounded-lg">
+                  <Switch
+                    id="auto-block-channels"
+                    checked={autoBlockChannels}
+                    onCheckedChange={setAutoBlockChannels}
+                  />
+                  <Label htmlFor="auto-block-channels" className="cursor-pointer flex-1">
+                    <span className="font-medium">Block these channels immediately</span>
+                    <span className="text-xs text-muted-foreground block mt-0.5">
+                      If enabled, these channels will be blocked right away. You can unblock them later in Settings.
+                    </span>
+                  </Label>
+                </div>
+              )}
             </div>
 
             {error && (
@@ -361,9 +470,13 @@ const Goals = () => {
             <Button 
               type="submit" 
               className="w-full" 
-              disabled={loading || goals.length === 0}
+              disabled={loading || goals.length === 0 || normalizingChannels}
             >
-              {loading ? "Saving..." : "Continue to Download"}
+              {normalizingChannels 
+                ? "Normalizing channel names..." 
+                : loading 
+                ? "Saving..." 
+                : "Continue to Download"}
             </Button>
             {goals.length === 0 && (
               <p className="text-xs text-center text-muted-foreground">
