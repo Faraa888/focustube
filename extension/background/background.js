@@ -34,7 +34,7 @@ import {
 // ─────────────────────────────────────────────────────────────
 // DEBUG MODE (set false when you ship)
 // ─────────────────────────────────────────────────────────────
-const DEBUG = true;
+const DEBUG = false;
 async function LOG(...a) {
   if (!DEBUG) return;
   const { ft_plan = "free" } = await chrome.storage.local.get(["ft_plan"]);
@@ -200,7 +200,7 @@ async function countForPageType(pageType) {
 // ─────────────────────────────────────────────────────────────
 // Message handler function
 async function handleMessage(msg) {
-  if (msg?.type === "FT_NAVIGATED") {
+      if (msg?.type === "FT_NAVIGATED") {
     return await handleNavigated(msg);
   }
 
@@ -252,6 +252,18 @@ async function handleMessage(msg) {
     await loadExtensionDataFromServer().catch((err) => {
       LOG("Failed to load extension data after website login:", err);
     });
+    
+    // Notify content script to re-check current page (in case user is on a blocked channel)
+    try {
+      const tabs = await chrome.tabs.query({ url: "*://*.youtube.com/*" });
+      for (const tab of tabs) {
+        chrome.tabs.sendMessage(tab.id, { type: "FT_RECHECK_BLOCKING" }).catch(() => {
+          // Tab might not have content script loaded, ignore
+        });
+      }
+    } catch (e) {
+      // Ignore errors - this is a nice-to-have
+    }
     
     return { ok: true, email };
   }
@@ -337,7 +349,16 @@ async function handleMessage(msg) {
     const { ft_blocked_channels = [] } = await getLocal(["ft_blocked_channels"]);
     const blockedChannels = Array.isArray(ft_blocked_channels) ? [...ft_blocked_channels] : [];
     
-    if (!blockedChannels.includes(channel)) {
+    // Check if already blocked (case-insensitive)
+    const channelLower = channel.toLowerCase().trim();
+    const isAlreadyBlocked = blockedChannels.some(blocked => {
+      const blockedLower = blocked.toLowerCase().trim();
+      return blockedLower === channelLower || 
+             channelLower.includes(blockedLower) || 
+             blockedLower.includes(channelLower);
+    });
+    
+    if (!isAlreadyBlocked) {
       blockedChannels.push(channel);
       await setLocal({ 
         ft_blocked_channels: blockedChannels,
@@ -345,12 +366,24 @@ async function handleMessage(msg) {
       });
       LOG("Channel blocked permanently:", channel);
       
-      // Sync to server
-      await saveExtensionDataToServer({
-        blocked_channels: blockedChannels
-      }).catch((err) => {
+      // Sync to server IMMEDIATELY
+      try {
+        await saveExtensionDataToServer({
+          blocked_channels: blockedChannels
+        });
+        LOG("Channel block saved to server successfully");
+        
+        // Pull fresh data from server to confirm sync
+        await loadExtensionDataFromServer().catch((err) => {
+          LOG("Failed to reload data after block (non-critical):", err);
+          // Non-critical - data is already saved, this is just to confirm
+        });
+    } catch (err) {
         LOG("Failed to save permanent block to server:", err);
-      });
+        // Still return success - data is in local storage, will sync on next hourly sync
+      }
+    } else {
+      LOG("Channel already blocked:", channel);
     }
     
     return { ok: true, channel };

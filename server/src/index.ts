@@ -803,7 +803,7 @@ app.get("/extension/get-data", async (req, res) => {
     // Get user goals from users table
     const { data: userData, error: userError } = await supabase
       .from("users")
-      .select("goals, anti_goals")
+      .select("goals, anti_goals, distracting_channels")
       .eq("email", userId)
       .single();
 
@@ -833,6 +833,19 @@ app.get("/extension/get-data", async (req, res) => {
       }
     }
 
+    // Parse distracting_channels (stored as TEXT in database, should be JSON array)
+    let distracting_channels: string[] = [];
+    if (userData?.distracting_channels) {
+      try {
+        distracting_channels = typeof userData.distracting_channels === "string"
+          ? JSON.parse(userData.distracting_channels)
+          : (Array.isArray(userData.distracting_channels) ? userData.distracting_channels : []);
+      } catch (e) {
+        console.warn("[Extension Data] Failed to parse distracting_channels:", e);
+        distracting_channels = [];
+      }
+    }
+
     if (extensionError && extensionError.code !== "PGRST116") {
       // PGRST116 = no rows found (acceptable)
       console.error("[Extension Data] Error fetching extension_data:", extensionError);
@@ -853,6 +866,7 @@ app.get("/extension/get-data", async (req, res) => {
           settings: {},
           goals: goals,
           anti_goals: anti_goals,
+          distracting_channels: distracting_channels,
         },
       });
     }
@@ -866,6 +880,7 @@ app.get("/extension/get-data", async (req, res) => {
         settings: extensionData.settings || {},
         goals: goals,
         anti_goals: anti_goals,
+        distracting_channels: distracting_channels,
       },
     });
   } catch (error) {

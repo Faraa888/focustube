@@ -29,6 +29,7 @@ const DEFAULTS = {
   ft_days_left: null,             // number of days left in trial (null if not trial)
   ft_user_goals: [],              // user goals array (for AI classification)
   ft_user_anti_goals: [],         // user anti-goals array (what distracts them)
+  ft_user_distraction_channels: [], // user distraction channels array (channels that derail them)
   ft_onboarding_completed: false, // true = user has completed onboarding
   ft_reset_period: "daily",       // daily | weekly | monthly
   ft_last_reset_key: "",          // stores last date/week/month key
@@ -542,6 +543,12 @@ export async function loadExtensionDataFromServer() {
     if (anti_goals !== undefined) {
       storageUpdate.ft_user_anti_goals = Array.isArray(anti_goals) ? anti_goals : [];
     }
+
+    // Load distracting_channels if provided (from users table)
+    const distracting_channels = result.data?.distracting_channels;
+    if (distracting_channels !== undefined) {
+      storageUpdate.ft_user_distraction_channels = Array.isArray(distracting_channels) ? distracting_channels : [];
+    }
     
     await setLocal(storageUpdate);
 
@@ -550,6 +557,7 @@ export async function loadExtensionDataFromServer() {
       watchHistory: (watch_history || []).length,
       goals: (goals || []).length,
       antiGoals: (anti_goals || []).length,
+      distractionChannels: (distracting_channels || []).length,
     });
 
     return result.data;

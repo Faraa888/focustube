@@ -15,9 +15,13 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { removeEmailFromExtension } from "@/lib/extensionStorage";
 import { X } from "lucide-react";
+import { useRequireAuth } from "@/hooks/useRequireAuth";
 
 const Settings = () => {
   const navigate = useNavigate();
+  const authStatus = useRequireAuth();
+  const isAuthenticated = authStatus === "authenticated";
+  const loadingAuth = authStatus === "loading";
   const [blockShorts, setBlockShorts] = useState(true);
   const [hideRecommendations, setHideRecommendations] = useState(false);
   const [dailyLimit, setDailyLimit] = useState([90]);
@@ -43,6 +47,15 @@ const Settings = () => {
 
   // Load blocked channels and focus window settings on mount
   useEffect(() => {
+    if (authStatus === "loading") {
+      return;
+    }
+
+    if (authStatus !== "authenticated") {
+      setLoadingChannels(false);
+      return;
+    }
+
     const loadSettings = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -83,7 +96,7 @@ const Settings = () => {
     };
 
     loadSettings();
-  }, []);
+  }, [authStatus]);
 
   // Helper: Convert 24h format (13:00) to 12h format (1:00 PM)
   const convert24hTo12h = (time24: string): string => {
@@ -314,6 +327,18 @@ const Settings = () => {
       setLoggingOut(false);
     }
   };
+
+  if (loadingAuth) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

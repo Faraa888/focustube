@@ -7,6 +7,15 @@
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────
+// DEBUG MODE (set false when you ship)
+// ─────────────────────────────────────────────────────────────
+const DEBUG = false;
+function LOG(...a) {
+  if (!DEBUG) return;
+  console.log(`%c[FocusTube Content]`, "color: #0ff; font-weight: bold;", ...a);
+}
+
 /**
  * Get server URL - checks storage for override, defaults to localhost
  * Cross-browser compatible (no imports needed for content scripts)
@@ -461,6 +470,80 @@ function extractVideoIdFromUrl(url = location.href) {
 }
 
 /**
+ * Fast channel extraction for blocking check (meta tags first, then DOM)
+ * This is optimized for speed - tries meta tags first (instant), falls back to DOM
+ * @returns {string|null} Channel name or null if not found
+ */
+function extractChannelFast() {
+  const currentVideoId = extractVideoIdFromUrl();
+  
+  // Method 1: Meta tags FIRST (fastest, most reliable)
+  const metaChannel = document.querySelector('meta[property="og:video:channel_name"]');
+  const metaUrl = document.querySelector('meta[property="og:url"]');
+  
+  if (metaChannel && metaUrl) {
+    const channelName = metaChannel.getAttribute("content")?.trim();
+    const metaVideoId = extractVideoIdFromUrl(metaUrl.getAttribute("content"));
+    
+    // Verify meta tag is for CURRENT video (not stale from previous navigation)
+    if (metaVideoId === currentVideoId && channelName) {
+      return channelName; // ✅ Fresh meta tag for current video!
+    }
+    // If video IDs don't match, meta tag is stale → skip it
+  } else if (metaChannel) {
+    // Meta channel exists but no URL meta tag - trust it (meta tags are usually fresh)
+    const channelName = metaChannel.getAttribute("content")?.trim();
+    if (channelName) {
+      return channelName;
+    }
+  }
+  
+  // Method 2: DOM fallback (if meta tags are stale or missing)
+  const mainVideoContainer = document.querySelector(
+    "#primary-inner, ytd-watch-metadata, ytd-video-owner-renderer"
+  );
+  
+  if (mainVideoContainer) {
+    const channelElement = mainVideoContainer.querySelector(
+      "ytd-channel-name a, #channel-name a, #owner-sub-count a"
+    );
+    
+    if (channelElement) {
+      // Verify element is visible and in main video container
+      const isVisible = channelElement.offsetParent !== null;
+      const isInMainVideo = mainVideoContainer.contains(channelElement);
+      
+      if (isVisible && isInMainVideo) {
+        const channelText = channelElement.textContent?.trim();
+        if (channelText) {
+          return channelText; // ✅ DOM is always current after navigation
+        }
+      }
+    }
+  }
+  
+  // Method 3: Last resort - try more specific DOM selectors
+  const candidate = document.querySelector(
+    "ytd-watch-metadata ytd-channel-name a, " +
+    "ytd-video-owner-renderer #channel-name a"
+  );
+  
+  if (candidate) {
+    const isVisible = candidate.offsetParent !== null;
+    const isInMainVideo = candidate.closest("#primary, ytd-watch-metadata, ytd-video-owner-renderer");
+    
+    if (isVisible && isInMainVideo) {
+      const channelText = candidate.textContent?.trim();
+      if (channelText) {
+        return channelText;
+      }
+    }
+  }
+  
+  return null; // Not found - don't block (safer than false positive)
+}
+
+/**
  * Step 1: Wait for DOM element to appear (for YouTube SPA async loading)
  * @param {string} selector - CSS selector to wait for
  * @param {number} timeout - Maximum time to wait in milliseconds (default: 2000)
@@ -632,15 +715,86 @@ function extractVideoMetadata() {
       });
     }
 
-    // 4. Channel Name
-    const channelElement = document.querySelector("ytd-channel-name a, #owner-sub-count a, ytd-video-owner-renderer #channel-name a");
-    if (channelElement) {
-      metadata.channel = channelElement.textContent?.trim() || null;
-    } else {
-      // Fallback: try meta tags
-      const metaChannel = document.querySelector('meta[property="og:video:channel_name"], link[itemprop="name"]');
+    // 4. Channel Name - ONLY from main video, not sidebar
+    // Also verify it's from current page, not stale from previous page
+    let channelElement = null;
+    const currentVideoId = extractVideoIdFromUrl();
+
+    // Method 1: Look within main video container (most reliable)
+    const mainVideoContainer = document.querySelector(
+      "#primary-inner, ytd-watch-metadata, ytd-video-owner-renderer"
+    );
+
+    if (mainVideoContainer) {
+      // Search ONLY within main video area (not sidebar)
+      channelElement = mainVideoContainer.querySelector(
+        "ytd-channel-name a, #channel-name a, #owner-sub-count a"
+      );
+      
+      // Verify channel element is from current page (not stale)
+      if (channelElement) {
+        // Check if element is visible (not hidden/stale)
+        const isVisible = channelElement.offsetParent !== null;
+        // Check if it's actually in the main video container (not sidebar)
+        const isInMainVideo = mainVideoContainer.contains(channelElement);
+        
+        if (!isVisible || !isInMainVideo) {
+          // Element is stale or in wrong location, ignore it
+          channelElement = null;
+        }
+      }
+    }
+
+    // Method 2: If not found, try more specific selectors (still avoiding sidebar)
+    if (!channelElement) {
+      const candidate = document.querySelector(
+        "ytd-watch-metadata ytd-channel-name a, " +
+        "ytd-video-owner-renderer #channel-name a, " +
+        "#owner-sub-count a"
+      );
+      
+      // Verify candidate is from current page
+      if (candidate) {
+        const isVisible = candidate.offsetParent !== null;
+        const isInMainVideo = candidate.closest("#primary, ytd-watch-metadata, ytd-video-owner-renderer");
+        
+        if (isVisible && isInMainVideo) {
+          channelElement = candidate;
+        }
+      }
+    }
+
+    // Method 3: Fallback to meta tags (most reliable, but may not always be present)
+    if (!channelElement) {
+      const metaChannel = document.querySelector('meta[property="og:video:channel_name"]');
       if (metaChannel) {
-        metadata.channel = metaChannel.getAttribute("content")?.trim() || metaChannel.getAttribute("href")?.trim() || null;
+        const channelName = metaChannel.getAttribute("content")?.trim();
+        // Verify meta tag is for current video by checking URL matches
+        const metaUrl = document.querySelector('meta[property="og:url"]');
+        if (metaUrl) {
+          const metaVideoId = extractVideoIdFromUrl(metaUrl.getAttribute("content"));
+          if (metaVideoId === currentVideoId && channelName) {
+            metadata.channel = channelName;
+          }
+        } else if (channelName) {
+          // If no URL meta tag, trust the channel name (meta tags are usually fresh)
+          metadata.channel = channelName;
+        }
+      }
+    } else {
+      // Verify channel element is actually for current video
+      const channelText = channelElement.textContent?.trim();
+      if (channelText) {
+        metadata.channel = channelText;
+      } else {
+        // Channel element found but no text - might be stale, try meta tags
+        const metaChannel = document.querySelector('meta[property="og:video:channel_name"]');
+        if (metaChannel) {
+          const channelName = metaChannel.getAttribute("content")?.trim();
+          if (channelName) {
+            metadata.channel = channelName;
+          }
+        }
       }
     }
 
@@ -2600,6 +2754,38 @@ async function stopGlobalTimeTracking() {
 // MODE CHANGE HANDLER (Dev/User toggle listener)
 // ─────────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg) => {
+  // Re-check blocking when data is loaded after login
+  if (msg?.type === "FT_RECHECK_BLOCKING") {
+    const pageType = detectPageType();
+    if (pageType === "WATCH") {
+      const videoId = extractVideoIdFromUrl();
+      const channel = extractChannelFast();
+      
+      if (channel && videoId) {
+        // Re-check blocking with fresh data
+        chrome.storage.local.get(["ft_blocked_channels"]).then(({ ft_blocked_channels = [] }) => {
+          const blockedChannels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
+          if (blockedChannels.length > 0) {
+            const channelLower = channel.toLowerCase().trim();
+            const isBlocked = blockedChannels.some(blocked => {
+              const blockedLower = blocked.toLowerCase().trim();
+              return blockedLower === channelLower || 
+                     channelLower.includes(blockedLower) || 
+                     blockedLower.includes(channelLower);
+            });
+            
+            if (isBlocked) {
+              console.log("[FT] 🚫 Channel blocked (after login re-check):", channel);
+              window.location.href = "https://www.youtube.com/";
+            }
+          }
+        }).catch((e) => {
+          console.warn("[FT] Error re-checking blocking:", e.message);
+        });
+      }
+    }
+    return; // Don't continue to other handlers
+  }
   if (msg?.type === "FT_MODE_CHANGED" || msg?.type === "FT_PLAN_CHANGED") {
     console.log(`[FT content] Plan changed → ${msg.plan}`);
     // Clear overlays & force fresh navigation logic
@@ -2631,7 +2817,7 @@ async function handleNavigation() {
   
   // Debug: Log when handleNavigation is called
   const currentUrl = location.href;
-  console.log("[FT DEBUG] handleNavigation() called", { url: currentUrl, timestamp: Date.now() });
+  LOG("[FT DEBUG] handleNavigation() called", { url: currentUrl, timestamp: Date.now() });
   
   // Check if onboarding is needed (first-time user)
   try {
@@ -2692,8 +2878,68 @@ async function handleNavigation() {
   // Extract video metadata for watch pages (for AI classification)
   let videoMetadata = null;
   if (pageType === "WATCH") {
-    // Start 45-second watch timer for AI classification
+    // ============================================================
+    // FAST PATH: Immediate blocking check (before full metadata extraction)
+    // ============================================================
     const videoId = extractVideoIdFromUrl();
+    let channel = extractChannelFast(); // Fast extraction (meta tags first, then DOM)
+    
+    // If channel not found immediately, wait 500ms and retry once (for SPA navigation lag)
+    if (!channel && videoId) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      channel = extractChannelFast(); // Retry once
+    }
+    
+    if (channel && videoId) {
+      // Check blocked channels immediately (already in memory)
+      try {
+        const { ft_blocked_channels = [] } = await chrome.storage.local.get(["ft_blocked_channels"]);
+        const blockedChannels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
+        
+        if (blockedChannels.length > 0) {
+          const channelLower = channel.toLowerCase().trim();
+          const isBlocked = blockedChannels.some(blocked => {
+            const blockedLower = blocked.toLowerCase().trim();
+            // Exact match or substring match (handles "Eddie Hall" vs "Eddie Hall The Beast")
+            return blockedLower === channelLower || 
+                   channelLower.includes(blockedLower) || 
+                   blockedLower.includes(channelLower);
+          });
+          
+          if (isBlocked) {
+            console.log("[FT] 🚫 Channel blocked (fast check):", channel);
+            // Redirect immediately - don't wait for anything
+            window.location.href = "https://www.youtube.com/";
+            return; // Stop here, don't continue
+          }
+        }
+        
+        // Channel is NOT blocked - show block button immediately
+        // (Don't wait for full metadata extraction)
+        try {
+          const { ft_blocked_channels: currentBlocked = [] } = await chrome.storage.local.get(["ft_blocked_channels"]);
+          const channelLower = channel.toLowerCase().trim();
+          const isAlreadyBlocked = Array.isArray(currentBlocked) && currentBlocked.some(blocked => {
+            const blockedLower = blocked.toLowerCase().trim();
+            return blockedLower === channelLower || 
+                   channelLower.includes(blockedLower) || 
+                   blockedLower.includes(channelLower);
+          });
+          
+          if (!isAlreadyBlocked) {
+            console.log("[FT] Channel not blocked, injecting button immediately for:", channel);
+            await injectBlockChannelButton(channel);
+          }
+        } catch (e) {
+          console.warn("[FT] Error injecting block button (fast path):", e.message);
+        }
+      } catch (e) {
+        console.warn("[FT] Error checking blocked channels (fast path):", e.message);
+        // Continue with normal flow if check fails
+      }
+    }
+    
+    // Start 45-second watch timer for AI classification
     if (videoId && videoId !== currentWatchVideoId) {
       // New video - reset tracking
       if (videoWatchTimer) {
@@ -2796,154 +3042,115 @@ async function handleNavigation() {
     } else if (videoId === currentWatchVideoId && videoClassified) {
       // Same video, already classified - do nothing
     }
+    
+    // Extract metadata from meta tags immediately (instant, no wait)
     try {
-      const initialVideoId = extractVideoIdFromUrl();
-      console.log("[FT] Starting metadata extraction for video:", initialVideoId);
+      const videoId = extractVideoIdFromUrl();
+      if (!videoId) {
+        console.warn("[FT] No video ID found, skipping metadata extraction");
+        // Continue to background decision check even without video ID
+      } else {
+        // Extract everything from meta tags immediately (instant)
+        videoMetadata = {
+          video_id: videoId,
+          title: document.querySelector('meta[property="og:title"]')?.getAttribute("content")?.trim() || null,
+          description: document.querySelector('meta[property="og:description"]')?.getAttribute("content")?.trim()?.substring(0, 500) || null,
+          channel: extractChannelFast(), // Already uses meta tags first
+          tags: Array.from(document.querySelectorAll('meta[property="og:video:tag"]')).map(el => el.getAttribute("content")?.trim()).filter(Boolean),
+          category: document.querySelector('meta[itemprop="genre"]')?.getAttribute("content")?.trim() || null, // Try meta tag first
+          related_videos: [], // Optional, can be empty
+          duration_seconds: null, // Optional, can be null
+          is_shorts: location.pathname.startsWith("/shorts/") || location.pathname.includes("/shorts/"),
+          url: location.href
+        };
 
-      await expandDescriptionIfCollapsed(initialVideoId);
-
-      let attempts = 0;
-      const maxAttempts = 10; // 5 seconds max (10 × 500ms)
-
-      let lastSeenVideoId = initialVideoId;      
-      while (attempts < maxAttempts) {
-        const currentVideoId = extractVideoIdFromUrl();
-        
-        // If video ID changed during extraction, reset and start over
-        if (currentVideoId !== lastSeenVideoId && currentVideoId) {
-          console.log("[FT] Video ID changed during extraction, resetting:", {
-            old: lastSeenVideoId,
-            new: currentVideoId
-          });
-          lastSeenVideoId = currentVideoId;
-          attempts = 0; // Reset attempts for new video
-          await new Promise((resolve) => setTimeout(resolve, 500)); // Wait for DOM to update
-          continue;
-        }
-        
-        videoMetadata = extractVideoMetadata(); 
-
-        if (videoMetadata) {
-          videoMetadata.video_id = currentVideoId;
+        // If title/channel missing, wait 500ms and retry once (for SPA navigation lag)
+        if ((!videoMetadata.title || !videoMetadata.channel) && videoId) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          videoMetadata.title = videoMetadata.title || document.querySelector('meta[property="og:title"]')?.getAttribute("content")?.trim() || null;
+          videoMetadata.channel = videoMetadata.channel || extractChannelFast();
         }
 
-        // Verify channel element is actually on the current page (not stale)
-        if (videoMetadata?.channel) {
-          const channelElement = document.querySelector("ytd-channel-name a, #owner-sub-count a, ytd-video-owner-renderer #channel-name a");
-          if (channelElement) {
-            const extractedChannel = channelElement.textContent?.trim();
-            // If channel doesn't match what we extracted, it might be stale
-            if (extractedChannel && extractedChannel !== videoMetadata.channel) {
-              console.log("[FT] Channel mismatch detected, updating:", {
-                old: videoMetadata.channel,
-                new: extractedChannel
-              });
-              videoMetadata.channel = extractedChannel;
-            }
-          }
-        }
-
-        const allReady = Boolean(
-          videoMetadata &&
-          videoMetadata.video_id &&
-          videoMetadata.title &&
-          videoMetadata.channel &&
-          videoMetadata.video_id === currentVideoId // Ensure video ID matches
-        );
-
-        if (allReady) {
-          console.log("[FT] ✅ Core metadata ready:", {
+        // Verify we have minimum required fields (title is required for AI)
+        if (videoMetadata.video_id && videoMetadata.title) {
+          console.log("[FT] ✅ Metadata extracted from meta tags (instant):", {
             video_id: videoMetadata.video_id,
             title: videoMetadata.title?.substring(0, 50),
-            channel: videoMetadata.channel,
-            category: videoMetadata.category,
-            description_length: videoMetadata.description?.length || 0,
-            tags_count: videoMetadata.tags?.length || 0
+            channel: videoMetadata.channel || "MISSING",
+            has_description: !!videoMetadata.description,
+            category: videoMetadata.category || "MISSING",
+            tags_count: videoMetadata.tags.length
           });
-          break;
-        }
 
-        attempts++;
-        if (attempts < maxAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
-      }
-
-      if (!videoMetadata || !videoMetadata.video_id || !videoMetadata.title) {
-        console.warn("[FT] ⚠️ Metadata incomplete after 5s, proceeding with partial data:", {
-          video_id: videoMetadata?.video_id || "MISSING",
-          title_present: Boolean(videoMetadata?.title),
-          channel_present: Boolean(videoMetadata?.channel),
-          category_present: Boolean(videoMetadata?.category),
-          description_present: Boolean(videoMetadata?.description)
-        });
-      }
-
-      if (videoMetadata) {
-        // Ensure category is fresh (wait specifically for category/meta to update)
-        let categoryReady = videoMetadata.category && videoMetadata.category !== "MISSING" ? videoMetadata.category : null;
-        let descriptionReady = videoMetadata.description || null;
-        const extraAttempts = 12; // additional 6 seconds max (12 × 500ms)
-
-        if (!categoryReady) {
-          console.log("[FT] Category not ready, starting extended wait loop...");
-          for (let i = 0; i < extraAttempts; i++) {
-            await new Promise((resolve) => setTimeout(resolve, 500));
-
-            // Try to expand description during category wait if still missing
-            if (!descriptionReady) {
-              await expandDescriptionIfCollapsed(initialVideoId);
+          // Send to AI immediately (non-blocking) - blocking is already done via fast path
+          chrome.runtime.sendMessage({
+            type: "FT_CLASSIFY_VIDEO",
+            videoMetadata: videoMetadata,
+          }).then((response) => {
+            if (response?.ok && response?.classification) {
+              console.log("[FT] Video classified (initial):", {
+                video_id: videoId.substring(0, 10),
+                category: response.classification.category_primary || response.classification.category,
+                distraction: response.classification.distraction_level || response.classification.category,
+              });
+              videoClassified = true;
+              currentVideoAIClassification = response.classification;
             }
+          }).catch((err) => {
+            console.warn("[FT] Error classifying video:", err.message);
+          });
 
-            const latestMetadata = extractVideoMetadata();
-            const latestCategory = latestMetadata?.category && latestMetadata.category !== "MISSING" ? latestMetadata.category : null;
+          // Background: Try to get category from DOM for up to 5 seconds (non-blocking)
+          // This enriches metadata but doesn't block the user experience
+          if (!videoMetadata.category || videoMetadata.category === "MISSING") {
+            (async () => {
+              const maxAttempts = 10; // 5 seconds max (10 × 500ms)
+              let categoryFound = null;
 
-            if (!descriptionReady && latestMetadata?.description) {
-              descriptionReady = latestMetadata.description;
-              console.log(`[FT] Description found on attempt ${i + 1}`);
-            }
+              for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                // Check if video ID changed (user navigated away)
+                const currentVideoId = extractVideoIdFromUrl();
+                if (currentVideoId !== videoId) {
+                  console.log("[FT] Video ID changed during category fetch, stopping");
+                  return;
+                }
 
-            if ((!videoMetadata.tags || videoMetadata.tags.length === 0) && latestMetadata?.tags?.length) {
-              videoMetadata.tags = latestMetadata.tags;
-            }
+                // Try to extract category from DOM
+                const latestMetadata = extractVideoMetadata();
+                const latestCategory = latestMetadata?.category && latestMetadata.category !== "MISSING" ? latestMetadata.category : null;
 
-            if (latestCategory) {
-              categoryReady = latestCategory;
-              console.log(`[FT] ✅ Category found on attempt ${i + 1}: ${latestCategory}`);
-              break;
-            }
+                if (latestCategory) {
+                  categoryFound = latestCategory;
+                  console.log(`[FT] ✅ Category found in background (attempt ${attempt + 1}): ${latestCategory}`);
+                  
+                  // Update metadata (for future reference, but AI already classified)
+                  videoMetadata.category = latestCategory;
+                  
+                  // Optional: If AI hasn't responded yet, we could update the classification
+                  // But since category is optional, we'll just log it
+                  break;
+                }
 
-            if (i === extraAttempts - 1) {
-              console.warn(`[FT] Category still missing after ${extraAttempts} attempts`);
-            }
-          }
+                // Wait 500ms before next attempt
+                if (attempt < maxAttempts - 1) {
+                  await new Promise((resolve) => setTimeout(resolve, 500));
+                }
+              }
 
-          if (!categoryReady) {
-            console.warn("[FT] ⚠️ Category missing after extended wait, falling back to 'Unknown'");
-            categoryReady = "Unknown";
+              if (!categoryFound) {
+                console.log("[FT] Category not found after 5s background search (optional field)");
+              }
+            })(); // Fire and forget - runs in background
           }
         } else {
-          console.log(`[FT] Category already ready: ${categoryReady}`);
+          console.warn("[FT] Missing required metadata (title or video_id):", {
+            has_video_id: !!videoMetadata.video_id,
+            has_title: !!videoMetadata.title
+          });
         }
-
-        videoMetadata.category = categoryReady;
-        if (descriptionReady) {
-          videoMetadata.description = descriptionReady;
-        }
-
-        videoMetadata.url = location.href;
-
-        console.log("[FT] ✅ Final metadata ready:", {
-          video_id: videoMetadata.video_id,
-          title: videoMetadata.title?.substring(0, 60),
-          channel: videoMetadata.channel,
-          category: videoMetadata.category,
-          description_length: videoMetadata.description?.length || 0,
-          tags_count: videoMetadata.tags?.length || 0
-        });
       }
     } catch (e) {
-      console.warn("[FT] Error extracting video metadata:", e.message || e);
+      console.warn("[FT] Error extracting metadata from meta tags:", e.message);
     }
   }
 
@@ -2956,7 +3163,7 @@ async function handleNavigation() {
     }
     
     // Phase 1: Log before sending to background
-    console.log("[FT DEBUG] Sending to background:", {
+    LOG("[FT DEBUG] Sending to background:", {
       pageType,
       url: location.href,
       videoMetadata: videoMetadata ? {
@@ -3718,6 +3925,34 @@ setupFullscreenDetection();
 // ─────────────────────────────────────────────────────────────
 chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace !== "local") return;
+  
+  // Re-check blocking when blocked channels change (cross-tab sync)
+  if (changes.ft_blocked_channels) {
+    const pageType = detectPageType();
+    if (pageType === "WATCH") {
+      const videoId = extractVideoIdFromUrl();
+      const channel = extractChannelFast();
+      
+      if (channel && videoId) {
+        const newBlockedChannels = changes.ft_blocked_channels.newValue || [];
+        if (Array.isArray(newBlockedChannels) && newBlockedChannels.length > 0) {
+          const channelLower = channel.toLowerCase().trim();
+          const isBlocked = newBlockedChannels.some(blocked => {
+            const blockedLower = blocked.toLowerCase().trim();
+            return blockedLower === channelLower || 
+                   channelLower.includes(blockedLower) || 
+                   blockedLower.includes(channelLower);
+          });
+          
+          if (isBlocked) {
+            console.log("[FT] 🚫 Channel blocked (cross-tab sync):", channel);
+            window.location.href = "https://www.youtube.com/";
+            return; // Stop here, don't continue with other listeners
+          }
+        }
+      }
+    }
+  }
   
   // Detect daily reset - if reset key changed, reset the global time tracker
   if (changes.ft_last_reset_key) {
