@@ -1941,6 +1941,126 @@ async function showSpiralNudge(spiralInfo) {
   console.log("[FT] ✅ Spiral nudge added to DOM");
 }
 
+// Button injection observer (watches for channel element to appear)
+let buttonInjectionObserver = null;
+let pendingButtonChannel = null;
+
+/**
+ * Checks if channel is blocked, then either redirects or injects button
+ * @param {string} channelName - Name of channel
+ * @param {Element} channelElement - DOM element where button should be injected
+ */
+async function checkBlockingAndInjectButton(channelName, channelElement) {
+  try {
+    const { ft_blocked_channels = [] } = await chrome.storage.local.get(["ft_blocked_channels"]);
+    const blockedChannels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
+    
+    if (blockedChannels.length > 0) {
+      const channelLower = channelName.toLowerCase().trim();
+      const isBlocked = blockedChannels.some(blocked => {
+        const blockedLower = blocked.toLowerCase().trim();
+        return blockedLower === channelLower || 
+               channelLower.includes(blockedLower) || 
+               blockedLower.includes(channelLower);
+      });
+      
+      if (isBlocked) {
+        console.log("[FT] 🚫 Channel blocked (button injection check):", channelName);
+        window.location.href = "https://www.youtube.com/";
+        return; // Redirect, don't inject button
+      }
+    }
+    
+    // Not blocked, inject button
+    await injectBlockChannelButton(channelName);
+  } catch (e) {
+    console.warn("[FT] Error checking blocking for button injection:", e);
+  }
+}
+
+/**
+ * Sets up MutationObserver to watch for channel element, then injects button or redirects
+ * @param {string} channelName - Name of channel
+ */
+function setupButtonInjectionObserver(channelName) {
+  // Clear any existing observer
+  if (buttonInjectionObserver) {
+    buttonInjectionObserver.disconnect();
+    buttonInjectionObserver = null;
+  }
+  
+  // Don't set up if button already exists
+  if (document.getElementById("ft-block-channel-btn")) {
+    return;
+  }
+  
+  pendingButtonChannel = channelName;
+  console.log("[FT] Setting up button injection observer for:", channelName);
+  
+  // Try immediate injection first
+  const channelSelectors = [
+    "ytd-channel-name a",
+    "#owner-sub-count a",
+    "ytd-video-owner-renderer #channel-name a",
+    "ytd-watch-metadata ytd-channel-name a"
+  ];
+  
+  let channelElement = null;
+  for (const selector of channelSelectors) {
+    channelElement = document.querySelector(selector);
+    if (channelElement) break;
+  }
+  
+  if (channelElement && !document.getElementById("ft-block-channel-btn")) {
+    // Element already exists, check blocking and act
+    checkBlockingAndInjectButton(channelName, channelElement);
+    pendingButtonChannel = null;
+    return;
+  }
+  
+  // Set up observer to watch for channel element
+  buttonInjectionObserver = new MutationObserver(() => {
+    // Check if button already exists
+    if (document.getElementById("ft-block-channel-btn")) {
+      buttonInjectionObserver.disconnect();
+      buttonInjectionObserver = null;
+      pendingButtonChannel = null;
+      return;
+    }
+    
+    // Try to find channel element
+    let channelElement = null;
+    for (const selector of channelSelectors) {
+      channelElement = document.querySelector(selector);
+      if (channelElement) break;
+    }
+    
+    if (channelElement) {
+      // Element found, check blocking and act
+      console.log("[FT] Channel element appeared, checking blocking for:", channelName);
+      buttonInjectionObserver.disconnect();
+      buttonInjectionObserver = null;
+      checkBlockingAndInjectButton(channelName, channelElement);
+      pendingButtonChannel = null;
+    }
+  });
+  
+  // Watch for changes
+  buttonInjectionObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+  
+  // Timeout after 5 seconds
+  setTimeout(() => {
+    if (buttonInjectionObserver) {
+      buttonInjectionObserver.disconnect();
+      buttonInjectionObserver = null;
+      pendingButtonChannel = null;
+    }
+  }, 5000);
+}
+
 /**
  * Injects "Block Channel" button on watch pages
  * @param {string} channelName - Name of channel to block
@@ -3013,6 +3133,13 @@ async function handleNavigation() {
   // Extract video metadata for watch pages (for AI classification)
   let videoMetadata = null;
   if (pageType === "WATCH") {
+    // Clear any existing button injection observer (new navigation)
+    if (buttonInjectionObserver) {
+      buttonInjectionObserver.disconnect();
+      buttonInjectionObserver = null;
+      pendingButtonChannel = null;
+    }
+    
     // ============================================================
     // STEP 1: Reload fresh data from server FIRST (before any checks)
     // ============================================================
@@ -3043,6 +3170,7 @@ async function handleNavigation() {
         const { ft_blocked_channels = [] } = await chrome.storage.local.get(["ft_blocked_channels"]);
         const blockedChannels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
         
+        // Quick blocking check (before setting up observer)
         if (blockedChannels.length > 0) {
           const channelLower = channel.toLowerCase().trim();
           const isBlocked = blockedChannels.some(blocked => {
@@ -3061,25 +3189,10 @@ async function handleNavigation() {
           }
         }
         
-        // Channel is NOT blocked - show block button immediately
-        // (Don't wait for full metadata extraction)
-        try {
-          const { ft_blocked_channels: currentBlocked = [] } = await chrome.storage.local.get(["ft_blocked_channels"]);
-          const channelLower = channel.toLowerCase().trim();
-          const isAlreadyBlocked = Array.isArray(currentBlocked) && currentBlocked.some(blocked => {
-            const blockedLower = blocked.toLowerCase().trim();
-            return blockedLower === channelLower || 
-                   channelLower.includes(blockedLower) || 
-                   blockedLower.includes(channelLower);
-          });
-          
-          if (!isAlreadyBlocked) {
-            console.log("[FT] Channel not blocked, injecting button immediately for:", channel);
-            await injectBlockChannelButton(channel);
-          }
-        } catch (e) {
-          console.warn("[FT] Error injecting block button (fast path):", e.message);
-        }
+        // Channel is NOT blocked - set up observer to inject button when element appears
+        // Observer will also re-check blocking when element appears (with fresh data)
+        console.log("[FT] Channel not blocked, setting up button injection observer for:", channel);
+        setupButtonInjectionObserver(channel);
       } catch (e) {
         console.warn("[FT] Error checking blocked channels (fast path):", e.message);
         // Continue with normal flow if check fails
@@ -3638,28 +3751,15 @@ async function handleNavigation() {
   }
 
   // Inject "Block Channel" button on watch pages (if channel is not already blocked)
+  // Use observer approach for reliable injection
   if (pageType === "WATCH" && videoMetadata && videoMetadata.channel) {
     try {
-      const { ft_blocked_channels = [] } = await chrome.storage.local.get(["ft_blocked_channels"]);
       const channelName = videoMetadata.channel.trim(); // Use exact name from metadata
-      const channelLower = channelName.toLowerCase();
-      // Use same substring matching as blocking logic
-      const isBlocked = Array.isArray(ft_blocked_channels) && ft_blocked_channels.some(blocked => {
-        const blockedLower = blocked.toLowerCase().trim();
-        return blockedLower === channelLower || 
-               channelLower.includes(blockedLower) || 
-               blockedLower.includes(channelLower);
-      });
-      
-      if (!isBlocked) {
-        // Channel is not blocked - inject button with EXACT channel name
-        console.log("[FT] Channel not blocked, injecting button for:", channelName);
-        await injectBlockChannelButton(channelName);
-      } else {
-        console.log("[FT] Channel already blocked (substring match):", channelName);
-      }
+      // Set up observer - it will check blocking and inject button when element appears
+      console.log("[FT] Setting up button injection observer (slow path) for:", channelName);
+      setupButtonInjectionObserver(channelName);
     } catch (e) {
-      console.warn("[FT] Error checking blocked channels for button injection:", e.message);
+      console.warn("[FT] Error setting up button injection observer:", e.message);
     }
   }
 }
