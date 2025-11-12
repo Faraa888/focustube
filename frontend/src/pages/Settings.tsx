@@ -360,8 +360,27 @@ const Settings = () => {
       });
 
       if (response.ok) {
-        // Refresh page to show normalized names
-        window.location.reload();
+        // Show success toast with normalization info
+        const changedCount = normalizedChannels.filter((name: string, idx: number) => 
+          name.toLowerCase().trim() !== blockedChannels[idx]?.toLowerCase().trim()
+        ).length;
+        
+        toast({
+          title: "Channels Saved",
+          description: changedCount > 0 
+            ? `${changedCount} channel name(s) normalized and saved`
+            : "Channels saved (no normalization needed)",
+          variant: "default",
+        });
+        
+        // Delay reload so logs are visible (10 seconds for debugging)
+        console.log("[Settings] ✅ Save successful, reloading in 10 seconds...");
+        console.log("[Settings] 📋 Original channels:", blockedChannels);
+        console.log("[Settings] ✨ Normalized channels:", normalizedChannels);
+        
+        setTimeout(() => {
+          window.location.reload();
+        }, 10000); // 10 seconds delay
       } else {
         throw new Error("Failed to save");
       }
