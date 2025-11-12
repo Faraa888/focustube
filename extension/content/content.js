@@ -1790,6 +1790,7 @@ async function showFocusWindowOverlay(focusWindowInfo) {
   const overlay = document.createElement("div");
   overlay.id = "ft-focus-window-overlay";
   
+  // Hard block - no buttons, no way to skip
   overlay.innerHTML = `
     <div class="ft-milestone-box">
       <h2>🕐 You're Outside Your Focus Window</h2>
@@ -1799,25 +1800,11 @@ async function showFocusWindowOverlay(focusWindowInfo) {
       <p class="ft-milestone-intro" style="margin-top: 12px;">
         ${styleMessage}
       </p>
-      <div class="ft-milestone-buttons">
-        <button id="ft-focus-window-settings" class="ft-button ft-button-primary">Go to Settings</button>
-      </div>
     </div>
   `;
   
-  // Button handler
-  const settingsBtn = overlay.querySelector("#ft-focus-window-settings");
-  if (settingsBtn) {
-    settingsBtn.addEventListener("click", () => {
-      overlay.remove();
-      restoreVideoState();
-      // Open settings page in new tab
-      window.open("https://focustube-beta.vercel.app/app/settings", "_blank");
-    });
-  }
-  
   document.body.appendChild(overlay);
-  console.log("[FT] ✅ Focus window overlay added to DOM");
+  console.log("[FT] ✅ Focus window overlay added to DOM (hard block)");
 }
 
 async function showSpiralNudge(spiralInfo) {
@@ -3677,6 +3664,9 @@ async function handleNavigation() {
     pauseVideos();
     await stopShortsTimeTracking();
     return; // Don't continue with other blocking logic
+  } else {
+    // User is no longer outside focus window - remove overlay and restore scroll
+    removeFocusWindowOverlay();
   }
 
   // Handle spiral detection (before blocking checks)
@@ -3748,6 +3738,7 @@ async function handleNavigation() {
     }
   } else {
     removeOverlay(); // clear if allowed
+    removeFocusWindowOverlay(); // Also remove focus window overlay if present
   }
 
   // Inject "Block Channel" button on watch pages (if channel is not already blocked)

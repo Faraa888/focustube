@@ -11,7 +11,7 @@ const statusContainer = document.getElementById("statusContainer");
 const headerSubtitle = document.getElementById("headerSubtitle");
 const emailInput = document.getElementById("email");
 const loginBtn = document.getElementById("loginBtn");
-const logoutBtn = document.getElementById("logoutBtn");
+const manageAccountBtn = document.getElementById("manageAccountBtn");
 const signupBtn = document.getElementById("signupBtn");
 const signinBtn = document.getElementById("signinBtn");
 const continueFreeBtn = document.getElementById("continueFreeBtn");
@@ -297,60 +297,15 @@ async function handleLogin() {
   }
 }
 
-// Handle logout
-async function handleLogout() {
+// Handle manage account - opens website settings
+function handleManageAccount() {
   try {
-    console.log("🔓 [POPUP] Logging out...");
-    
-    // Clear all extension storage (including blocked channels and other user data)
-    await chrome.storage.local.remove([
-      "ft_user_email", 
-      "ft_plan", 
-      "ft_days_left", 
-      "ft_trial_expires_at",
-      "ft_blocked_channels",
-      "ft_watch_history",
-      "ft_channel_spiral_count",
-      "ft_extension_settings",
-      "ft_user_goals",
-      "ft_user_anti_goals"
-    ]);
-    
-    console.log("✅ [POPUP] Extension storage cleared");
-    
-    // Notify all FocusTube website tabs to sign out
-    try {
-      const tabs = await chrome.tabs.query({});
-      const frontendUrl = FRONTEND_URL || 'https://focustube-beta.vercel.app';
-      
-      for (const tab of tabs) {
-        if (tab.url && (tab.url.startsWith(frontendUrl) || tab.url.startsWith('http://localhost:808'))) {
-          try {
-            await chrome.tabs.sendMessage(tab.id, {
-              type: 'FT_LOGOUT_FROM_EXTENSION'
-            });
-            console.log(`✅ [POPUP] Sent logout message to tab: ${tab.url}`);
-          } catch (e) {
-            // Tab might not have content script, ignore silently
-            console.log(`ℹ️ [POPUP] Could not send message to tab ${tab.id}: ${e.message}`);
-          }
-        }
-      }
-    } catch (error) {
-      // If we can't query tabs or send messages, continue anyway
-      console.warn("⚠️ [POPUP] Could not notify website tabs:", error);
-    }
-    
-    showMessage("Disconnected successfully", "info");
-    
-    // Clear email input
-    if (emailInput) emailInput.value = "";
-    
-    // Reload to show onboarding screen
-    await loadCurrentEmail();
+    console.log("🔗 [POPUP] Opening settings page...");
+    chrome.tabs.create({ url: `${FRONTEND_URL}/app/settings` });
+    window.close();
   } catch (error) {
-    console.error("🔴 [POPUP] Logout error:", error);
-    showMessage("Error disconnecting. Please try again.", "error");
+    console.error("Error opening settings:", error);
+    showMessage("Error opening website. Please visit the website to manage your account.", "error");
   }
 }
 
@@ -391,7 +346,7 @@ if (emailInput) {
     }
   });
 }
-if (logoutBtn) logoutBtn.addEventListener("click", handleLogout);
+if (manageAccountBtn) manageAccountBtn.addEventListener("click", handleManageAccount);
 
 // Load current state on popup open
 loadCurrentEmail().catch(console.error);

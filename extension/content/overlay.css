@@ -693,9 +693,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 0.95);
   backdrop-filter: blur(8px);
   padding: 20px;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-overflow-scrolling: none;
+}
+
+/* Prevent any interaction with content behind */
+#ft-focus-window-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: rgba(0, 0, 0, 0.95);
 }
 
 #ft-focus-window-overlay .ft-milestone-box {
