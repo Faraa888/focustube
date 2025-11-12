@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { removeEmailFromExtension } from "@/lib/extensionStorage";
-import { X } from "lucide-react";
+import { X, Plus } from "lucide-react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 
 const Settings = () => {
@@ -22,37 +21,39 @@ const Settings = () => {
   const authStatus = useRequireAuth();
   const isAuthenticated = authStatus === "authenticated";
   const loadingAuth = authStatus === "loading";
-  const [blockShorts, setBlockShorts] = useState(true);
-  const [hideRecommendations, setHideRecommendations] = useState(false);
-  const [dailyLimit, setDailyLimit] = useState([90]);
-  const [goals, setGoals] = useState("Learn web development\nImprove public speaking");
-  const [antiGoals, setAntiGoals] = useState("Gaming content\nViral entertainment");
-  const [loggingOut, setLoggingOut] = useState(false);
+  
+  // Goals state
+  const [goals, setGoals] = useState<string[]>([]);
+  const [antiGoals, setAntiGoals] = useState<string[]>([]);
+  const [goalInput, setGoalInput] = useState("");
+  const [antiGoalInput, setAntiGoalInput] = useState("");
+  const [savingGoals, setSavingGoals] = useState(false);
+  
+  // Blocked channels state
   const [blockedChannels, setBlockedChannels] = useState<string[]>([]);
   const [newChannelName, setNewChannelName] = useState("");
   const [loadingChannels, setLoadingChannels] = useState(true);
   const [savingChannel, setSavingChannel] = useState(false);
+  
+  // Controls state
+  const [blockShorts, setBlockShorts] = useState(false);
+  const [hideRecommendations, setHideRecommendations] = useState(false);
+  const [dailyLimit, setDailyLimit] = useState([90]);
   const [focusWindowEnabled, setFocusWindowEnabled] = useState(false);
   const [focusWindowStart, setFocusWindowStart] = useState("1:00 PM");
   const [focusWindowEnd, setFocusWindowEnd] = useState("6:00 PM");
-  const [savingFocusWindow, setSavingFocusWindow] = useState(false);
+  const [nudgeStyle, setNudgeStyle] = useState<"gentle" | "direct" | "firm">("firm");
+  const [savingSettings, setSavingSettings] = useState(false);
+  
+  const [userPlan, setUserPlan] = useState<"free" | "pro" | "trial">("free");
+  const [loadingSettings, setLoadingSettings] = useState(true);
 
-  const handleSave = () => {
-    // TODO: Save settings to backend/extension
-    toast({
-      title: "Settings saved",
-      description: "Your preferences have been updated.",
-    });
-  };
-
-  // Load blocked channels and focus window settings on mount
+  // Load all settings on mount
   useEffect(() => {
-    if (authStatus === "loading") {
-      return;
-    }
-
+    if (authStatus === "loading") return;
     if (authStatus !== "authenticated") {
       setLoadingChannels(false);
+      setLoadingSettings(false);
       return;
     }
 
@@ -61,9 +62,45 @@ const Settings = () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user?.email) {
           setLoadingChannels(false);
+          setLoadingSettings(false);
           return;
         }
 
+        // Get user plan and goals
+        const { data: userData } = await supabase
+          .from("users")
+          .select("plan, goals, anti_goals")
+          .eq("email", user.email)
+          .single();
+        
+        if (userData) {
+          setUserPlan(userData.plan || "free");
+          
+          // Parse goals and anti-goals from JSON (show exact saved, no defaults)
+          if (userData.goals) {
+            try {
+              const parsed = JSON.parse(userData.goals);
+              setGoals(Array.isArray(parsed) ? parsed : []);
+            } catch {
+              setGoals([]);
+            }
+          } else {
+            setGoals([]);
+          }
+          
+          if (userData.anti_goals) {
+            try {
+              const parsed = JSON.parse(userData.anti_goals);
+              setAntiGoals(Array.isArray(parsed) ? parsed : []);
+            } catch {
+              setAntiGoals([]);
+            }
+          } else {
+            setAntiGoals([]);
+          }
+        }
+
+        // Get extension data (blocked channels, settings)
         const response = await fetch(
           `https://focustube-backend-4xah.onrender.com/extension/get-data?email=${encodeURIComponent(user.email)}`
         );
@@ -71,11 +108,14 @@ const Settings = () => {
         if (response.ok) {
           const result = await response.json();
           if (result.ok && result.data) {
+            // Load blocked channels (exact saved, no defaults)
             if (result.data.blocked_channels) {
-              setBlockedChannels(result.data.blocked_channels || []);
+              setBlockedChannels(Array.isArray(result.data.blocked_channels) ? result.data.blocked_channels : []);
+            } else {
+              setBlockedChannels([]);
             }
             
-            // Load focus window settings
+            // Load all settings (exact saved, no defaults)
             const settings = result.data.settings || {};
             if (settings.focus_window_enabled !== undefined) {
               setFocusWindowEnabled(settings.focus_window_enabled);
@@ -86,12 +126,29 @@ const Settings = () => {
             if (settings.focus_window_end) {
               setFocusWindowEnd(convert24hTo12h(settings.focus_window_end));
             }
+            if (settings.block_shorts !== undefined) {
+              setBlockShorts(settings.block_shorts);
+            }
+            if (settings.hide_recommendations !== undefined) {
+              setHideRecommendations(settings.hide_recommendations);
+            }
+            if (settings.daily_limit) {
+              setDailyLimit([settings.daily_limit]);
+            } else {
+              setDailyLimit([90]); // Default only if not set
+            }
+            if (settings.nudge_style) {
+              setNudgeStyle(settings.nudge_style);
+            } else {
+              setNudgeStyle("firm"); // Default only if not set
+            }
           }
         }
       } catch (error) {
         console.error("Error loading settings:", error);
       } finally {
         setLoadingChannels(false);
+        setLoadingSettings(false);
       }
     };
 
@@ -119,63 +176,107 @@ const Settings = () => {
     return `${hours24.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   };
 
-  // Save focus window settings
-  const handleSaveFocusWindow = async () => {
-    setSavingFocusWindow(true);
+  // Goals helpers
+  const addGoal = () => {
+    const trimmed = goalInput.trim();
+    if (!trimmed) return;
+    if (goals.length >= 5) {
+      toast({
+        title: "Maximum reached",
+        description: "You can add up to 5 goals. Remove one to add another.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (goals.some(g => g.toLowerCase() === trimmed.toLowerCase())) {
+      toast({
+        title: "Already added",
+        description: "This goal is already in your list.",
+      });
+      return;
+    }
+    setGoals([...goals, trimmed]);
+    setGoalInput("");
+  };
+
+  const removeGoal = (index: number) => {
+    setGoals(goals.filter((_, i) => i !== index));
+  };
+
+  const addAntiGoal = () => {
+    const trimmed = antiGoalInput.trim();
+    if (!trimmed) return;
+    if (antiGoals.length >= 5) {
+      toast({
+        title: "Maximum reached",
+        description: "You can add up to 5 distractions. Remove one to add another.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (antiGoals.some(g => g.toLowerCase() === trimmed.toLowerCase())) {
+      toast({
+        title: "Already added",
+        description: "This distraction is already in your list.",
+      });
+      return;
+    }
+    setAntiGoals([...antiGoals, trimmed]);
+    setAntiGoalInput("");
+  };
+
+  const removeAntiGoal = (index: number) => {
+    setAntiGoals(antiGoals.filter((_, i) => i !== index));
+  };
+
+  // Save goals
+  const handleSaveGoals = async () => {
+    setSavingGoals(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email) {
         toast({
           title: "Error",
-          description: "You must be logged in to save settings",
+          description: "You must be logged in to save goals",
           variant: "destructive",
         });
-        setSavingFocusWindow(false);
+        setSavingGoals(false);
         return;
       }
 
-      const settings = {
-        focus_window_enabled: focusWindowEnabled,
-        focus_window_start: convert12hTo24h(focusWindowStart),
-        focus_window_end: convert12hTo24h(focusWindowEnd),
-      };
+      const { error } = await supabase
+        .from("users")
+        .update({
+          goals: JSON.stringify(goals),
+          anti_goals: JSON.stringify(antiGoals),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("email", user.email);
 
-      const response = await fetch("https://focustube-backend-4xah.onrender.com/extension/save-data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: user.email,
-          data: {
-            settings: settings,
-          },
-        }),
+      if (error) throw error;
+
+      toast({
+        title: "Goals saved",
+        description: "Your goals have been updated.",
       });
-
-      if (response.ok) {
-        toast({
-          title: "Focus window saved",
-          description: "Your focus window settings have been updated.",
-        });
-      } else {
-        throw new Error("Failed to save");
-      }
     } catch (error) {
-      console.error("Error saving focus window:", error);
+      console.error("Error saving goals:", error);
       toast({
         title: "Error",
-        description: "Failed to save focus window settings. Please try again.",
+        description: "Failed to save goals. Please try again.",
         variant: "destructive",
       });
     } finally {
-      setSavingFocusWindow(false);
+      setSavingGoals(false);
     }
   };
 
-  const handleAddChannel = async () => {
-    if (!newChannelName.trim()) {
+  // Save blocked channels with normalization
+  const handleSaveBlockedChannels = async () => {
+    if (blockedChannels.length === 0) {
       toast({
-        title: "Error",
-        description: "Please enter a channel name",
+        title: "No channels",
+        description: "Add at least one channel to block.",
         variant: "destructive",
       });
       return;
@@ -194,50 +295,44 @@ const Settings = () => {
         return;
       }
 
-      // Check if already blocked (case-insensitive)
-      const channelLower = newChannelName.trim().toLowerCase();
-      const isAlreadyBlocked = blockedChannels.some(
-        ch => ch.toLowerCase().trim() === channelLower
-      );
+      // Normalize all channel names
+      const normalizeResponse = await fetch("https://focustube-backend-4xah.onrender.com/ai/normalize-channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel_names: blockedChannels }),
+      });
 
-      if (isAlreadyBlocked) {
-        toast({
-          title: "Already blocked",
-          description: "This channel is already in your blocklist",
-        });
-        setSavingChannel(false);
-        setNewChannelName("");
-        return;
+      let normalizedChannels = blockedChannels;
+      if (normalizeResponse.ok) {
+        const normalizeData = await normalizeResponse.json();
+        if (normalizeData.ok && normalizeData.normalized_names) {
+          normalizedChannels = normalizeData.normalized_names;
+        }
       }
 
-      // Add to list
-      const updatedChannels = [...blockedChannels, newChannelName.trim()];
-
-      // Save to backend
+      // Save normalized channels
       const response = await fetch("https://focustube-backend-4xah.onrender.com/extension/save-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: user.email,
-          blocked_channels: updatedChannels,
+          data: {
+            blocked_channels: normalizedChannels,
+          },
         }),
       });
 
       if (response.ok) {
-        setBlockedChannels(updatedChannels);
-        setNewChannelName("");
-        toast({
-          title: "Channel blocked",
-          description: "Well done! Eliminating distractions helps you stay focused.",
-        });
+        // Refresh page to show normalized names
+        window.location.reload();
       } else {
         throw new Error("Failed to save");
       }
     } catch (error) {
-      console.error("Error adding blocked channel:", error);
+      console.error("Error saving blocked channels:", error);
       toast({
         title: "Error",
-        description: "Failed to block channel. Please try again.",
+        description: "Failed to save blocked channels. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -245,74 +340,100 @@ const Settings = () => {
     }
   };
 
-  const handleRemoveChannel = async (channelToRemove: string) => {
+  const handleAddChannel = () => {
+    const trimmed = newChannelName.trim();
+    if (!trimmed) {
+      toast({
+        title: "Error",
+        description: "Please enter a channel name",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const channelLower = trimmed.toLowerCase();
+    const isAlreadyBlocked = blockedChannels.some(
+      ch => ch.toLowerCase().trim() === channelLower
+    );
+
+    if (isAlreadyBlocked) {
+      toast({
+        title: "Already blocked",
+        description: "This channel is already in your blocklist",
+      });
+      setNewChannelName("");
+      return;
+    }
+
+    setBlockedChannels([...blockedChannels, trimmed]);
+    setNewChannelName("");
+  };
+
+  const handleRemoveChannel = (index: number) => {
+    setBlockedChannels(blockedChannels.filter((_, i) => i !== index));
+  };
+
+  // Save controls settings
+  const handleSaveControls = async () => {
+    setSavingSettings(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email) {
         toast({
           title: "Error",
-          description: "You must be logged in to manage blocked channels",
+          description: "You must be logged in to save settings",
           variant: "destructive",
         });
+        setSavingSettings(false);
         return;
       }
 
-      const updatedChannels = blockedChannels.filter(
-        ch => ch.toLowerCase().trim() !== channelToRemove.toLowerCase().trim()
-      );
+      const settings = {
+        focus_window_enabled: focusWindowEnabled,
+        focus_window_start: convert12hTo24h(focusWindowStart),
+        focus_window_end: convert12hTo24h(focusWindowEnd),
+        block_shorts: blockShorts,
+        hide_recommendations: hideRecommendations,
+        daily_limit: dailyLimit[0],
+        nudge_style: nudgeStyle,
+      };
 
-      // Save to backend
       const response = await fetch("https://focustube-backend-4xah.onrender.com/extension/save-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: user.email,
-          blocked_channels: updatedChannels,
+          data: {
+            settings: settings,
+          },
         }),
       });
 
       if (response.ok) {
-        setBlockedChannels(updatedChannels);
         toast({
-          title: "Channel unblocked",
-          description: "Channel removed from blocklist",
+          title: "Settings saved",
+          description: "Your preferences have been updated.",
         });
       } else {
         throw new Error("Failed to save");
       }
     } catch (error) {
-      console.error("Error removing blocked channel:", error);
+      console.error("Error saving settings:", error);
       toast({
         title: "Error",
-        description: "Failed to unblock channel. Please try again.",
+        description: "Failed to save settings. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setSavingSettings(false);
     }
   };
 
   const handleLogout = async () => {
-    setLoggingOut(true);
     try {
-      // Clear Supabase session
-      const { error: signOutError } = await supabase.auth.signOut();
-      
-      if (signOutError) {
-        console.error("Logout error:", signOutError);
-        toast({
-          title: "Error",
-          description: "Failed to log out. Please try again.",
-          variant: "destructive",
-        });
-        setLoggingOut(false);
-        return;
-      }
-
-      // Clear chrome.storage (for extension)
+      await supabase.auth.signOut();
       await removeEmailFromExtension();
-
-      // Redirect to login
       navigate("/login");
-      
       toast({
         title: "Logged out",
         description: "You have been successfully logged out.",
@@ -324,11 +445,10 @@ const Settings = () => {
         description: "Something went wrong. Please try again.",
         variant: "destructive",
       });
-      setLoggingOut(false);
     }
   };
 
-  if (loadingAuth) {
+  if (loadingAuth || loadingSettings) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center text-muted-foreground">Loading...</div>
@@ -340,25 +460,29 @@ const Settings = () => {
     return null;
   }
 
+  const isProExperience = userPlan === "pro" || userPlan === "trial";
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
       
       <main className="flex-1 container mx-auto px-4 py-8 mt-16 max-w-4xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Settings</h1>
+          <h1 className="text-3xl font-bold mb-2">Your FocusTube</h1>
           <p className="text-muted-foreground">
             Customize FocusTube to match your goals
           </p>
         </div>
 
         <Tabs defaultValue="goals" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="goals">Goals</TabsTrigger>
+            <TabsTrigger value="blocked">Blocked Channels</TabsTrigger>
             <TabsTrigger value="controls">Controls</TabsTrigger>
             <TabsTrigger value="account">Account</TabsTrigger>
           </TabsList>
 
+          {/* Goals Tab */}
           <TabsContent value="goals" className="space-y-6">
             <Card>
               <CardHeader>
@@ -368,47 +492,192 @@ const Settings = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="goals">Learning goals (one per line)</Label>
-                  <Textarea
-                    id="goals"
-                    placeholder="e.g., Learn React&#10;Practice guitar&#10;Study for certification"
-                    value={goals}
-                    onChange={(e) => setGoals(e.target.value)}
-                    rows={4}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="e.g., Learn React"
+                    value={goalInput}
+                    onChange={(e) => setGoalInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addGoal();
+                      }
+                    }}
+                    disabled={goals.length >= 5}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    FocusTube will prioritize content related to these goals
-                  </p>
+                  <Button
+                    onClick={addGoal}
+                    disabled={goals.length >= 5 || !goalInput.trim()}
+                    variant="outline"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add
+                  </Button>
                 </div>
+                
+                {goals.length > 0 ? (
+                  <div className="space-y-2">
+                    {goals.map((goal, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <span className="font-medium">{goal}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeGoal(index)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No goals added yet. Add your first goal above.
+                  </p>
+                )}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Distractions to Avoid</CardTitle>
+                <CardTitle>Common Distractions</CardTitle>
                 <CardDescription>
                   Topics that tend to pull you off-track
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="antigoals">Avoid these topics (one per line)</Label>
-                  <Textarea
-                    id="antigoals"
-                    placeholder="e.g., Gaming streams&#10;Celebrity news&#10;Viral challenges"
-                    value={antiGoals}
-                    onChange={(e) => setAntiGoals(e.target.value)}
-                    rows={4}
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="e.g., Gaming streams"
+                    value={antiGoalInput}
+                    onChange={(e) => setAntiGoalInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addAntiGoal();
+                      }
+                    }}
+                    disabled={antiGoals.length >= 5}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    FocusTube will filter out content matching these topics
-                  </p>
+                  <Button
+                    onClick={addAntiGoal}
+                    disabled={antiGoals.length >= 5 || !antiGoalInput.trim()}
+                    variant="outline"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add
+                  </Button>
                 </div>
+                
+                {antiGoals.length > 0 ? (
+                  <div className="space-y-2">
+                    {antiGoals.map((antiGoal, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <span className="font-medium">{antiGoal}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeAntiGoal(index)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No distractions added yet. Add your first distraction above.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+            
+            <Button onClick={handleSaveGoals} disabled={savingGoals} className="w-full">
+              {savingGoals ? "Saving..." : "Save Goals"}
+            </Button>
+          </TabsContent>
+
+          {/* Blocked Channels Tab */}
+          <TabsContent value="blocked" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Blocked Channels</CardTitle>
+                <CardDescription>
+                  Channels you've blocked to stay focused. All names will be normalized when you save.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter channel name (e.g., Eddie Hall)"
+                    value={newChannelName}
+                    onChange={(e) => setNewChannelName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddChannel();
+                      }
+                    }}
+                    disabled={savingChannel}
+                  />
+                  <Button
+                    onClick={handleAddChannel}
+                    disabled={savingChannel || !newChannelName.trim()}
+                    variant="outline"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add
+                  </Button>
+                </div>
+                
+                {loadingChannels ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">Loading blocked channels...</p>
+                ) : blockedChannels.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No channels blocked yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {blockedChannels.map((channel, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <span className="font-medium">{channel}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveChannel(index)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <Button
+                  onClick={handleSaveBlockedChannels}
+                  disabled={savingChannel || blockedChannels.length === 0}
+                  className="w-full"
+                >
+                  {savingChannel ? "Normalizing & Saving..." : "Save & Normalize Channels"}
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  Channel names will be normalized to match YouTube metadata. The page will refresh after saving.
+                </p>
               </CardContent>
             </Card>
           </TabsContent>
 
+          {/* Controls Tab */}
           <TabsContent value="controls" className="space-y-6">
             <Card>
               <CardHeader>
@@ -418,24 +687,26 @@ const Settings = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-base">Block YouTube Shorts</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Hide the Shorts feed and suggestions
-                    </p>
+                {isProExperience && (
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-base">Hard Block Shorts / Track Shorts with Reminders</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {blockShorts ? "Hard block Shorts (Free behavior)" : "Track Shorts with reminders (Pro behavior)"}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={blockShorts}
+                      onCheckedChange={setBlockShorts}
+                    />
                   </div>
-                  <Switch
-                    checked={blockShorts}
-                    onCheckedChange={setBlockShorts}
-                  />
-                </div>
+                )}
 
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label className="text-base">Hide Recommendations</Label>
                     <p className="text-sm text-muted-foreground">
-                      Remove suggested videos from sidebar
+                      Remove suggested videos from sidebar and homepage
                     </p>
                   </div>
                   <Switch
@@ -470,7 +741,6 @@ const Settings = () => {
                     You'll receive gentle nudges when approaching this limit
                   </p>
                 </div>
-
               </CardContent>
             </Card>
 
@@ -478,7 +748,7 @@ const Settings = () => {
               <CardHeader>
                 <CardTitle>Focus Window</CardTitle>
                 <CardDescription>
-                  Set specific hours when YouTube is accessible. Outside these hours, YouTube will be blocked.
+                  Set specific hours when YouTube is accessible
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -506,11 +776,7 @@ const Settings = () => {
                           value={focusWindowStart}
                           onChange={(e) => setFocusWindowStart(e.target.value)}
                           placeholder="1:00 PM"
-                          pattern="^([1-9]|1[0-2]):[0-5][0-9] (AM|PM)$"
                         />
-                        <p className="text-xs text-muted-foreground">
-                          Start time (e.g., 1:00 PM)
-                        </p>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="focus-window-end">Until</Label>
@@ -520,78 +786,9 @@ const Settings = () => {
                           value={focusWindowEnd}
                           onChange={(e) => setFocusWindowEnd(e.target.value)}
                           placeholder="6:00 PM"
-                          pattern="^([1-9]|1[0-2]):[0-5][0-9] (AM|PM)$"
                         />
-                        <p className="text-xs text-muted-foreground">
-                          End time (e.g., 6:00 PM)
-                        </p>
                       </div>
                     </div>
-                    <Button
-                      onClick={handleSaveFocusWindow}
-                      disabled={savingFocusWindow}
-                      className="w-full"
-                    >
-                      {savingFocusWindow ? "Saving..." : "Save Focus Window"}
-                    </Button>
-                    <p className="text-xs text-muted-foreground">
-                      YouTube will be blocked outside these hours. Come back during your focus window to stay on track with your goals.
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Blocked Channels</CardTitle>
-                <CardDescription>
-                  Well done! Eliminating distractions helps you stay focused. Blocked channels will be automatically redirected.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Enter channel name (e.g., Eddie Hall)"
-                    value={newChannelName}
-                    onChange={(e) => setNewChannelName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleAddChannel();
-                      }
-                    }}
-                    disabled={savingChannel || loadingChannels}
-                  />
-                  <Button
-                    onClick={handleAddChannel}
-                    disabled={savingChannel || loadingChannels || !newChannelName.trim()}
-                  >
-                    {savingChannel ? "Adding..." : "Add"}
-                  </Button>
-                </div>
-                
-                {loadingChannels ? (
-                  <p className="text-sm text-muted-foreground">Loading blocked channels...</p>
-                ) : blockedChannels.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No channels blocked yet</p>
-                ) : (
-                  <div className="space-y-2">
-                    {blockedChannels.map((channel, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-3 border rounded-lg"
-                      >
-                        <span className="font-medium">{channel}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemoveChannel(channel)}
-                          className="h-8 w-8 p-0"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
                   </div>
                 )}
               </CardContent>
@@ -606,20 +803,37 @@ const Settings = () => {
               </CardHeader>
               <CardContent>
                 <div className="grid gap-3">
-                  <Button variant="outline" className="justify-start">
+                  <Button
+                    variant={nudgeStyle === "gentle" ? "default" : "outline"}
+                    className="justify-start"
+                    onClick={() => setNudgeStyle("gentle")}
+                  >
                     <span className="flex-1 text-left">Gentle — "Still learning?"</span>
                   </Button>
-                  <Button variant="outline" className="justify-start">
+                  <Button
+                    variant={nudgeStyle === "direct" ? "default" : "outline"}
+                    className="justify-start"
+                    onClick={() => setNudgeStyle("direct")}
+                  >
                     <span className="flex-1 text-left">Direct — "Check your goals"</span>
                   </Button>
-                  <Button variant="outline" className="justify-start">
+                  <Button
+                    variant={nudgeStyle === "firm" ? "default" : "outline"}
+                    className="justify-start"
+                    onClick={() => setNudgeStyle("firm")}
+                  >
                     <span className="flex-1 text-left">Firm — "Time's up"</span>
                   </Button>
                 </div>
               </CardContent>
             </Card>
+
+            <Button onClick={handleSaveControls} disabled={savingSettings} className="w-full">
+              {savingSettings ? "Saving..." : "Save All Controls"}
+            </Button>
           </TabsContent>
 
+          {/* Account Tab */}
           <TabsContent value="account" className="space-y-6">
             <Card>
               <CardHeader>
@@ -631,39 +845,16 @@ const Settings = () => {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                   <div>
-                    <div className="font-semibold">Free Plan</div>
+                    <div className="font-semibold">{userPlan === "free" ? "Free Plan" : userPlan === "trial" ? "Trial Plan" : "Pro Plan"}</div>
                     <div className="text-sm text-muted-foreground">
-                      Basic features included
+                      {userPlan === "free" ? "Basic features included" : "Full features included"}
                     </div>
                   </div>
-                  <Button asChild data-evt="settings_upgrade">
-                    <Link to="/pricing">Upgrade to Pro</Link>
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Pro includes AI filtering, advanced analytics, and priority support
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Data & Privacy</CardTitle>
-                <CardDescription>
-                  Your data stays on your device
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  FocusTube processes your YouTube activity locally. We never sell your data.
-                </p>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
-                    Export Data
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    Clear History
-                  </Button>
+                  {userPlan === "free" && (
+                    <Button asChild data-evt="settings_upgrade">
+                      <Link to="/pricing">Upgrade to Pro</Link>
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -680,40 +871,13 @@ const Settings = () => {
                   variant="outline" 
                   className="w-full"
                   onClick={handleLogout}
-                  disabled={loggingOut}
                 >
-                  {loggingOut ? "Signing out..." : "Sign Out"}
+                  Sign Out
                 </Button>
-                <p className="text-xs text-center text-muted-foreground mt-2">
-                  This will sign you out of both the website and extension
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-destructive/50">
-              <CardHeader>
-                <CardTitle className="text-destructive">Danger Zone</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Button variant="destructive" className="w-full">
-                  Delete Account
-                </Button>
-                <p className="text-xs text-center text-muted-foreground">
-                  This action cannot be undone
-                </p>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
-
-        <div className="mt-8 flex justify-end gap-4">
-          <Button variant="outline" asChild>
-            <Link to="/app/dashboard">Cancel</Link>
-          </Button>
-          <Button onClick={handleSave}>
-            Save Changes
-          </Button>
-        </div>
       </main>
 
       <Footer />

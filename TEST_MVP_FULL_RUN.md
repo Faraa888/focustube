@@ -298,48 +298,312 @@
 Once all sections pass, the MVP regression is complete.
 
 
+---
+
+### 7. Settings Page Redesign
+
+1. **Page Title & Navigation**
+   - Visit `/app/settings` → page title shows "Your FocusTube" (not "Settings").
+   - Verify 4 tabs visible: Goals | Blocked Channels | Controls | Account.
+   - Click each tab → switches correctly, content loads.
+
+2. **Goals Tab - Display**
+   - Goals tab loads existing goals from Supabase (if any).
+   - Goals display as list items (not textarea).
+   - Common Distractions display as list items.
+   - If no goals exist, shows "No goals added yet" message.
+   - If no distractions exist, shows "No distractions added yet" message.
+
+3. **Goals Tab - Add Goals**
+   - Type "Learn React" in goals input → click "Add" button (or press Enter).
+   - Goal appears as list item with X button.
+   - Add 2 more goals → all 3 display in list.
+   - Try adding 6th goal → toast: "Maximum reached" (max 5).
+   - Try adding duplicate goal → toast: "Already added".
+
+4. **Goals Tab - Remove Goals**
+   - Click X button on a goal → removes from list immediately.
+   - Remove all goals → shows empty state message.
+
+5. **Goals Tab - Save**
+   - Add 2 goals, 1 distraction.
+   - Click "Save Goals" button → toast: "Goals saved".
+   - Verify in Supabase `users` table:
+   
+     curl "https://focustube-backend-4xah.onrender.com/extension/get-data?email=YOUR_EMAIL"
+          - `goals` should be JSON array: `["Goal 1", "Goal 2"]`
+     - `anti_goals` should be JSON array: `["Distraction 1"]`
+   - Reload Settings page → goals still displayed correctly.
+
+6. **Common Distractions Tab**
+   - Same add/remove/save flow as Goals.
+   - Max 5 items, deduplication works.
 
 ---
 
-## Known Issues (To Fix)
+### 8. Blocked Channels Tab
 
-### Issue 1: Test 1.7 - Session Persistence
-**Status:** ⚠️ FAILING  
-**Description:** After closing browser completely and reopening, dashboard requires re-login (session doesn't persist). Extension and website seem out of sync.
+1. **Display Blocked Channels**
+   - Blocked Channels tab shows all channels from `extension_data.blocked_channels`.
+   - Each channel displays as list item with X button.
+   - If no channels, shows "No channels blocked yet".
 
-**Expected:** Dashboard should remain accessible after browser restart (Supabase session cookies should persist).
+2. **Add Channel**
+   - Type "Eddie Hall" → click "Add" button (or press Enter).
+   - Channel appears in list immediately.
+   - Add multiple channels → all display.
+   - Try duplicate → toast: "Already blocked".
 
-**Actual:** Dashboard redirects to login page.
+3. **Remove Channel**
+   - Click X on a channel → removes from list immediately.
+   - Remove all → shows empty state.
 
-**Impact:** Users have to log in again after closing browser.
+4. **Save & Normalize Channels**
+   - Add channels: "eddie hall", "Mr Beast", "Vikkstar123".
+   - Click "Save & Normalize Channels" button.
+   - Button shows "Normalizing & Saving..." while processing.
+   - Page refreshes automatically after save.
+   - After refresh, channels show normalized names (e.g., "Eddie Hall The Beast", "MrBeast", "Vikkstar123").
+   - Verify in Supabase:
+   
+     curl "https://focustube-backend-4xah.onrender.com/extension/get-data?email=YOUR_EMAIL"
+          - `blocked_channels` should contain normalized names.
 
-**Fix needed:** Check Supabase session cookie persistence and extension sync on browser restart.
-
----
-
-### Issue 2: Test 2.6 - Goals Sync Format Mismatch
-**Status:** ⚠️ FAILING  
-**Description:** Goals entered during signup/onboarding are stored as plain text (e.g., `"Run, Learn to code"`) instead of JSON array format (e.g., `["Run", "Learn programming"]`).
-
-**Root cause:** `frontend/src/pages/Goals.tsx` line 99-100 saves goals as:ript
-goals: goals.trim(),  // Plain text string
-anti_goals: antiGoals.trim(),  // Plain text string**Expected:** Goals should be stored as JSON array string: `JSON.stringify(["Run", "Learn programming"])`
-
-**Impact:**
-- AI classifier won't receive goals properly (expects array)
-- Dashboard won't display goals correctly
-- Extension won't sync goals from server
-- Backend parsing fails (expects JSON array, gets plain text)
-
-**Fix needed:** Update `Goals.tsx` to:
-1. Split textarea input by newlines
-2. Filter empty lines
-3. Convert to array: `goals.split('\n').filter(g => g.trim()).map(g => g.trim())`
-4. Save as JSON string: `JSON.stringify(goalsArray)`
-
-**Files to fix:**
-- `frontend/src/pages/Goals.tsx` (lines 99-100, 126-127)
+5. **Normalization Edge Cases**
+   - Add channel with typos → normalization should fix.
+   - If normalization API fails → original names preserved (graceful fallback).
 
 ---
 
-**Last updated:** During MVP testing session
+### 9. Controls Tab - Block Shorts Toggle
+
+1. **Toggle Visibility (Pro/Trial Only)**
+   - As Free user → toggle NOT visible.
+   - As Pro/Trial user → toggle visible.
+   - Label: "Hard Block Shorts / Track Shorts with Reminders".
+
+2. **Toggle ON (Hard Block)**
+   - Pro user: Toggle ON → description shows "Hard block Shorts (Free behavior)".
+   - Click "Save All Controls" → toast: "Settings saved".
+   - Verify in Supabase:
+   
+     curl "https://focustube-backend-4xah.onrender.com/extension/get-data?email=YOUR_EMAIL"
+          - `settings.block_shorts` = `true`.
+   - Reload extension.
+   - Try to visit `/shorts` → immediate redirect to home (hard block).
+   - Check storage:
+ 
+     chrome.storage.local.get(['ft_pro_manual_block_shorts', 'ft_block_shorts_today'], console.log);
+          - Both should be `true`.
+
+3. **Toggle OFF (Track with Reminders)**
+   - Pro user: Toggle OFF → description shows "Track Shorts with reminders (Pro behavior)".
+   - Click "Save All Controls".
+   - Verify `settings.block_shorts` = `false`.
+   - Reload extension.
+   - Visit `/shorts` → allowed, tracking active, reminders at 2/5/10 min.
+   - Check storage:
+ 
+     chrome.storage.local.get(['ft_pro_manual_block_shorts', 'ft_block_shorts_today'], console.log);
+          - Both should be `false`.
+
+---
+
+### 10. Controls Tab - Hide Recommendations
+
+1. **Toggle Display**
+   - Controls tab shows "Hide Recommendations" toggle.
+   - Description: "Remove suggested videos from sidebar and homepage".
+
+2. **Toggle ON - Watch Page**
+   - Toggle ON → click "Save All Controls".
+   - Verify `settings.hide_recommendations` = `true`.
+   - Reload extension.
+   - Visit any YouTube watch page (e.g., `/watch?v=...`).
+   - Sidebar recommendations (`ytd-watch-next-secondary-results-renderer`) should be hidden.
+   - "Up next" section should be hidden.
+   - Check console: `[FT]` logs should show recommendations hidden.
+
+3. **Toggle ON - Homepage**
+   - Visit YouTube homepage (`/`).
+   - Main feed (`ytd-rich-grid-renderer`) should be hidden.
+   - Recommendation sections should be hidden.
+   - Page should appear mostly empty (only header/sidebar nav visible).
+
+4. **Toggle OFF**
+   - Toggle OFF → save.
+   - Reload extension.
+   - Visit watch page → sidebar recommendations visible.
+   - Visit homepage → feed visible.
+
+5. **Dynamic Content**
+   - With toggle ON, navigate between pages.
+   - Recommendations stay hidden on new pages.
+   - MutationObserver should re-hide if YouTube adds content dynamically.
+
+6. **Cross-Tab Sync**
+   - Open 2 YouTube tabs.
+   - Change toggle in Settings → save.
+   - Both tabs should update (hide/show recommendations) without reload.
+
+---
+
+### 11. Controls Tab - Daily Limit Slider
+
+1. **Slider Display**
+   - Controls tab shows "Daily limit" slider.
+   - Default value: 90 minutes (if not set).
+   - Range: 15-150 minutes, step 15.
+   - Badge shows current value: "90 minutes".
+
+2. **Adjust Slider**
+   - Drag slider to 60 minutes → badge updates to "60 minutes".
+   - Drag to 120 minutes → badge shows "120 minutes".
+
+3. **Save & Apply**
+   - Set to 60 minutes → click "Save All Controls".
+   - Verify `settings.daily_limit` = `60` in Supabase.
+   - Reload extension.
+   - Watch videos for 60 minutes → at 60:01, should see time limit overlay.
+   - Overlay message uses selected nudge style.
+
+4. **Default Value**
+   - New user (no setting) → slider shows 90.
+   - After saving, reload → slider shows saved value.
+
+5. **Extension Enforcement**
+   - Set limit to 30 minutes (for quick test).
+   - Watch videos → at 30 minutes, blocking should trigger.
+   - Check background console: `[FT]` logs should show limit reached.
+
+---
+
+### 12. Controls Tab - Focus Window
+
+1. **Focus Window (Existing Tests)**
+   - Re-run tests from Section 5 (Focus Windows).
+   - Verify still works with new Settings page layout.
+
+---
+
+### 13. Controls Tab - Nudge Style
+
+1. **Style Selection**
+   - Controls tab shows "Nudge Style" section.
+   - 3 buttons: Gentle, Direct, Firm.
+   - Default: Firm (selected/highlighted).
+
+2. **Select Style**
+   - Click "Gentle" → button highlights, others unhighlight.
+   - Click "Direct" → switches correctly.
+   - Click "Firm" → switches correctly.
+
+3. **Save Style**
+   - Select "Gentle" → click "Save All Controls".
+   - Verify `settings.nudge_style` = `"gentle"` in Supabase.
+   - Reload extension.
+
+4. **Spiral Nudge - Style Applied**
+   - Watch 3 videos from same channel (trigger spiral).
+   - Spiral nudge should show: "Still learning?" (Gentle style).
+   - Change to "Direct" → save → trigger again → shows: "Check your goals".
+   - Change to "Firm" → save → trigger again → shows: "Time's up".
+
+5. **Time Limit Overlay - Style Applied**
+   - Set daily limit to 15 minutes (quick test).
+   - Watch until limit reached.
+   - Overlay message should use selected style:
+     - Gentle: "Take a break?"
+     - Direct: "You're over your limit"
+     - Firm: "Blocked for today"
+
+6. **Focus Window Overlay - Style Applied**
+   - Enable focus window, set outside current time.
+   - Visit YouTube → overlay shows style message:
+     - Gentle: "Maybe step away?"
+     - Direct: "Time to focus"
+     - Firm: "Focus now"
+
+7. **Journal Nudge - Style Applied**
+   - Pro user: Watch distracting content for 1 minute.
+   - Journal nudge placeholder should use selected style (all styles use same text for journal).
+
+---
+
+### 14. Account Tab
+
+1. **Subscription Display**
+   - Account tab shows current plan (Free/Trial/Pro).
+   - Free users see "Upgrade to Pro" button.
+   - Pro/Trial users see plan name only.
+
+2. **Sign Out**
+   - Click "Sign Out" → redirects to `/login`.
+   - Extension storage cleared.
+   - Popup shows onboarding.
+
+---
+
+### 15. Settings Loading (No Defaults)
+
+1. **Load Exact Saved Values**
+   - Set goals: ["Goal 1", "Goal 2"].
+   - Set daily limit: 75 minutes.
+   - Set nudge style: "direct".
+   - Save all.
+   - Reload Settings page.
+   - Goals show exactly: ["Goal 1", "Goal 2"] (not defaults).
+   - Daily limit shows: 75 (not 90).
+   - Nudge style shows: Direct selected (not Firm).
+
+2. **New User (No Settings)**
+   - Fresh account with no saved settings.
+   - Goals tab: Empty lists (no default text).
+   - Daily limit: Shows 90 (only default if not set).
+   - Nudge style: Shows Firm (only default if not set).
+   - Blocked channels: Empty list.
+
+---
+
+### 16. Integration Tests
+
+1. **Settings Persist Across Sessions**
+   - Set all settings (goals, channels, controls).
+   - Save all.
+   - Close browser completely.
+   - Reopen → log in → Settings page.
+   - All settings should be exactly as saved.
+
+2. **Extension Syncs Settings**
+   - Change settings in web app → save.
+   - Reload extension.
+   - Check storage:
+     
+     chrome.storage.local.get(['ft_extension_settings'], console.log);
+          - Should contain: `block_shorts`, `hide_recommendations`, `daily_limit`, `nudge_style`.
+
+3. **Block Shorts + Hide Recs Together**
+   - Pro user: Enable both toggles.
+   - Save.
+   - Visit YouTube:
+     - Shorts should be blocked (hard redirect).
+     - Recommendations should be hidden.
+
+4. **Daily Limit + Nudge Style**
+   - Set limit to 30 minutes, style to "gentle".
+   - Watch until limit → overlay shows gentle message.
+
+---
+
+### 17. Quick Wrap-Up
+
+- Confirm no console errors in background/popup/content.  
+- Verify page titles: "Your FocusTube" (Settings), "Your Stats" (Dashboard).  
+- `git status` should show only intended changes (or clean if already committed).  
+- If any step fails, capture:
+  - Console log snippet (`[FT] ...`).  
+  - `chrome.storage.local.get(null, console.log);`.  
+  - Any failing `curl` response or Supabase screenshot.
+  - Screenshot of Settings page showing issue.
+
+Once all sections pass, the MVP regression is complete.

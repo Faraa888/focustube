@@ -84,7 +84,7 @@ const Dashboard = () => {
       
       <main className="flex-1 container mx-auto px-4 py-8 mt-16">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
+          <h1 className="text-3xl font-bold mb-2">Your Stats</h1>
           <p className="text-muted-foreground">
             Track your YouTube habits and stay focused
           </p>

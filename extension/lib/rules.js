@@ -94,8 +94,10 @@ export function evaluateBlock(ctx) {
     }
   }
 
-  // Global daily time limit (only if you enable it later)
-  const dailyLimitMin = Number(config?.daily_watch_minutes_limit || 0);
+  // Global daily time limit - read from settings (default 90 if not set)
+  const dailyLimitMin = ctx.ft_extension_settings?.daily_limit !== undefined 
+    ? Number(ctx.ft_extension_settings.daily_limit) 
+    : 90;
   if (dailyLimitMin > 0) {
     const limitSeconds = dailyLimitMin * 60;
     if (watchSecondsToday >= limitSeconds) {

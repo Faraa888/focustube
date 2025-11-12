@@ -1291,6 +1291,10 @@ function showSearchWarning(remaining, message) {
 async function showGlobalLimitOverlay(plan, counters) {
   removeOverlay(); // ensure no duplicates
 
+  // Get nudge style
+  const style = await getNudgeStyle();
+  const styleMessage = getNudgeMessage(style, "timeLimit");
+
   const overlay = document.createElement("div");
   overlay.id = "ft-overlay";
   overlay.className = "ft-global-limit-overlay";
@@ -1338,7 +1342,7 @@ async function showGlobalLimitOverlay(plan, counters) {
             <strong>Searches made:</strong> ${searchesMade}
           </div>
         </div>
-        <p class="ft-global-limit-message">💬 "You've had your fun. Time to step back!"</p>
+        <p class="ft-global-limit-message">💬 "${styleMessage}"</p>
         ${buttonsHTML ? `<div class="ft-button-container">${buttonsHTML}</div>` : ''}
       </div>
     </div>
@@ -1756,7 +1760,7 @@ function showBlockChannelConfirmation(channelName, onConfirm, onCancel) {
  * Show overlay when user is outside their focus window
  * @param {Object} focusWindowInfo - { start, end, current }
  */
-function showFocusWindowOverlay(focusWindowInfo) {
+async function showFocusWindowOverlay(focusWindowInfo) {
   const { start, end } = focusWindowInfo;
   
   console.log("[FT] 🕐 Showing focus window overlay:", focusWindowInfo);
@@ -1767,6 +1771,10 @@ function showFocusWindowOverlay(focusWindowInfo) {
   
   // Pause video before showing overlay
   pauseAndMuteVideo();
+  
+  // Get nudge style
+  const style = await getNudgeStyle();
+  const styleMessage = getNudgeMessage(style, "focusWindow");
   
   // Convert 24h to 12h for display
   const convert24hTo12h = (time24) => {
@@ -1789,7 +1797,7 @@ function showFocusWindowOverlay(focusWindowInfo) {
         Your YouTube window is <strong>${startDisplay} - ${endDisplay}</strong>.
       </p>
       <p class="ft-milestone-intro" style="margin-top: 12px;">
-        Come back during those hours to stay focused on your goals.
+        ${styleMessage}
       </p>
       <div class="ft-milestone-buttons">
         <button id="ft-focus-window-settings" class="ft-button ft-button-primary">Go to Settings</button>
@@ -1812,7 +1820,7 @@ function showFocusWindowOverlay(focusWindowInfo) {
   console.log("[FT] ✅ Focus window overlay added to DOM");
 }
 
-function showSpiralNudge(spiralInfo) {
+async function showSpiralNudge(spiralInfo) {
   const { channel, count, type, message } = spiralInfo;
   
   console.log("[FT] 🚨 Showing spiral nudge:", spiralInfo);
@@ -1824,6 +1832,10 @@ function showSpiralNudge(spiralInfo) {
   // Pause video before showing nudge
   pauseAndMuteVideo();
   
+  // Get nudge style
+  const style = await getNudgeStyle();
+  const styleMessage = getNudgeMessage(style, "spiral");
+  
   const overlay = document.createElement("div");
   overlay.id = "ft-spiral-nudge";
   
@@ -1831,7 +1843,7 @@ function showSpiralNudge(spiralInfo) {
   
   overlay.innerHTML = `
     <div class="ft-milestone-box">
-      <h2>⚠️ ${message}</h2>
+      <h2>⚠️ ${styleMessage}</h2>
       <p class="ft-milestone-intro">
         You've watched ${count} ${count === 1 ? 'video' : 'videos'} from <strong>${channel}</strong> ${timePeriod}.
       </p>
@@ -2100,13 +2112,17 @@ async function injectBlockChannelButton(channelName, retryCount = 0) {
  * Temporary, dismissible popup asking "What pulled you off track?"
  * @param {Object} videoMetadata - Video metadata (title, channel, url, etc.)
  */
-function showJournalNudge(videoMetadata) {
+async function showJournalNudge(videoMetadata) {
   // Remove any existing journal nudge
   const existingNudge = document.getElementById("ft-journal-nudge");
   if (existingNudge) existingNudge.remove();
   
   // Mark as shown to prevent duplicates
   journalNudgeShown = true;
+  
+  // Get nudge style
+  const style = await getNudgeStyle();
+  const styleMessage = getNudgeMessage(style, "journal");
   
   // Create nudge popup
   const nudge = document.createElement("div");
@@ -2125,7 +2141,7 @@ function showJournalNudge(videoMetadata) {
       <textarea 
         id="ft-journal-nudge-input" 
         class="ft-journal-nudge-input" 
-        placeholder="What made you click on this? What were you feeling?"
+        placeholder="${styleMessage}"
         rows="3"
       ></textarea>
       <div class="ft-journal-nudge-buttons">
@@ -2799,6 +2815,134 @@ chrome.runtime.onMessage.addListener((msg) => {
 // ─────────────────────────────────────────────────────────────
 
 /**
+ * Gets nudge style from settings (default: "firm")
+ * Returns style object with messages for different nudge types
+ */
+async function getNudgeStyle() {
+  if (!isChromeContextValid()) return "firm";
+  
+  try {
+    const { ft_extension_settings = {} } = await chrome.storage.local.get(["ft_extension_settings"]);
+    return ft_extension_settings.nudge_style || "firm";
+  } catch (e) {
+    console.warn("[FT] Error getting nudge style:", e.message);
+    return "firm";
+  }
+}
+
+/**
+ * Gets nudge message based on style and type
+ */
+function getNudgeMessage(style, type, context = {}) {
+  const messages = {
+    gentle: {
+      spiral: "Still learning?",
+      timeLimit: "Take a break?",
+      focusWindow: "Maybe step away?",
+      journal: "What made you click on this? What were you feeling?"
+    },
+    direct: {
+      spiral: "Check your goals",
+      timeLimit: "You're over your limit",
+      focusWindow: "Time to focus",
+      journal: "What made you click on this? What were you feeling?"
+    },
+    firm: {
+      spiral: "Time's up",
+      timeLimit: "Blocked for today",
+      focusWindow: "Focus now",
+      journal: "What made you click on this? What were you feeling?"
+    }
+  };
+  
+  return messages[style]?.[type] || messages.firm[type] || "";
+}
+
+/**
+ * Hides YouTube recommendations based on user settings
+ * Hides both sidebar recommendations (on watch pages) and homepage feed
+ */
+function hideRecommendationsIfEnabled() {
+  if (!isChromeContextValid()) return;
+  
+  chrome.storage.local.get(["ft_extension_settings"]).then(({ ft_extension_settings = {} }) => {
+    const hideRecs = ft_extension_settings.hide_recommendations === true;
+    
+    if (!hideRecs) {
+      // Show recommendations if setting is off
+      document.querySelectorAll('[data-ft-hidden-recs]').forEach(el => {
+        el.style.display = '';
+        el.removeAttribute('data-ft-hidden-recs');
+      });
+      return;
+    }
+
+    const pageType = detectPageType();
+
+    // Hide sidebar recommendations on watch pages
+    if (pageType === "WATCH") {
+      // Sidebar recommendations container
+      const sidebar = document.querySelector('ytd-watch-next-secondary-results-renderer');
+      if (sidebar && !sidebar.hasAttribute('data-ft-hidden-recs')) {
+        sidebar.style.display = 'none';
+        sidebar.setAttribute('data-ft-hidden-recs', 'true');
+      }
+
+      // Also hide the "Up next" section
+      const upNext = document.querySelector('ytd-watch-next-secondary-results-renderer');
+      if (upNext && !upNext.hasAttribute('data-ft-hidden-recs')) {
+        upNext.style.display = 'none';
+        upNext.setAttribute('data-ft-hidden-recs', 'true');
+      }
+    }
+
+    // Hide homepage recommendations feed
+    if (pageType === "HOME") {
+      // Main content feed - try multiple selectors
+      const feedSelectors = [
+        'ytd-rich-grid-renderer',
+        'ytd-two-column-browse-results-renderer',
+        '#contents ytd-rich-grid-renderer'
+      ];
+      
+      feedSelectors.forEach(selector => {
+        const feed = document.querySelector(selector);
+        if (feed && !feed.hasAttribute('data-ft-hidden-recs')) {
+          feed.style.display = 'none';
+          feed.setAttribute('data-ft-hidden-recs', 'true');
+        }
+      });
+
+      // Also hide any recommendation sections
+      document.querySelectorAll('ytd-rich-section-renderer, ytd-shelf-renderer').forEach(el => {
+        if (!el.hasAttribute('data-ft-hidden-recs')) {
+          el.style.display = 'none';
+          el.setAttribute('data-ft-hidden-recs', 'true');
+        }
+      });
+    }
+  }).catch((e) => {
+    console.warn("[FT] Error checking hide recommendations setting:", e.message);
+  });
+}
+
+// MutationObserver for dynamic content
+let recommendationsObserver = null;
+
+function setupRecommendationsObserver() {
+  if (recommendationsObserver) return;
+
+  recommendationsObserver = new MutationObserver(() => {
+    hideRecommendationsIfEnabled();
+  });
+
+  recommendationsObserver.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+}
+
+/**
  * Core navigation handler — runs whenever the page changes or refreshes.
  * 1. Detects what kind of page we're on
  * 2. Sends message to background for decision
@@ -2835,6 +2979,10 @@ async function handleNavigation() {
   }
   
   const pageType = detectPageType();
+  
+  // Hide recommendations if enabled (early, before other checks)
+  hideRecommendationsIfEnabled();
+  setupRecommendationsObserver();
 
   // Check if we just redirected from Shorts (on home page)
   if (pageType === "HOME") {
@@ -4052,6 +4200,11 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
         console.warn("[FT] Error in storage listener:", e.message);
       }
     }
+  }
+  
+  // Re-apply hide recommendations when settings change
+  if (changes.ft_extension_settings) {
+    hideRecommendationsIfEnabled();
   }
 });
 

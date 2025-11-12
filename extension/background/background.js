@@ -1118,16 +1118,42 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     "ft_shorts_seconds_today",
     "ft_blocked_today",
     "ft_block_shorts_today",
+    "ft_pro_manual_block_shorts",
     "ft_unlock_until_epoch",
     "ft_allowance_videos_left",
     "ft_allowance_seconds_left",
     "ft_blocked_channels",
     "ft_blocked_channels_today",
-    "ft_spiral_detected"
+    "ft_spiral_detected",
+    "ft_extension_settings"
   ]);
 
-  // 6. Read plan + limits
+  // 6. Read plan + limits (needed for block shorts check)
   const { plan, config } = await getPlanConfig();
+  
+  // 6.1. Apply block shorts setting if enabled
+  const extensionSettings = state.ft_extension_settings || {};
+  if (extensionSettings.block_shorts === true && isProExperience(plan)) {
+    // If block_shorts is enabled, set ft_pro_manual_block_shorts and ft_block_shorts_today
+    if (!state.ft_pro_manual_block_shorts || !state.ft_block_shorts_today) {
+      await setLocal({
+        ft_pro_manual_block_shorts: true,
+        ft_block_shorts_today: true
+      });
+      state.ft_pro_manual_block_shorts = true;
+      state.ft_block_shorts_today = true;
+    }
+  } else if (extensionSettings.block_shorts === false && isProExperience(plan)) {
+    // If block_shorts is disabled, clear the flags (allow Pro tracking/reminders)
+    if (state.ft_pro_manual_block_shorts || state.ft_block_shorts_today) {
+      await setLocal({
+        ft_pro_manual_block_shorts: false,
+        ft_block_shorts_today: false
+      });
+      state.ft_pro_manual_block_shorts = false;
+      state.ft_block_shorts_today = false;
+    }
+  }
 
   // 6.4. Check focus window (if enabled) - BEFORE other blocking logic
   const { 
@@ -1431,6 +1457,9 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   const channel = (pageType === "WATCH" && videoMetadata) ? videoMetadata.channel : null;
   const blockedChannels = state.ft_blocked_channels || [];
   
+  // Get extension settings for daily limit and other settings
+  const { ft_extension_settings = {} } = await getLocal(["ft_extension_settings"]);
+  
   const ctx = {
     plan,
     config,
@@ -1444,6 +1473,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     channel,
     blockedChannels,
     aiClassification, // Add AI classification to context
+    ft_extension_settings, // Add extension settings for daily limit and other configs
   };
 
   // 10. Check AI classification and allowance (Pro users only)
