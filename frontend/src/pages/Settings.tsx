@@ -296,6 +296,8 @@ const Settings = () => {
       }
 
       // Normalize all channel names
+      console.log("[Settings] 🔄 Starting normalization for channels:", blockedChannels);
+      
       const normalizeResponse = await fetch("https://focustube-backend-4xah.onrender.com/ai/normalize-channels", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -303,11 +305,46 @@ const Settings = () => {
       });
 
       let normalizedChannels = blockedChannels;
+      let normalizationWarning = null;
+      
       if (normalizeResponse.ok) {
         const normalizeData = await normalizeResponse.json();
+        console.log("[Settings] 📥 Normalization response:", normalizeData);
+        
         if (normalizeData.ok && normalizeData.normalized_names) {
           normalizedChannels = normalizeData.normalized_names;
+          console.log("[Settings] ✅ Normalized channels:", normalizedChannels);
+          
+          // Check if any names actually changed
+          const namesChanged = normalizedChannels.some((name: string, idx: number) => 
+            name.toLowerCase().trim() !== blockedChannels[idx]?.toLowerCase().trim()
+          );
+          
+          if (!namesChanged) {
+            console.warn("[Settings] ⚠️ No channel names changed after normalization");
+          }
+          
+          // Check for warnings
+          if (normalizeData.warning) {
+            normalizationWarning = normalizeData.warning;
+            console.warn("[Settings] ⚠️ Normalization warning:", normalizeData.warning);
+          }
+        } else {
+          console.warn("[Settings] ⚠️ Normalization response missing normalized_names, using original");
         }
+      } else {
+        const errorText = await normalizeResponse.text().catch(() => "Unknown error");
+        console.error("[Settings] ❌ Normalization API failed:", normalizeResponse.status, errorText);
+        normalizationWarning = `Normalization API returned ${normalizeResponse.status}`;
+      }
+      
+      // Show warning toast if normalization had issues (but still save)
+      if (normalizationWarning) {
+        toast({
+          title: "Normalization Warning",
+          description: `Some channel names may not have been normalized: ${normalizationWarning}`,
+          variant: "default",
+        });
       }
 
       // Save normalized channels

@@ -793,12 +793,15 @@ app.post("/ai/normalize-channels", async (req, res) => {
 
     // If OpenAI not configured, return original names (no normalization)
     if (!openaiClient) {
-      console.warn("[Normalize Channels] OpenAI not configured, returning original names");
+      console.warn("[Normalize Channels] ⚠️ OpenAI not configured, returning original names");
       return res.json({
         ok: true,
         normalized_names: channel_names,
+        warning: "OpenAI not configured - normalization skipped",
       });
     }
+    
+    console.log(`[Normalize Channels] 🔄 Normalizing ${channel_names.length} channel(s):`, channel_names);
 
     // Build prompt
     const prompt = `Given these YouTube channel names that a user typed, return the exact canonical channel name as it appears in YouTube metadata. Return a JSON array with the normalized names in the same order.
@@ -830,6 +833,7 @@ Important:
       });
 
       const responseText = completion.choices[0]?.message?.content?.trim() || "";
+      console.log("[Normalize Channels] 📥 GPT raw response:", responseText);
       
       // Try to parse JSON array from response
       let normalizedNames: string[] = channel_names; // Fallback to original
@@ -841,11 +845,28 @@ Important:
         
         if (Array.isArray(parsed) && parsed.length === channel_names.length) {
           normalizedNames = parsed.map((name: any) => String(name).trim()).filter(Boolean);
+          console.log("[Normalize Channels] ✅ Successfully normalized:", normalizedNames);
+          
+          // Log which names changed
+          const changes = channel_names.map((original, idx) => {
+            const normalized = normalizedNames[idx];
+            if (original.toLowerCase().trim() !== normalized.toLowerCase().trim()) {
+              return `${original} → ${normalized}`;
+            }
+            return null;
+          }).filter(Boolean);
+          
+          if (changes.length > 0) {
+            console.log("[Normalize Channels] 📝 Name changes:", changes);
+          } else {
+            console.log("[Normalize Channels] ℹ️ No names changed (already correct or GPT returned same)");
+          }
         } else {
-          console.warn("[Normalize Channels] Response format invalid, using original names");
+          console.warn("[Normalize Channels] ⚠️ Response format invalid - expected array of length", channel_names.length, "got:", parsed);
         }
       } catch (parseError) {
-        console.warn("[Normalize Channels] Failed to parse OpenAI response:", parseError);
+        console.warn("[Normalize Channels] ⚠️ Failed to parse OpenAI response:", parseError);
+        console.warn("[Normalize Channels] Raw response was:", responseText);
         // Fallback to original names
       }
 
@@ -854,12 +875,13 @@ Important:
         normalized_names: normalizedNames,
       });
     } catch (openaiError: any) {
-      console.error("[Normalize Channels] OpenAI error:", openaiError.message);
+      console.error("[Normalize Channels] ❌ OpenAI error:", openaiError.message);
+      console.error("[Normalize Channels] Error details:", openaiError);
       // Return original names on error (graceful degradation)
       return res.json({
         ok: true,
         normalized_names: channel_names,
-        warning: "Normalization failed, using original names",
+        warning: `Normalization failed: ${openaiError.message}`,
       });
     }
   } catch (error) {

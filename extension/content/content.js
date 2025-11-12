@@ -1352,8 +1352,8 @@ async function showGlobalLimitOverlay(plan, counters) {
   const checkUsageBtn = overlay.querySelector("#ft-check-usage");
   if (checkUsageBtn) {
     checkUsageBtn.addEventListener("click", () => {
-      // Redirect to dashboard
-      window.location.href = "https://focustube.app/dashboard";
+      // Open dashboard in new tab (matches settings link pattern)
+      window.open("https://focustube-beta.vercel.app/app/dashboard", "_blank");
     });
   }
 
@@ -1948,7 +1948,7 @@ let pendingButtonChannel = null;
 /**
  * Checks if channel is blocked, then either redirects or injects button
  * @param {string} channelName - Name of channel
- * @param {Element} channelElement - DOM element where button should be injected
+ * @param {Element} channelElement - Not used anymore (kept for compatibility)
  */
 async function checkBlockingAndInjectButton(channelName, channelElement) {
   try {
@@ -1989,58 +1989,53 @@ function setupButtonInjectionObserver(channelName) {
     buttonInjectionObserver = null;
   }
   
-  // Don't set up if button already exists
-  if (document.getElementById("ft-block-channel-btn")) {
+  // Remove existing button if it exists (will be re-injected with new channel)
+  const existingBtn = document.getElementById("ft-block-channel-btn");
+  if (existingBtn) {
+    existingBtn.remove();
+  }
+  
+  if (!channelName) {
+    console.warn("[FT] No channel name provided for button injection");
     return;
   }
   
   pendingButtonChannel = channelName;
   console.log("[FT] Setting up button injection observer for:", channelName);
   
-  // Try immediate injection first
   const channelSelectors = [
     "ytd-channel-name a",
     "#owner-sub-count a",
     "ytd-video-owner-renderer #channel-name a",
-    "ytd-watch-metadata ytd-channel-name a"
+    "ytd-watch-metadata ytd-channel-name a",
+    "ytd-watch-metadata #channel-name a",
+    "#channel-name a"
   ];
   
-  let channelElement = null;
-  for (const selector of channelSelectors) {
-    channelElement = document.querySelector(selector);
-    if (channelElement) break;
-  }
+  // Helper function to try injecting button
+  // With fixed positioning, we don't need to wait for container - just inject when ready
+  const tryInjectButton = () => {
+    // For fixed position, we can inject immediately - just verify we're on a watch page
+    // by checking if we have a video ID
+    const videoId = extractVideoIdFromUrl();
+    if (videoId) {
+      // On watch page, check blocking and inject
+      console.log("[FT] Watch page detected, checking blocking and injecting button");
+      // We don't need channelElement for fixed position, but checkBlockingAndInjectButton expects it
+      // So we'll just call injectBlockChannelButton directly after checking blocking
+      checkBlockingAndInjectButton(channelName, null); // Pass null, function will handle it
+      return true; // Successfully injected
+    }
+    
+    return false; // Not on watch page yet
+  };
   
-  if (channelElement && !document.getElementById("ft-block-channel-btn")) {
-    // Element already exists, check blocking and act
-    checkBlockingAndInjectButton(channelName, channelElement);
-    pendingButtonChannel = null;
-    return;
-  }
-  
-  // Set up observer to watch for channel element
+  // Set up observer to watch for channel element (catches mutations)
   buttonInjectionObserver = new MutationObserver(() => {
-    // Check if button already exists
-    if (document.getElementById("ft-block-channel-btn")) {
+    if (tryInjectButton()) {
+      // Button injected, clean up
       buttonInjectionObserver.disconnect();
       buttonInjectionObserver = null;
-      pendingButtonChannel = null;
-      return;
-    }
-    
-    // Try to find channel element
-    let channelElement = null;
-    for (const selector of channelSelectors) {
-      channelElement = document.querySelector(selector);
-      if (channelElement) break;
-    }
-    
-    if (channelElement) {
-      // Element found, check blocking and act
-      console.log("[FT] Channel element appeared, checking blocking for:", channelName);
-      buttonInjectionObserver.disconnect();
-      buttonInjectionObserver = null;
-      checkBlockingAndInjectButton(channelName, channelElement);
       pendingButtonChannel = null;
     }
   });
@@ -2051,14 +2046,43 @@ function setupButtonInjectionObserver(channelName) {
     subtree: true
   });
   
-  // Timeout after 5 seconds
+  // Periodic fallback check (every 500ms for 5 seconds = 10 attempts)
+  // This catches the element even if observer misses it
+  let fallbackAttempts = 0;
+  const maxFallbackAttempts = 10; // 5 seconds total
+  
+  const fallbackInterval = setInterval(() => {
+    fallbackAttempts++;
+    
+    if (tryInjectButton()) {
+      // Button injected, clean up
+      clearInterval(fallbackInterval);
+      if (buttonInjectionObserver) {
+        buttonInjectionObserver.disconnect();
+        buttonInjectionObserver = null;
+      }
+      pendingButtonChannel = null;
+    } else if (fallbackAttempts >= maxFallbackAttempts) {
+      // Timeout reached
+      console.warn("[FT] Button injection timeout after 5 seconds");
+      clearInterval(fallbackInterval);
+      if (buttonInjectionObserver) {
+        buttonInjectionObserver.disconnect();
+        buttonInjectionObserver = null;
+      }
+      pendingButtonChannel = null;
+    }
+  }, 500);
+  
+  // Cleanup timeout (safety net)
   setTimeout(() => {
+    clearInterval(fallbackInterval);
     if (buttonInjectionObserver) {
       buttonInjectionObserver.disconnect();
       buttonInjectionObserver = null;
-      pendingButtonChannel = null;
     }
-  }, 5000);
+    pendingButtonChannel = null;
+  }, 5500); // Slightly longer than fallback
 }
 
 /**
@@ -2067,59 +2091,34 @@ function setupButtonInjectionObserver(channelName) {
  * @param {number} retryCount - Current retry attempt (internal)
  */
 async function injectBlockChannelButton(channelName, retryCount = 0) {
-  const maxRetries = 5; // Maximum 5 retries (2.5 seconds total)
-  
-  // Check if button already exists
-  if (document.getElementById("ft-block-channel-btn")) {
-    console.log("[FT] Block button already exists, skipping injection");
-    return;
+  // Always remove existing button first (to update channel name on navigation)
+  const existingBtn = document.getElementById("ft-block-channel-btn");
+  if (existingBtn) {
+    existingBtn.remove();
+    console.log("[FT] Removed existing button, injecting new one for:", channelName);
   }
   
-  // Try multiple selectors for channel name element
-  const channelSelectors = [
-    "ytd-channel-name a",
-    "#owner-sub-count a",
-    "ytd-video-owner-renderer #channel-name a",
-    "ytd-watch-metadata ytd-channel-name a"
-  ];
-  
-  let channelElement = null;
-  for (const selector of channelSelectors) {
-    channelElement = document.querySelector(selector);
-    if (channelElement) break;
-  }
-  
-  if (!channelElement) {
-    if (retryCount < maxRetries) {
-      console.log(`[FT] Channel element not found, retrying (${retryCount + 1}/${maxRetries})...`);
-      setTimeout(() => injectBlockChannelButton(channelName, retryCount + 1), 500);
-      return;
-    } else {
-      console.warn("[FT] Could not find channel element after", maxRetries, "attempts");
-      return;
-    }
-  }
-  
-  // Find parent container (usually ytd-channel-name or owner-sub-count)
-  let container = channelElement.closest("ytd-channel-name") || 
-                  channelElement.closest("#owner-sub-count") ||
-                  channelElement.parentElement;
-  
-  if (!container) {
-    console.warn("[FT] Could not find container for block button");
+  // With fixed positioning, we don't need to find channel element
+  // Just verify we're on a watch page
+  const videoId = extractVideoIdFromUrl();
+  if (!videoId) {
+    console.warn("[FT] Not on watch page, skipping button injection");
     return;
   }
   
   console.log("[FT] ✅ Injecting Block Channel button for:", channelName);
   
-  // Create button
+  // Create button with fixed positioning (doesn't depend on container dimensions)
   const button = document.createElement("button");
   button.id = "ft-block-channel-btn";
   button.className = "ft-block-channel-btn";
   button.textContent = "Block Channel";
   button.style.cssText = `
-    margin-left: 12px;
-    padding: 6px 12px;
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 9999;
+    padding: 8px 16px;
     background-color: #ff4444;
     color: white;
     border: none;
@@ -2127,6 +2126,7 @@ async function injectBlockChannelButton(channelName, retryCount = 0) {
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     transition: background-color 0.2s;
   `;
   
@@ -2209,9 +2209,9 @@ async function injectBlockChannelButton(channelName, retryCount = 0) {
     );
   });
   
-  // Insert button after channel name element
-  container.appendChild(button);
-  console.log("[FT] ✅ Block Channel button injected successfully");
+  // Append to body (fixed position, doesn't depend on container)
+  document.body.appendChild(button);
+  console.log("[FT] ✅ Block Channel button injected successfully (fixed position)");
 }
 
 /**

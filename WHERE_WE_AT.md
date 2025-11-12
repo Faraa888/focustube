@@ -77,3 +77,12 @@
 ---
 
 *Last Updated: 2025-01-16*
+
+
+Couple things to do :
+
+Add overlay for the block (small pop up (xx is blocked) after redirect)
+Make sure timer is time spent on YT not time spend since day starts
+
+
+
