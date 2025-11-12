@@ -433,8 +433,8 @@ async function handleMessage(msg) {
       return { ok: false, error: "User ID must be set first" };
     }
     
-    if (!plan || !["free", "pro"].includes(plan)) {
-      return { ok: false, error: "Plan must be 'free' or 'pro'" };
+    if (!plan || !["free", "pro", "trial"].includes(plan)) {
+      return { ok: false, error: "Plan must be 'free', 'pro', or 'trial'" };
     }
     
     try {
@@ -1137,7 +1137,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
 
   // 6. Read plan + limits (needed for block shorts check)
   const { plan, config } = await getPlanConfig();
-  
+
   // 6.1. Apply block shorts setting if enabled
   const extensionSettings = state.ft_extension_settings || {};
   if (extensionSettings.block_shorts === true && isProExperience(plan)) {

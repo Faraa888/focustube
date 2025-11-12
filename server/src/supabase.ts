@@ -117,7 +117,8 @@ export async function getUserPlan(email: string): Promise<string | null> {
  */
 export async function updateUserPlan(
   email: string,
-  plan: string
+  plan: string,
+  trial_expires_at?: string | null
 ): Promise<boolean> {
   try {
     if (!supabaseUrl || !supabaseServiceKey) {
@@ -132,11 +133,24 @@ export async function updateUserPlan(
       .eq("email", email)
       .single();
 
+    const updateData: any = {
+      plan,
+      updated_at: new Date().toISOString()
+    };
+
+    // Add trial_expires_at if provided
+    if (trial_expires_at) {
+      updateData.trial_expires_at = trial_expires_at;
+    } else if (plan !== "trial") {
+      // Clear trial_expires_at if not on trial
+      updateData.trial_expires_at = null;
+    }
+
     if (existingUser) {
       // User exists - update plan
       const { error } = await supabase
         .from("users")
-        .update({ plan, updated_at: new Date().toISOString() })
+        .update(updateData)
         .eq("email", email);
 
       if (error) {
@@ -150,9 +164,8 @@ export async function updateUserPlan(
       // User doesn't exist - create new user
       const { error } = await supabase.from("users").insert({
         email,
-        plan,
+        ...updateData,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       });
 
       if (error) {

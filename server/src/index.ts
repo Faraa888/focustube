@@ -804,16 +804,37 @@ app.post("/ai/normalize-channels", async (req, res) => {
     console.log(`[Normalize Channels] 🔄 Normalizing ${channel_names.length} channel(s):`, channel_names);
 
     // Build prompt
-    const prompt = `Given these YouTube channel names that a user typed, return the exact canonical channel name as it appears in YouTube metadata. Return a JSON array with the normalized names in the same order.
+    const prompt = `You are a YouTube channel name normalizer. Your job is to correct typos, fix spelling, add missing words/articles, and return the EXACT channel name as it appears on YouTube.
 
-User typed: ${JSON.stringify(channel_names)}
+User typed these channel names (may contain typos, missing words, or formatting issues):
+${JSON.stringify(channel_names)}
 
-Return only a JSON array like: ["Vikkstar123", "Eddie Hall The Beast", "Mr Beast"]
+Return a JSON array with the corrected, canonical channel names in the same order.
 
-Important:
-- Return the exact channel name as it appears in YouTube (including numbers, suffixes, etc.)
-- Keep the same order as input
-- Return only the JSON array, no other text`;
+CRITICAL RULES:
+1. Fix ALL typos and spelling mistakes (e.g., "calfrezy" → "calfreezy", "Justic" → "Justice", "crciket" → "cricket")
+2. Add missing articles like "The" when the channel name includes it (e.g., "Overlap" → "The Overlap", "United Stand" → "The United Stand")
+3. Fix spacing issues (e.g., "Loganpaul" → "Logan Paul")
+4. Add missing words if the channel name is incomplete (e.g., "sky crciket" → "Sky Sports Cricket")
+5. Use proper capitalization as shown on YouTube (e.g., "eddie hall" → "Eddie Hall The Beast")
+6. Preserve numbers, special characters, and suffixes exactly as on YouTube
+7. If unsure, search your knowledge of popular YouTube channels
+8. Keep the same order as input
+9. Return ONLY a JSON array, no other text
+
+Examples:
+- "vikkstar" → "Vikkstar123"
+- "eddie hall" → "Eddie Hall The Beast"  
+- "mr beast" → "MrBeast"
+- "calfrezy" → "calfreezy"
+- "matt davelia" → "Matt D'Avella"
+- "Overlap" → "The Overlap"
+- "United Stand" → "The United Stand"
+- "Zach Justic" → "Zach Justice"
+- "Loganpaul" → "Logan Paul"
+- "sky crciket" → "Sky Sports Cricket"
+
+Return format: ["Channel1", "Channel2", "Channel3"]`;
 
     try {
       const completion = await openaiClient.chat.completions.create({
@@ -1303,11 +1324,12 @@ app.get("/dashboard/stats", async (req, res) => {
  * POST /user/update-plan
  * 
  * Updates user plan in Supabase (for testing)
- * Body: { email: "user@example.com", plan: "free" | "pro" }
+ * Body: { email: "user@example.com", plan: "free" | "pro" | "trial", days_left?: number }
+ * - If plan is "trial" and days_left is provided, calculates trial_expires_at
  */
 app.post("/user/update-plan", async (req, res) => {
   try {
-    const { email, plan } = req.body;
+    const { email, plan, days_left } = req.body;
 
     if (!email || typeof email !== "string") {
       return res.status(400).json({
@@ -1316,15 +1338,23 @@ app.post("/user/update-plan", async (req, res) => {
       });
     }
 
-    if (!plan || !["free", "pro"].includes(plan)) {
+    if (!plan || !["free", "pro", "trial"].includes(plan)) {
       return res.status(400).json({
         ok: false,
-        error: "Plan must be 'free' or 'pro'",
+        error: "Plan must be 'free', 'pro', or 'trial'",
       });
     }
 
+    // Calculate trial_expires_at from days_left if provided
+    let trial_expires_at: string | null = null;
+    if (plan === "trial" && days_left !== undefined) {
+      const expiresDate = new Date();
+      expiresDate.setDate(expiresDate.getDate() + days_left);
+      trial_expires_at = expiresDate.toISOString();
+    }
+
     // Update user plan in Supabase
-    const updated = await updateUserPlan(email, plan);
+    const updated = await updateUserPlan(email, plan, trial_expires_at);
 
     if (updated) {
       // Invalidate cache for this email (plan changed)
@@ -1336,6 +1366,7 @@ app.post("/user/update-plan", async (req, res) => {
         ok: true,
         message: `Plan updated to ${plan}`,
         plan: plan,
+        trial_expires_at: trial_expires_at || undefined,
       });
     } else {
       res.status(500).json({

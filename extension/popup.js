@@ -398,8 +398,16 @@ loadCurrentEmail().catch(console.error);
 
 // Listen for storage changes (when frontend stores email)
 chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (namespace === 'local' && changes.ft_user_email) {
+  if (namespace === 'local') {
     // Email was added/changed - reload to show logged-in status
-    loadCurrentEmail().catch(console.error);
+    if (changes.ft_user_email) {
+      loadCurrentEmail().catch(console.error);
+    }
+    
+    // Plan or days_left changed - update banner and status
+    if (changes.ft_plan || changes.ft_days_left) {
+      // Reload current email to refresh plan display
+      loadCurrentEmail().catch(console.error);
+    }
   }
 });

@@ -5,11 +5,12 @@
 // ─────────────────────────────────────────────────────────────
 // IMPORTS
 // ─────────────────────────────────────────────────────────────
-import { PLAN_FREE, PLAN_PRO, PLAN_TEST } from "./constants.js";
+import { PLAN_FREE, PLAN_PRO, PLAN_TRIAL, PLAN_TEST } from "./constants.js";
 
 // ─────────────────────────────────────────────────────────────
 // PLAN CONFIG (single source of truth for limits/flags)
 // Keep numbers conservative for FREE, generous for PRO.
+// TRIAL plan gets same features as PRO (handled in state.js).
 // TEST plan never blocks (for QA/dev).
 // ─────────────────────────────────────────────────────────────
 export const CONFIG_BY_PLAN = Object.freeze({
@@ -22,6 +23,11 @@ export const CONFIG_BY_PLAN = Object.freeze({
     strict_shorts: false,  // Allow Shorts (you can still warn via UI if you want)
     search_threshold: 15,  // More generous
     daily_watch_minutes_limit: 3 // 3 minutes per day (Pro plan) - testing value, production: 90 (configurable 3-150)
+  }),
+  [PLAN_TRIAL]: Object.freeze({
+    strict_shorts: false,  // Same as Pro - allow Shorts
+    search_threshold: 15,  // Same as Pro - more generous
+    daily_watch_minutes_limit: 3 // Same as Pro - testing value, production: 90 (configurable 3-150)
   }),
   [PLAN_TEST]: Object.freeze({
     strict_shorts: false,
