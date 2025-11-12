@@ -511,9 +511,45 @@ export async function loadExtensionDataFromServer() {
       anti_goals
     } = result.data;
     
+    const { ft_watch_history: localWatchHistory = [] } = await getLocal(["ft_watch_history"]);
+    const serverWatchHistory = watch_history || [];
+    
+    // Smart merge: combine both, dedupe by video_id + watched_at, keep most recent
+    // This prevents data loss when server has old data and local has new data
+    const historyMap = new Map();
+
+    // Add local entries first
+    localWatchHistory.forEach(entry => {
+      if (!entry.video_id || !entry.watched_at) return; // Skip invalid entries
+      const key = `${entry.video_id}_${entry.watched_at}`;
+      historyMap.set(key, entry);
+    });
+
+    // Add server entries (will only add if not already present, or if server has newer data)
+    serverWatchHistory.forEach(entry => {
+      if (!entry.video_id || !entry.watched_at) return; // Skip invalid entries
+      const key = `${entry.video_id}_${entry.watched_at}`;
+      if (!historyMap.has(key)) {
+        // New entry from server - add it
+        historyMap.set(key, entry);
+      } else {
+        // Entry exists - keep the one with more recent watched_at timestamp
+        const existing = historyMap.get(key);
+        const existingTime = new Date(existing.watched_at).getTime();
+        const serverTime = new Date(entry.watched_at).getTime();
+        if (serverTime > existingTime) {
+          historyMap.set(key, entry); // Server has newer version
+        }
+      }
+    });
+
+    // Convert back to array and sort by watched_at (newest first)
+    const mergedWatchHistory = Array.from(historyMap.values())
+      .sort((a, b) => new Date(b.watched_at).getTime() - new Date(a.watched_at).getTime());
+
     const storageUpdate = {
       ft_blocked_channels: blocked_channels || [],
-      ft_watch_history: watch_history || [],
+      ft_watch_history: mergedWatchHistory,
       ft_channel_spiral_count: channel_spiral_count || {},
       ft_extension_settings: settings || {},
     };

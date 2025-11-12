@@ -179,8 +179,15 @@ setInterval(() => {
 
 // Send batch on extension unload (fire-and-forget)
 chrome.runtime.onSuspend.addListener(() => {
+  // Sync watch event batch
   sendWatchEventBatch().catch((err) => {
     console.warn("[FT] Unload watch event batch failed:", err);
+  });
+  
+  // Sync extension data (watch history, blocked channels, etc.) before closing
+  // This prevents data loss if extension closes before hourly sync
+  saveExtensionDataToServer(null).catch((err) => {
+    console.warn("[FT] Failed to sync extension data on suspend:", err?.message || err);
   });
 });
 
@@ -823,7 +830,7 @@ function extractVideoId(url) {
  * @param {string} category - Video category ("distracting" | "neutral" | "productive")
  * @returns {Promise<number>} - Time watched in seconds
  */
-async function finalizeVideoWatch(videoId, startTime, category) {
+async function finalizeVideoWatch(videoId, startTime, category, category_primary = null) {
   if (!videoId || !startTime) {
     return 0;
   }
@@ -900,7 +907,8 @@ async function finalizeVideoWatch(videoId, startTime, category) {
         video_id: videoId,
         watched_at: new Date().toISOString(),
         seconds: durationSeconds,
-        category: category || "neutral"
+        category: category || "neutral",
+        category_primary: category_primary || "Other"
       };
       history.push(watchHistoryEntry);
 
@@ -1028,7 +1036,13 @@ async function finalizeVideoWatch(videoId, startTime, category) {
         ...(spiralDetected ? { ft_spiral_detected: spiralDetected } : {})
       });
 
-      // 10. Sync to server (debounced - will be called elsewhere, but ensure data is ready)
+      // 10. Sync to server immediately (fire-and-forget, don't block)
+      // This ensures data is saved quickly and not lost if extension closes
+      saveExtensionDataToServer(null).catch((err) => {
+        console.warn("[FT] Failed to sync watch history after video (non-blocking):", err?.message || err);
+      });
+
+      // 11. Spiral detection note
       if (spiralDetected) {
         LOG("Spiral flag set, will trigger nudge on next video from this channel");
       }
@@ -1100,7 +1114,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   // - User enters a new WATCH page (need to finalize previous video first)
   const { ft_current_video_classification: prevVideo } = await getLocal(["ft_current_video_classification"]);
   if (prevVideo && prevVideo.startTime) {
-    const { videoId, category, startTime } = prevVideo;
+    const { videoId, category, category_primary, startTime } = prevVideo;
     // Only finalize if:
     // - We're leaving WATCH page (going to different page type)
     // - OR we're entering a new WATCH page (different video ID)
@@ -1109,7 +1123,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     const isLeavingWatchPage = pageType !== "WATCH";
     
     if (isLeavingWatchPage || isNewVideo) {
-      await finalizeVideoWatch(videoId, startTime, category);
+      await finalizeVideoWatch(videoId, startTime, category, category_primary);
       // Clear previous video tracking
       await setLocal({ ft_current_video_classification: null });
     }
@@ -1429,6 +1443,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
             ft_current_video_classification: {
               videoId,
               category: aiClassification.category,
+              category_primary: aiClassification.category_primary || "Other",
               startTime: Date.now(),
               title: videoMetadata.title || "Unknown",
               channel: videoMetadata.channel || "Unknown",

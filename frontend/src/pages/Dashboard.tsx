@@ -166,6 +166,37 @@ const Dashboard = () => {
               />
             </div>
 
+            {/* Category Breakdown */}
+            {stats.categoryBreakdown && stats.categoryBreakdown.length > 0 && (
+              <Card className="mb-8">
+                <CardHeader>
+                  <CardTitle>Content Categories</CardTitle>
+                  <CardDescription>
+                    What types of content you've been watching
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {stats.categoryBreakdown.map((cat: any, index: number) => (
+                      <div key={index} className="flex items-center justify-between p-3 rounded-lg border bg-card">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <Badge variant="outline" className="rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0">
+                            {index + 1}
+                          </Badge>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{cat.category}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {cat.videos} {cat.videos === 1 ? "video" : "videos"} · {cat.minutes} min
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Top Distractions (if any) */}
             {stats.topDistractionsThisWeek && stats.topDistractionsThisWeek.length > 0 && (
               <Card className="mb-8">

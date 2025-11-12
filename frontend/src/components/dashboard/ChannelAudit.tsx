@@ -10,6 +10,7 @@ interface Channel {
   videos: number;
   minutes: number;
   seconds: number;
+  percentage?: number; // Percentage of watch time in last 30 days
 }
 
 interface ChannelAuditProps {
@@ -139,6 +140,9 @@ export default function ChannelAudit({ channels }: ChannelAuditProps) {
                   <div className="font-medium truncate">{channel.channel}</div>
                   <div className="text-xs text-muted-foreground">
                     {channel.videos} {channel.videos === 1 ? "video" : "videos"} · {channel.minutes} min
+                    {channel.percentage !== undefined && channel.percentage > 0 && (
+                      <span className="ml-2">· {channel.percentage}% of watch time (last 30 days)</span>
+                    )}
                   </div>
                 </div>
               </div>

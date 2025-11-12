@@ -1166,7 +1166,6 @@ app.get("/dashboard/stats", async (req, res) => {
 
     const extensionData = extData || {};
     const watchHistory = Array.isArray(extensionData.watch_history) ? extensionData.watch_history : [];
-    const channelLifetimeStats = extensionData.channel_lifetime_stats || {};
     const settings = extensionData.settings || {};
     const spiralEvents = Array.isArray(settings.spiral_events) ? settings.spiral_events : [];
 
@@ -1184,7 +1183,7 @@ app.get("/dashboard/stats", async (req, res) => {
     const breakdownToday = { productive: 0, neutral: 0, distracting: 0 };
     const breakdownWeek = { productive: 0, neutral: 0, distracting: 0 };
 
-    const productiveWeekVideos = { total: 0, productive: 0 };
+    const productiveWeekVideos = { total: 0, productive: 0, neutral: 0 };
 
     const distractionsMap: Record<string, { seconds: number; videos: number }> = {};
 
@@ -1216,6 +1215,8 @@ app.get("/dashboard/stats", async (req, res) => {
         productiveWeekVideos.total += 1;
         if (category === "productive") {
           productiveWeekVideos.productive += 1;
+        } else if (category === "neutral") {
+          productiveWeekVideos.neutral += 1;
         }
 
         // Track top distractions within week window
@@ -1233,11 +1234,22 @@ app.get("/dashboard/stats", async (req, res) => {
     const watchTimeTodayMinutes = Math.round(watchSecondsToday / 60);
     const watchTimeWeekMinutes = Math.round(watchSecondsWeek / 60);
 
-    // Focus score (rolling 7 days)
+    // Focus score (rolling 7 days) - count non-distracting (productive + neutral)
     const focusScore7Day =
       productiveWeekVideos.total > 0
-        ? Math.round((productiveWeekVideos.productive / productiveWeekVideos.total) * 100)
+        ? Math.round(((productiveWeekVideos.productive + productiveWeekVideos.neutral) / productiveWeekVideos.total) * 100)
         : 0;
+
+    // Category breakdown: aggregate by category_primary (e.g., "Programming & Dev", "Entertainment")
+    const categoryBreakdown: Record<string, { videos: number; seconds: number }> = {};
+    watchHistory.forEach((entry: any) => {
+      const category = (entry.category_primary || "Other").trim();
+      if (!categoryBreakdown[category]) {
+        categoryBreakdown[category] = { videos: 0, seconds: 0 };
+      }
+      categoryBreakdown[category].videos += 1;
+      categoryBreakdown[category].seconds += Number(entry.seconds || 0);
+    });
 
     // Biggest distractions (top 5 channels by seconds)
     const topDistractionsThisWeek = Object.entries(distractionsMap)
@@ -1278,18 +1290,68 @@ app.get("/dashboard/stats", async (req, res) => {
       })
       .slice(0, 20); // Top 20 most recent
 
-    // Most viewed channels (lifetime stats already aggregated in extension)
-    const topChannels = Object.entries(channelLifetimeStats)
-      .map(([channel, stats]: [string, any]) => ({
-        channel,
-        videos: Number(stats?.total_videos || 0),
-        seconds: Number(stats?.total_seconds || 0),
-        minutes: Math.round(Number(stats?.total_seconds || 0) / 60),
-        firstWatched: stats?.first_watched || null,
-        lastWatched: stats?.last_watched || null,
-      }))
-      .sort((a, b) => b.videos - a.videos)
-      .slice(0, 5);
+    // Most viewed channels - calculate from watch_history (last 30 days)
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const channelStats: Record<string, { videos: number; seconds: number; firstWatched: string | null; lastWatched: string | null }> = {};
+    let totalWatchTimeLast30Days = 0; // Total seconds watched in last 30 days
+    
+    watchHistory.forEach((entry: any) => {
+      // Only count entries from last 30 days
+      if (!entry.watched_at) return;
+      const watchedAt = new Date(entry.watched_at);
+      if (watchedAt < thirtyDaysAgo) return;
+      
+      const channel = (entry.channel || "Unknown").trim();
+      if (!channel || channel === "Unknown") return;
+      
+      const seconds = Number(entry.seconds || 0);
+      totalWatchTimeLast30Days += seconds;
+      
+      if (!channelStats[channel]) {
+        channelStats[channel] = {
+          videos: 0,
+          seconds: 0,
+          firstWatched: entry.watched_at || null,
+          lastWatched: entry.watched_at || null,
+        };
+      }
+      
+      channelStats[channel].videos += 1;
+      channelStats[channel].seconds += seconds;
+      
+      // Update first/last watched timestamps
+      const firstWatched = channelStats[channel].firstWatched ? new Date(channelStats[channel].firstWatched!) : null;
+      const lastWatched = channelStats[channel].lastWatched ? new Date(channelStats[channel].lastWatched!) : null;
+      
+      if (!firstWatched || watchedAt < firstWatched) {
+        channelStats[channel].firstWatched = entry.watched_at;
+      }
+      if (!lastWatched || watchedAt > lastWatched) {
+        channelStats[channel].lastWatched = entry.watched_at;
+      }
+    });
+    
+    const topChannels = Object.entries(channelStats)
+      .map(([channel, stats]) => {
+        // Calculate percentage of total watch time (last 30 days)
+        const percentage = totalWatchTimeLast30Days > 0
+          ? Math.round((stats.seconds / totalWatchTimeLast30Days) * 100)
+          : 0;
+        
+        return {
+          channel,
+          videos: stats.videos,
+          seconds: stats.seconds,
+          minutes: Math.round(stats.seconds / 60),
+          percentage, // Percentage of watch time in last 30 days
+          firstWatched: stats.firstWatched,
+          lastWatched: stats.lastWatched,
+        };
+      })
+      .sort((a, b) => b.videos - a.videos) // Sort by video count (most watched first)
+      .slice(0, 5); // Top 5 channels
 
     return res.json({
       ok: true,
@@ -1302,6 +1364,14 @@ app.get("/dashboard/stats", async (req, res) => {
       },
       topDistractionsThisWeek,
       topChannels,
+      categoryBreakdown: Object.entries(categoryBreakdown)
+        .map(([category, stats]) => ({
+          category,
+          videos: stats.videos,
+          minutes: Math.round(stats.seconds / 60),
+        }))
+        .sort((a, b) => b.videos - a.videos)
+        .slice(0, 10), // Top 10 categories
       cleanupSuggestion: {
         seconds: cleanupSuggestionSeconds,
         minutes: cleanupSuggestionMinutes,
