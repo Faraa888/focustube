@@ -2049,33 +2049,20 @@ async function injectBlockChannelButton(channelName, retryCount = 0) {
             console.log("[FT] Adding channel to blocklist:", channelName);
             console.log("[FT] Updated blocklist:", updatedBlocked);
             
-            // Save to local storage
-            await chrome.storage.local.set({ ft_blocked_channels: updatedBlocked });
-            console.log("[FT] ✅ Channel saved to local storage");
-            
-            // Save to server
-            if (ft_user_email) {
-              const serverUrl = await getServerUrl();
-              try {
-                const response = await fetch(`${serverUrl}/extension/save-data`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    email: ft_user_email,
-                    blocked_channels: updatedBlocked
-                  })
-                });
-                
-                if (response.ok) {
-                  console.log("[FT] ✅ Blocked channel saved to server:", channelName);
-                } else {
-                  console.warn("[FT] ⚠️ Server save failed with status:", response.status);
-                }
-              } catch (err) {
-                console.warn("[FT] ⚠️ Failed to save blocked channel to server:", err);
+            // Save to server via background worker (correct format)
+            try {
+              const response = await chrome.runtime.sendMessage({
+                type: "FT_BLOCK_CHANNEL_PERMANENT",
+                channel: channelName
+              });
+              
+              if (response?.ok) {
+                console.log("[FT] ✅ Blocked channel saved to server:", channelName);
+              } else {
+                console.warn("[FT] ⚠️ Server save failed:", response?.error);
               }
-            } else {
-              console.warn("[FT] ⚠️ No user email, skipping server save");
+            } catch (err) {
+              console.warn("[FT] ⚠️ Failed to save blocked channel to server:", err);
             }
             
             // Show success notification
@@ -3027,7 +3014,19 @@ async function handleNavigation() {
   let videoMetadata = null;
   if (pageType === "WATCH") {
     // ============================================================
-    // FAST PATH: Immediate blocking check (before full metadata extraction)
+    // STEP 1: Reload fresh data from server FIRST (before any checks)
+    // ============================================================
+    try {
+      await chrome.runtime.sendMessage({ type: "FT_RELOAD_EXTENSION_DATA" });
+      // Wait a tiny bit for storage to update
+      await new Promise(resolve => setTimeout(resolve, 50));
+    } catch (e) {
+      console.warn("[FT] Failed to reload data (using cached):", e);
+      // Continue with cached data if reload fails
+    }
+    
+    // ============================================================
+    // STEP 2: FAST PATH: Immediate blocking check (with fresh data)
     // ============================================================
     const videoId = extractVideoIdFromUrl();
     let channel = extractChannelFast(); // Fast extraction (meta tags first, then DOM)
@@ -4272,6 +4271,7 @@ function scheduleNav(delay = 150) {
 
 let lastUrl = location.href;
 
+// Layer 1: MutationObserver (watches DOM changes)
 const observer = new MutationObserver(() => {
   if (location.href !== lastUrl) {
     lastUrl = location.href;
@@ -4280,6 +4280,37 @@ const observer = new MutationObserver(() => {
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
+
+// Layer 2: URL polling (catches missed navigations)
+setInterval(() => {
+  if (location.href !== lastUrl) {
+    lastUrl = location.href;
+    scheduleNav(150);
+  }
+}, 100); // Check every 100ms
+
+// Layer 3: Video ID tracking (most reliable for YouTube)
+let lastVideoId = extractVideoIdFromUrl();
+setInterval(() => {
+  const currentVideoId = extractVideoIdFromUrl();
+  if (currentVideoId && currentVideoId !== lastVideoId) {
+    lastVideoId = currentVideoId;
+    scheduleNav(150);
+  }
+}, 200); // Check every 200ms
+
+// Layer 4: History API interception (catches programmatic navigation)
+const originalPushState = history.pushState;
+history.pushState = function(...args) {
+  originalPushState.apply(history, args);
+  scheduleNav(150);
+};
+
+const originalReplaceState = history.replaceState;
+history.replaceState = function(...args) {
+  originalReplaceState.apply(history, args);
+  scheduleNav(150);
+};
 
 // Initialize global time tracking (tracks time on all YouTube pages)
 // Start tracking immediately when script loads

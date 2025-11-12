@@ -340,6 +340,13 @@ async function handleMessage(msg) {
     return { ok: true, channel };
   }
 
+  if (msg?.type === "FT_RELOAD_EXTENSION_DATA") {
+    await loadExtensionDataFromServer().catch((err) => {
+      LOG("Failed to reload extension data:", err);
+    });
+    return { ok: true };
+  }
+
   if (msg?.type === "FT_BLOCK_CHANNEL_PERMANENT") {
     const channel = msg?.channel?.trim();
     if (!channel) {
