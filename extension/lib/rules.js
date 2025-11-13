@@ -100,10 +100,11 @@ export function evaluateBlock(ctx) {
     }
   }
 
-  // Global daily time limit - read from settings (default 90 if not set)
+  // Global daily time limit - read from settings (default: 60 for free, 90 for pro/trial)
+  const plan = ctx.plan || "free";
   const dailyLimitMin = ctx.ft_extension_settings?.daily_limit !== undefined 
     ? Number(ctx.ft_extension_settings.daily_limit) 
-    : 90;
+    : (plan === "free" ? 60 : 90); // Default: 60 min for free, 90 min for pro/trial
   if (dailyLimitMin > 0) {
     const limitSeconds = dailyLimitMin * 60;
     if (watchSecondsToday >= limitSeconds) {

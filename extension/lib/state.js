@@ -405,8 +405,10 @@ export async function syncPlanFromServer(force = false) {
   const { ft_user_email } = await getLocal(["ft_user_email"]);
 
   if (!ft_user_email || ft_user_email.trim() === "") {
-    console.log("[FT] No email set, skipping plan sync");
-    return false;
+    // Not signed in - default to free plan
+    console.log("[FT] No email set, defaulting to free plan");
+    await setPlan("free");
+    return true;
   }
 
   // Fetch plan and trial info from server
@@ -587,6 +589,11 @@ export async function loadExtensionDataFromServer() {
     }
     
     await setLocal(storageUpdate);
+    
+    // Merge timer from server (for cross-device sync)
+    await mergeTimerFromServer().catch((err) => {
+      console.warn("[FT] Failed to merge timer from server (non-critical):", err);
+    });
 
     console.log("[FT] Extension data loaded from server:", {
       blockedChannels: (blocked_channels || []).length,
@@ -735,6 +742,102 @@ export async function saveExtensionDataToServer(data = null) {
     return true;
   } catch (error) {
     console.warn("[FT] Error saving extension data:", error.message);
+    return false;
+  }
+}
+
+/**
+ * Merge timer from server (for cross-device sync)
+ * Takes MAX of device timer and server timer to get total across devices
+ */
+export async function mergeTimerFromServer() {
+  try {
+    const { ft_user_email, ft_watch_seconds_today: deviceTimer } = await getLocal([
+      "ft_user_email",
+      "ft_watch_seconds_today"
+    ]);
+    
+    if (!ft_user_email || ft_user_email.trim() === "") {
+      return; // Not logged in, skip
+    }
+
+    const response = await fetch(
+      `${SERVER_URL}/extension/get-timer?email=${encodeURIComponent(ft_user_email)}`
+    );
+
+    if (!response.ok) {
+      console.warn("[FT] Failed to fetch timer from server:", response.status);
+      return;
+    }
+
+    const result = await response.json();
+    
+    if (!result.ok) {
+      console.warn("[FT] Invalid timer response:", result);
+      return;
+    }
+
+    const serverTimer = Number(result.watch_seconds_today || 0);
+    const deviceTimerNum = Number(deviceTimer || 0);
+    
+    // Merge: Take MAX (highest across devices = total)
+    const mergedTimer = Math.max(deviceTimerNum, serverTimer);
+    
+    if (mergedTimer !== deviceTimerNum) {
+      // Update device timer with merged total
+      await setLocal({ ft_watch_seconds_today: mergedTimer });
+      console.log(`[FT] Timer merged: device=${deviceTimerNum}s, server=${serverTimer}s, merged=${mergedTimer}s`);
+    }
+  } catch (error) {
+    console.warn("[FT] Error merging timer from server:", error);
+    // Non-critical, don't throw
+  }
+}
+
+/**
+ * Save timer to server (for cross-device sync)
+ * Called periodically when logged in
+ */
+export async function saveTimerToServer() {
+  try {
+    const { ft_user_email, ft_watch_seconds_today } = await getLocal([
+      "ft_user_email",
+      "ft_watch_seconds_today"
+    ]);
+    
+    if (!ft_user_email || ft_user_email.trim() === "") {
+      return false; // Not logged in, skip
+    }
+
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const watchSeconds = Number(ft_watch_seconds_today || 0);
+
+    const response = await fetch(`${SERVER_URL}/extension/save-timer`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: ft_user_email,
+        watch_seconds_today: watchSeconds,
+        date: today,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn("[FT] Failed to save timer to server:", response.status);
+      return false;
+    }
+
+    const result = await response.json();
+    if (result.ok) {
+      console.log(`[FT] Timer saved to server: ${watchSeconds}s`);
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.warn("[FT] Error saving timer to server:", error);
     return false;
   }
 }

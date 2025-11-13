@@ -426,6 +426,7 @@ let globalTimeTracker = null; // Interval timer for global time tracking
 let globalTimeStart = null; // When global time tracking started
 let lastGlobalSaveTime = null; // Last time we saved global time
 let globalBaseSeconds = 0; // Base seconds for global time tracking (synced with storage)
+let focusWindowCheckInterval = null; // Interval timer for focus window check during video playback
 
 // Video watch time tracking for AI classification (45 seconds trigger)
 let videoWatchTimer = null; // Timer for 45-second watch trigger
@@ -1813,10 +1814,65 @@ async function showFocusWindowOverlay(focusWindowInfo) {
 
 function removeFocusWindowOverlay() {
   const overlay = document.getElementById("ft-focus-window-overlay");
-  if (overlay) overlay.remove();
+  if (overlay) {
+    overlay.remove();
+    // Restore scroll
+    document.body.style.overflow = "";
+    document.documentElement.style.overflow = "";
+    console.log("[FT] ✅ Focus window overlay removed");
+  }
+}
 
-  document.body.style.overflow = "";
-  document.documentElement.style.overflow = "";
+/**
+ * Start periodic focus window check during video playback
+ * Checks every 30 seconds if user is outside focus window
+ */
+function startFocusWindowCheck() {
+  if (focusWindowCheckInterval) return; // Already checking
+  
+  focusWindowCheckInterval = setInterval(async () => {
+    const pageType = detectPageType();
+    if (pageType !== "WATCH") {
+      stopFocusWindowCheck();
+      return;
+    }
+    
+    // Check if focus window is enabled
+    const { ft_focus_window_enabled, ft_focus_window_start, ft_focus_window_end } = 
+      await chrome.storage.local.get(["ft_focus_window_enabled", "ft_focus_window_start", "ft_focus_window_end"]);
+    
+    if (ft_focus_window_enabled) {
+      const now = new Date();
+      const currentHours = now.getHours();
+      const currentMinutes = now.getMinutes();
+      const currentTime = `${currentHours.toString().padStart(2, '0')}:${currentMinutes.toString().padStart(2, '0')}`;
+      
+      const startTime = ft_focus_window_start || "13:00";
+      const endTime = ft_focus_window_end || "18:00";
+      
+      const isWithinWindow = currentTime >= startTime && currentTime <= endTime;
+      
+      if (!isWithinWindow) {
+        // Outside window - show overlay
+        const focusWindowInfo = { start: startTime, end: endTime, current: currentTime };
+        showFocusWindowOverlay(focusWindowInfo);
+        pauseVideos();
+      } else {
+        // Inside window - remove overlay if present
+        removeFocusWindowOverlay();
+      }
+    }
+  }, 30000); // Check every 30 seconds
+}
+
+/**
+ * Stop periodic focus window check
+ */
+function stopFocusWindowCheck() {
+  if (focusWindowCheckInterval) {
+    clearInterval(focusWindowCheckInterval);
+    focusWindowCheckInterval = null;
+  }
 }
 
 async function showSpiralNudge(spiralInfo) {
@@ -2675,8 +2731,12 @@ async function startGlobalTimeTracking() {
         console.warn("[FT] Failed to get plan for limit check:", chrome.runtime.lastError.message);
       } else {
         const plan = ft_plan || "free";
-        // Get limit from config (2 mins Free = 120s, 3 mins Pro/Trial = 180s) - testing values
-        const limitSeconds = isProExperience(plan) ? 180 : 120;
+        // Get limit from settings (default: 60 for free, 90 for pro/trial)
+        const { ft_extension_settings = {} } = await chrome.storage.local.get(["ft_extension_settings"]);
+        const dailyLimitMin = ft_extension_settings.daily_limit !== undefined 
+          ? Number(ft_extension_settings.daily_limit) 
+          : (plan === "free" ? 60 : 90); // Default: 60 min for free, 90 min for pro/trial
+        const limitSeconds = dailyLimitMin * 60;
         
         // Check if limit reached
         if (currentTotalSeconds >= limitSeconds) {
@@ -3101,8 +3161,11 @@ async function handleNavigation() {
   const pageType = detectPageType();
   
   // Hide recommendations if enabled (early, before other checks)
-  hideRecommendationsIfEnabled();
-  setupRecommendationsObserver();
+  // Works on both HOME and WATCH pages
+  if (pageType === "HOME" || pageType === "WATCH") {
+    hideRecommendationsIfEnabled();
+    setupRecommendationsObserver();
+  }
 
   // Check if we just redirected from Shorts (on home page)
   if (pageType === "HOME") {
@@ -3324,9 +3387,41 @@ async function handleNavigation() {
         // Continue to background decision check even without video ID
       } else {
         // Extract everything from meta tags immediately (instant)
+        // Improved title extraction with multiple fallbacks
+        const extractTitle = () => {
+          // Method 1: Meta tag (fastest, but may be stale on SPA navigation)
+          const metaTitle = document.querySelector('meta[property="og:title"]');
+          if (metaTitle) {
+            const metaTitleContent = metaTitle.getAttribute("content")?.trim();
+            if (metaTitleContent && metaTitleContent !== "YouTube") {
+              return metaTitleContent;
+            }
+          }
+          
+          // Method 2: DOM h1 element (more reliable on SPA navigation)
+          const titleElement = document.querySelector("h1.ytd-watch-metadata yt-formatted-string, h1.ytd-video-primary-info-renderer, h1.title, ytd-watch-metadata h1");
+          if (titleElement) {
+            const titleText = titleElement.textContent?.trim();
+            if (titleText && titleText !== "YouTube") {
+              return titleText;
+            }
+          }
+          
+          // Method 3: yt-formatted-string in watch metadata
+          const formattedTitle = document.querySelector("ytd-watch-metadata yt-formatted-string#text, ytd-watch-metadata yt-formatted-string");
+          if (formattedTitle) {
+            const formattedText = formattedTitle.textContent?.trim();
+            if (formattedText && formattedText !== "YouTube") {
+              return formattedText;
+            }
+          }
+          
+          return null;
+        };
+        
         videoMetadata = {
           video_id: videoId,
-          title: document.querySelector('meta[property="og:title"]')?.getAttribute("content")?.trim() || null,
+          title: extractTitle(),
           description: document.querySelector('meta[property="og:description"]')?.getAttribute("content")?.trim()?.substring(0, 500) || null,
           channel: extractChannelFast(), // Already uses meta tags first
           tags: Array.from(document.querySelectorAll('meta[property="og:video:tag"]')).map(el => el.getAttribute("content")?.trim()).filter(Boolean),
@@ -3337,11 +3432,28 @@ async function handleNavigation() {
           url: location.href
         };
 
-        // If title/channel missing, wait 500ms and retry once (for SPA navigation lag)
+        // If title/channel missing, wait 1s and retry with DOM elements (for SPA navigation lag)
         if ((!videoMetadata.title || !videoMetadata.channel) && videoId) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          videoMetadata.title = videoMetadata.title || document.querySelector('meta[property="og:title"]')?.getAttribute("content")?.trim() || null;
-          videoMetadata.channel = videoMetadata.channel || extractChannelFast();
+          await new Promise((resolve) => setTimeout(resolve, 1000)); // Increased to 1s for better reliability
+          
+          // Retry title extraction with DOM elements (more reliable after SPA navigation)
+          if (!videoMetadata.title) {
+            const titleElement = document.querySelector("h1.ytd-watch-metadata yt-formatted-string, h1.ytd-video-primary-info-renderer, h1.title, ytd-watch-metadata h1");
+            if (titleElement) {
+              videoMetadata.title = titleElement.textContent?.trim() || null;
+            }
+            // Fallback to meta tag if DOM still doesn't have it
+            if (!videoMetadata.title) {
+              const metaTitle = document.querySelector('meta[property="og:title"]');
+              if (metaTitle) {
+                videoMetadata.title = metaTitle.getAttribute("content")?.trim() || null;
+              }
+            }
+          }
+          
+          if (!videoMetadata.channel) {
+            videoMetadata.channel = extractChannelFast();
+          }
         }
 
         // Verify we have minimum required fields (title is required for AI)
@@ -3644,6 +3756,8 @@ async function handleNavigation() {
     journalNudgeShown = false;
     currentVideoAIClassification = null;
     videoClassified = false;
+    // Stop focus window check when leaving WATCH page
+    stopFocusWindowCheck();
   }
 
   // Handle AI classification popup (show before checking blocked status)
@@ -3689,10 +3803,18 @@ async function handleNavigation() {
     showFocusWindowOverlay(resp.focusWindowInfo);
     pauseVideos();
     await stopShortsTimeTracking();
+    // Start periodic check to catch time changes during video playback
+    startFocusWindowCheck();
     return; // Don't continue with other blocking logic
   } else {
     // User is no longer outside focus window - remove overlay and restore scroll
     removeFocusWindowOverlay();
+    // If on WATCH page, start periodic check to catch time changes
+    if (pageType === "WATCH") {
+      startFocusWindowCheck();
+    } else {
+      stopFocusWindowCheck();
+    }
   }
 
   // Handle spiral detection (before blocking checks)

@@ -20,6 +20,7 @@ import {
   syncPlanFromServer,      // sync plan from server
   loadExtensionDataFromServer, // load extension data from server
   saveExtensionDataToServer, // save extension data to server
+  saveTimerToServer,        // save timer to server for cross-device sync
 } from "../lib/state.js";
 
 import { evaluateBlock } from "../lib/rules.js";
@@ -369,7 +370,21 @@ setInterval(() => {
   saveExtensionDataToServer(null).catch((err) => {
     console.warn("[FT] Background extension data sync failed:", err);
   });
+  
+  // Save timer to server every hour (for cross-device sync)
+  saveTimerToServer().catch((err) => {
+    console.warn("[FT] Background timer sync failed:", err);
+  });
 }, 60 * 60 * 1000); // 1 hour
+
+// ─────────────────────────────────────────────────────────────
+// TIMER SYNC: Save timer to server every 5 minutes (for better cross-device sync)
+// ─────────────────────────────────────────────────────────────
+setInterval(() => {
+  saveTimerToServer().catch((err) => {
+    // Silent fail - timer sync is non-critical
+  });
+}, 5 * 60 * 1000); // 5 minutes
 
 // Send batch on extension unload (fire-and-forget)
 chrome.runtime.onSuspend.addListener(() => {
@@ -480,16 +495,36 @@ async function handleMessage(msg) {
         console.warn("[FT] Failed to save data before logout (non-critical):", err);
         // Continue with logout even if save fails - data is already in Supabase
       });
+      
+      // Save timer to server before logout (for cross-device sync)
+      await saveTimerToServer().catch((err) => {
+        console.warn("[FT] Failed to save timer before logout (non-critical):", err);
+      });
     }
     
     // Only remove auth-related fields, NOT user data
     // User data (blocked_channels, watch_history, settings, goals) stays in Supabase
     // When user logs back in, data will be restored from Supabase via loadExtensionDataFromServer()
+    // 
+    // IMPORTANT: Timer counters (ft_watch_seconds_today, etc.) are NOT cleared on logout
+    // They persist in local storage so daily limits continue across logout/login sessions
+    // They only reset at midnight via maybeRotateCounters() or when explicitly reset
     await chrome.storage.local.remove([
       "ft_user_email",      // Auth only
       "ft_plan",             // Auth only
       "ft_days_left",        // Auth only
       "ft_trial_expires_at", // Auth only
+      // DO NOT clear timer counters - they persist across logout/login for daily limits:
+      // - ft_watch_seconds_today (persists - daily limit continues)
+      // - ft_watch_visits_today (persists - daily limit continues)
+      // - ft_searches_today (persists - daily limit continues)
+      // - ft_short_visits_today (persists - daily limit continues)
+      // - ft_shorts_engaged_today (persists - daily limit continues)
+      // - ft_shorts_seconds_today (persists - daily limit continues)
+      // - ft_allowance_videos_left (persists - daily allowance continues)
+      // - ft_allowance_seconds_left (persists - daily allowance continues)
+      // - ft_blocked_today (persists - temporary blocks continue)
+      // - ft_block_shorts_today (persists - temporary blocks continue)
       // DO NOT remove user data - it's preserved in Supabase:
       // - ft_blocked_channels (preserved in Supabase)
       // - ft_watch_history (preserved in Supabase)

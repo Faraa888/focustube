@@ -12,7 +12,9 @@ interface WatchTimeMapProps {
 export default function WatchTimeMap({ hourlyData, breakdownWeek }: WatchTimeMapProps) {
   // Convert seconds to minutes for display
   const hourlyMinutes = hourlyData.map(seconds => Math.round(seconds / 60));
-  const maxMinutes = Math.max(...hourlyMinutes, 1); // Avoid division by zero
+  // Dynamic scale: max value + 10% padding for better visualization
+  const maxWatchTime = Math.max(...hourlyMinutes, 0);
+  const maxMinutes = maxWatchTime > 0 ? Math.ceil(maxWatchTime * 1.1) : 60; // 10% padding, min 60
 
   // Calculate total for percentage breakdown
   const totalWeek = breakdownWeek.productive + breakdownWeek.neutral + breakdownWeek.distracting;

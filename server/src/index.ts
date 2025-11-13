@@ -1148,6 +1148,154 @@ app.post("/extension/save-data", async (req, res) => {
   }
 });
 
+/**
+ * Save timer endpoint
+ * POST /extension/save-timer
+ * 
+ * Saves watch timer to extension_data.settings for cross-device sync
+ * Body: { email: "user@example.com", watch_seconds_today: 1800, date: "2025-01-13" }
+ */
+app.post("/extension/save-timer", async (req, res) => {
+  try {
+    const { email, watch_seconds_today, date } = req.body;
+
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({
+        ok: false,
+        error: "Email is required",
+      });
+    }
+
+    if (watch_seconds_today === undefined || typeof watch_seconds_today !== "number") {
+      return res.status(400).json({
+        ok: false,
+        error: "watch_seconds_today is required and must be a number",
+      });
+    }
+
+    const userId = email.toLowerCase().trim();
+    const today = date || new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+    // Get existing extension_data
+    const { data: existingData, error: fetchError } = await supabase
+      .from("extension_data")
+      .select("settings")
+      .eq("user_id", userId)
+      .single();
+
+    let settings: any = {};
+    if (existingData && existingData.settings && typeof existingData.settings === 'object') {
+      settings = existingData.settings;
+    }
+
+    // Update timer in settings
+    settings.watch_seconds_today = watch_seconds_today;
+    settings.timer_synced_at = new Date().toISOString();
+    settings.timer_date = today;
+
+    // Upsert extension_data with updated settings
+    const { error: updateError } = await supabase
+      .from("extension_data")
+      .upsert({
+        user_id: userId,
+        settings: settings,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: "user_id",
+      });
+
+    if (updateError) {
+      console.error("[Timer] Error saving timer:", updateError);
+      return res.status(500).json({
+        ok: false,
+        error: "Failed to save timer",
+      });
+    }
+
+    res.json({
+      ok: true,
+      message: "Timer saved successfully",
+    });
+  } catch (error) {
+    console.error("Error in /extension/save-timer:", error);
+    res.status(500).json({
+      ok: false,
+      error: "Internal server error",
+    });
+  }
+});
+
+/**
+ * Get timer endpoint
+ * GET /extension/get-timer?email=user@example.com
+ * 
+ * Returns watch timer from extension_data.settings for cross-device sync
+ */
+app.get("/extension/get-timer", async (req, res) => {
+  try {
+    const email = req.query.email as string;
+
+    if (!email) {
+      return res.status(400).json({
+        ok: false,
+        error: "Email is required",
+      });
+    }
+
+    const userId = email.toLowerCase().trim();
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+    // Get extension_data
+    const { data, error } = await supabase
+      .from("extension_data")
+      .select("settings")
+      .eq("user_id", userId)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      console.error("[Timer] Error fetching timer:", error);
+      return res.status(500).json({
+        ok: false,
+        error: "Failed to fetch timer",
+      });
+    }
+
+    // If no data found, return 0
+    if (!data || !data.settings) {
+      return res.json({
+        ok: true,
+        watch_seconds_today: 0,
+        timer_date: today,
+      });
+    }
+
+    const settings = data.settings || {};
+    const timerDate = settings.timer_date || today;
+    
+    // Only return timer if it's for today (don't use yesterday's timer)
+    if (timerDate === today) {
+      return res.json({
+        ok: true,
+        watch_seconds_today: Number(settings.watch_seconds_today || 0),
+        timer_date: timerDate,
+        timer_synced_at: settings.timer_synced_at || null,
+      });
+    } else {
+      // Timer is for a different day, return 0
+      return res.json({
+        ok: true,
+        watch_seconds_today: 0,
+        timer_date: today,
+      });
+    }
+  } catch (error) {
+    console.error("Error in /extension/get-timer:", error);
+    res.status(500).json({
+      ok: false,
+      error: "Internal server error",
+    });
+  }
+});
 
 /**
  * GET /dashboard/stats?email=
