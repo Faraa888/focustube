@@ -22,46 +22,6 @@ export default function WeeklySummary({
   const productivePercent = totalWeek > 0 ? Math.round((breakdownWeek.productive / totalWeek) * 100) : 0;
   const distractingPercent = totalWeek > 0 ? Math.round((breakdownWeek.distracting / totalWeek) * 100) : 0;
 
-  // Find peak productive and distracting hours
-  const productiveHours: number[] = [];
-  const distractingHours: number[] = [];
-
-  // Simplified: assume morning (6-12) = productive, evening (18-24) = distracting
-  // In a real implementation, we'd use actual category breakdown per hour
-  hourlyWatchTime.forEach((seconds, hour) => {
-    if (seconds > 0) {
-      if (hour >= 6 && hour < 12) {
-        productiveHours.push(hour);
-      } else if (hour >= 18 || hour < 6) {
-        distractingHours.push(hour);
-      }
-    }
-  });
-
-  const formatHour = (hour: number) => {
-    if (hour === 0) return "12 AM";
-    if (hour < 12) return `${hour} AM`;
-    if (hour === 12) return "12 PM";
-    return `${hour - 12} PM`;
-  };
-
-  const getPeakProductive = () => {
-    if (productiveHours.length === 0) return "No productive viewing detected";
-    const avgHour = Math.round(
-      productiveHours.reduce((sum, h) => sum + h, 0) / productiveHours.length
-    );
-    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    return `${dayNames[0]} ${formatHour(avgHour)} tutorials`;
-  };
-
-  const getPeakDistracting = () => {
-    if (distractingHours.length === 0) return "No distracting viewing detected";
-    const avgHour = Math.round(
-      distractingHours.reduce((sum, h) => sum + h, 0) / distractingHours.length
-    );
-    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    return `${dayNames[4]} ${formatHour(avgHour)} Shorts`;
-  };
 
   const hours = Math.floor(thisWeekMinutes / 60);
   const minutes = thisWeekMinutes % 60;
@@ -91,14 +51,7 @@ export default function WeeklySummary({
           </div>
         </div>
 
-        <div className="pt-4 border-t">
-          <p className="text-sm">
-            <strong>Most productive viewing:</strong> {getPeakProductive()}
-          </p>
-          <p className="text-sm mt-2">
-            <strong>Most waste:</strong> {getPeakDistracting()}
-          </p>
-        </div>
+        {/* Removed peak viewing text - calculation was inaccurate without hourly category breakdown */}
 
         {distractingPercent > 50 && (
           <div className="pt-4 border-t">

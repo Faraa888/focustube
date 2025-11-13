@@ -2919,6 +2919,15 @@ chrome.runtime.onMessage.addListener((msg) => {
     scheduleNav(0);
     return;
   }
+
+  if (msg?.type === "FT_SETTINGS_RELOADED") {
+    // Settings were reloaded from server - re-apply immediately
+    console.log("[FT] Settings reloaded, re-applying...");
+    hideRecommendationsIfEnabled();
+    // Also re-check blocking in case focus window or other settings changed
+    scheduleNav(0);
+    return;
+  }
 });
 
 // ─────────────────────────────────────────────────────────────

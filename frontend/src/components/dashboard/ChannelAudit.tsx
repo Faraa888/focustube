@@ -82,7 +82,18 @@ export default function ChannelAudit({ channels }: ChannelAuditProps) {
           title: "Channel blocked",
           description: "Well done! Eliminating distractions helps you stay focused.",
         });
-        // Refresh page to update list
+        
+        // Notify extension to reload settings immediately (no page reload needed)
+        try {
+          window.postMessage({
+            type: "FT_RELOAD_SETTINGS",
+            requestId: `block_${Date.now()}`
+          }, window.location.origin);
+        } catch (err) {
+          console.log("Extension not available for immediate sync (will sync on next reload)");
+        }
+        
+        // Refresh page to update list (channel will be removed from audit list)
         window.location.reload();
       } else {
         throw new Error("Failed to save");

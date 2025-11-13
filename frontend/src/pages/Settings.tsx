@@ -259,6 +259,16 @@ const Settings = () => {
         title: "Goals saved",
         description: "Your goals have been updated.",
       });
+      
+      // Notify extension to reload settings immediately (goals affect AI classification)
+      try {
+        window.postMessage({
+          type: "FT_RELOAD_SETTINGS",
+          requestId: `goals_${Date.now()}`
+        }, window.location.origin);
+      } catch (err) {
+        console.log("Extension not available for immediate sync (will sync on next reload)");
+      }
     } catch (error) {
       console.error("Error saving goals:", error);
       toast({
@@ -373,14 +383,15 @@ const Settings = () => {
           variant: "default",
         });
         
-        // Delay reload so logs are visible (10 seconds for debugging)
-        console.log("[Settings] ✅ Save successful, reloading in 10 seconds...");
-        console.log("[Settings] 📋 Original channels:", blockedChannels);
-        console.log("[Settings] ✨ Normalized channels:", normalizedChannels);
-        
-        setTimeout(() => {
-          window.location.reload();
-        }, 10000); // 10 seconds delay
+        // Notify extension to reload settings immediately (no page reload needed)
+        try {
+          window.postMessage({
+            type: "FT_RELOAD_SETTINGS",
+            requestId: `channels_${Date.now()}`
+          }, window.location.origin);
+        } catch (err) {
+          console.log("Extension not available for immediate sync (will sync on next reload)");
+        }
       } else {
         throw new Error("Failed to save");
       }
@@ -466,10 +477,22 @@ const Settings = () => {
       });
 
       if (response.ok) {
-        toast({
-          title: "Settings saved",
-          description: "Your preferences have been updated.",
-        });
+    toast({
+      title: "Settings saved",
+      description: "Your preferences have been updated.",
+    });
+        
+        // Notify extension to reload settings immediately (no reload needed)
+        try {
+          // Send message to extension via postMessage (handled by website-bridge.js)
+          window.postMessage({
+            type: "FT_RELOAD_SETTINGS",
+            requestId: `settings_${Date.now()}`
+          }, window.location.origin);
+        } catch (err) {
+          // Extension might not be installed, that's okay
+          console.log("Extension not available for immediate sync (will sync on next reload)");
+        }
       } else {
         throw new Error("Failed to save");
       }
@@ -744,18 +767,18 @@ const Settings = () => {
               </CardHeader>
               <CardContent className="space-y-6">
                 {isProExperience && (
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
                       <Label className="text-base">Hard Block Shorts / Track Shorts with Reminders</Label>
-                      <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                         {blockShorts ? "Hard block Shorts (Free behavior)" : "Track Shorts with reminders (Pro behavior)"}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={blockShorts}
-                      onCheckedChange={setBlockShorts}
-                    />
+                    </p>
                   </div>
+                  <Switch
+                    checked={blockShorts}
+                    onCheckedChange={setBlockShorts}
+                  />
+                </div>
                 )}
 
                 <div className="flex items-center justify-between">
@@ -907,9 +930,9 @@ const Settings = () => {
                     </div>
                   </div>
                   {userPlan === "free" && (
-                    <Button asChild data-evt="settings_upgrade">
-                      <Link to="/pricing">Upgrade to Pro</Link>
-                    </Button>
+                  <Button asChild data-evt="settings_upgrade">
+                    <Link to="/pricing">Upgrade to Pro</Link>
+                  </Button>
                   )}
                 </div>
               </CardContent>

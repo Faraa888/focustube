@@ -1335,7 +1335,7 @@ app.get("/dashboard/stats", async (req, res) => {
           const watchedAt = new Date(w.watched_at);
           return watchedAt.getHours() === hour;
         })
-        .reduce((sum: number, w: any) => sum + (Number(w.seconds) || 0), 0);
+        .reduce((sum: number, w: any) => sum + (Number(w.watch_seconds ?? w.seconds ?? 0)), 0);
     });
 
     // Spiral events (last 30 days, top 20 most recent)

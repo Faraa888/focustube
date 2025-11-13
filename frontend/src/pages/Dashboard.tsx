@@ -252,6 +252,16 @@ const Dashboard = () => {
                               }),
                             });
                             
+                            // Notify extension to reload settings immediately (no page reload needed)
+                            try {
+                              window.postMessage({
+                                type: "FT_RELOAD_SETTINGS",
+                                requestId: `dashboard_block_${Date.now()}`
+                              }, window.location.origin);
+                            } catch (err) {
+                              console.log("Extension not available for immediate sync");
+                            }
+                            
                             window.location.reload();
                           }}
                         >

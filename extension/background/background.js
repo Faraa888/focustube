@@ -471,19 +471,35 @@ async function handleMessage(msg) {
   }
 
   if (msg?.type === "FT_REMOVE_EMAIL_FROM_WEBSITE") {
+    // CRITICAL: Save all data to server BEFORE clearing
+    // This ensures no data loss on logout
+    const { ft_user_email } = await getLocal(["ft_user_email"]);
+    if (ft_user_email) {
+      // Save everything to server before clearing
+      await saveExtensionDataToServer(null).catch((err) => {
+        console.warn("[FT] Failed to save data before logout (non-critical):", err);
+        // Continue with logout even if save fails - data is already in Supabase
+      });
+    }
+    
+    // Only remove auth-related fields, NOT user data
+    // User data (blocked_channels, watch_history, settings, goals) stays in Supabase
+    // When user logs back in, data will be restored from Supabase via loadExtensionDataFromServer()
     await chrome.storage.local.remove([
-      "ft_user_email", 
-      "ft_plan", 
-      "ft_days_left", 
-      "ft_trial_expires_at",
-      "ft_blocked_channels",
-      "ft_watch_history",
-      "ft_channel_spiral_count",
-      "ft_extension_settings",
-      "ft_user_goals",
-      "ft_user_anti_goals"
+      "ft_user_email",      // Auth only
+      "ft_plan",             // Auth only
+      "ft_days_left",        // Auth only
+      "ft_trial_expires_at", // Auth only
+      // DO NOT remove user data - it's preserved in Supabase:
+      // - ft_blocked_channels (preserved in Supabase)
+      // - ft_watch_history (preserved in Supabase)
+      // - ft_extension_settings (preserved in Supabase)
+      // - ft_user_goals (preserved in Supabase)
+      // - ft_user_anti_goals (preserved in Supabase)
+      // - ft_channel_spiral_count (preserved in Supabase)
     ]);
-    LOG("Email and user data removed from website logout");
+    
+    LOG("Email and auth data removed from website logout (user data preserved in Supabase)");
     return { ok: true };
   }
 
@@ -625,7 +641,40 @@ async function handleMessage(msg) {
     } else {
       return { ok: false, error: "Failed to sync plan" };
     }
+  }
+
+  if (msg?.type === "FT_RELOAD_SETTINGS") {
+    // Reload settings from server (triggered by website after saving settings)
+    // This ensures settings changes take effect immediately without extension reload
+    const { ft_user_email } = await getLocal(["ft_user_email"]);
+    if (!ft_user_email) {
+      return { ok: false, error: "Not logged in" };
+    }
+    
+    LOG("Reloading settings from server (triggered by website)");
+    const loaded = await loadExtensionDataFromServer().catch((err) => {
+      LOG("Failed to reload settings:", err);
+      return null;
+    });
+    
+    if (loaded) {
+      LOG("Settings reloaded successfully");
+      // Notify all content scripts to re-check settings
+      try {
+        const tabs = await chrome.tabs.query({ url: "*://*.youtube.com/*" });
+        tabs.forEach(tab => {
+          chrome.tabs.sendMessage(tab.id, { type: "FT_SETTINGS_RELOADED" }).catch(() => {
+            // Tab might not have content script loaded, ignore
+          });
+        });
+      } catch (err) {
+        console.warn("[FT] Failed to notify content scripts:", err);
       }
+      return { ok: true };
+    } else {
+      return { ok: false, error: "Failed to reload settings" };
+    }
+  }
 
   if (msg?.type === "FT_SET_PLAN") {
     const plan = msg?.plan?.trim() || "";
