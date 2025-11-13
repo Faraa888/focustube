@@ -79,6 +79,21 @@ chrome.runtime.onInstalled.addListener(() => boot().catch(console.error));
 chrome.runtime.onStartup.addListener(() => boot().catch(console.error));
 
 // ─────────────────────────────────────────────────────────────
+// STORAGE CHANGE LISTENER: Load extension data when email is set
+// ─────────────────────────────────────────────────────────────
+chrome.storage.onChanged.addListener(async (changes, namespace) => {
+  if (namespace === 'local' && changes.ft_user_email) {
+    // Email was just set - load extension data immediately
+    if (changes.ft_user_email.newValue) {
+      LOG("Email set, loading extension data...");
+      await loadExtensionDataFromServer().catch((err) => {
+        LOG("Failed to load extension data after email set:", err);
+      });
+    }
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
 // REQUEST TRACKING: Prevents race conditions from quick video switching
 // ─────────────────────────────────────────────────────────────
 let lastClassificationRequest = {
@@ -378,13 +393,14 @@ setInterval(() => {
 }, 60 * 60 * 1000); // 1 hour
 
 // ─────────────────────────────────────────────────────────────
-// TIMER SYNC: Save timer to server every 5 minutes (for better cross-device sync)
+// TIMER SYNC: Save timer to server every 15 minutes (for better cross-device sync)
+// Reduced frequency to improve performance
 // ─────────────────────────────────────────────────────────────
 setInterval(() => {
   saveTimerToServer().catch((err) => {
     // Silent fail - timer sync is non-critical
   });
-}, 5 * 60 * 1000); // 5 minutes
+}, 15 * 60 * 1000); // 15 minutes (reduced from 5 to improve performance)
 
 // Send batch on extension unload (fire-and-forget)
 chrome.runtime.onSuspend.addListener(() => {

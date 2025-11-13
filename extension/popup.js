@@ -356,12 +356,19 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace === 'local') {
     // Email was added/changed - reload to show logged-in status
     if (changes.ft_user_email) {
+      console.log("🔄 [POPUP] Email changed, reloading...");
       loadCurrentEmail().catch(console.error);
     }
     
     // Plan or days_left changed - update banner and status
     if (changes.ft_plan || changes.ft_days_left) {
-      // Reload current email to refresh plan display
+      console.log("🔄 [POPUP] Plan changed, reloading...");
+      loadCurrentEmail().catch(console.error);
+    }
+    
+    // Extension settings changed - reload to show updated status
+    if (changes.ft_extension_settings) {
+      console.log("🔄 [POPUP] Settings changed, reloading...");
       loadCurrentEmail().catch(console.error);
     }
   }

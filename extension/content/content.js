@@ -2984,6 +2984,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     // Settings were reloaded from server - re-apply immediately
     console.log("[FT] Settings reloaded, re-applying...");
     hideRecommendationsIfEnabled();
+    setupRecommendationsObserver(); // ← ADD THIS LINE
     // Also re-check blocking in case focus window or other settings changed
     scheduleNav(0);
     return;
