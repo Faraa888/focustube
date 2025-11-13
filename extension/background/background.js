@@ -1081,6 +1081,12 @@ async function finalizeVideoWatch(videoId, startTime, distractionLevel, category
   queue.push(watchEvent);
   await setLocal({ ft_watch_event_queue: queue });
 
+  // Immediately try to send batch (fire-and-forget, don't block)
+  sendWatchEventBatch().catch((err) => {
+    console.warn("[FT] Immediate watch event batch send failed (will retry later):", err?.message || err);
+  });
+
+
   LOG("Watch event queued:", {
     videoId: videoId.substring(0, 10),
     title: videoTitle.substring(0, 30),
@@ -1435,11 +1441,23 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   }
 
   // 6.5. Check channel blocking BEFORE AI classification (early exit)
-  if (pageType === "WATCH" && videoMetadata && videoMetadata.channel) {
+  // Extract channel from metadata or URL if needed
+  let channelToCheck = null;
+  if (pageType === "WATCH") {
+    if (videoMetadata && videoMetadata.channel) {
+      channelToCheck = videoMetadata.channel.trim();
+    } else if (url) {
+      // Fallback: try to extract channel from URL or use a placeholder
+      // Content script should have sent it, but if missing, we'll check on next navigation
+      // For now, skip this check if metadata is incomplete
+      channelToCheck = null;
+    }
+  }
+
+  if (pageType === "WATCH" && channelToCheck) {
     const blockedChannels = state.ft_blocked_channels || [];
     if (Array.isArray(blockedChannels) && blockedChannels.length > 0) {
-      const channel = videoMetadata.channel.trim();
-      const channelLower = channel.toLowerCase();
+      const channelLower = channelToCheck.toLowerCase();
       // More robust matching: check if blocked channel name is contained in current channel or vice versa
       const isBlocked = blockedChannels.some(blocked => {
         const blockedLower = blocked.toLowerCase().trim();
@@ -1450,7 +1468,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
       });
       if (isBlocked) {
         // Channel is blocked - return early, skip AI classification
-        LOG("Channel blocked:", { channel, blockedChannels, matched: true });
+        LOG("Channel blocked:", { channel: channelToCheck, blockedChannels, matched: true });
         return {
           ok: true,
           pageType,
@@ -1477,8 +1495,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     // 6.6. Check temporary blocks (blocked for today)
     const blockedChannelsToday = state.ft_blocked_channels_today || [];
     if (Array.isArray(blockedChannelsToday) && blockedChannelsToday.length > 0) {
-      const channel = videoMetadata.channel.trim();
-      const channelLower = channel.toLowerCase();
+      const channelLower = channelToCheck.toLowerCase();
       const isBlockedToday = blockedChannelsToday.some(blocked => {
         const blockedLower = blocked.toLowerCase().trim();
         return blockedLower === channelLower || 

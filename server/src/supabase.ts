@@ -34,6 +34,40 @@ export interface UserPlanInfo {
   trial_expires_at: string | null;
 }
 
+/**
+ * Get user UUID from email
+ * @param email - User email
+ * @returns User UUID (id from users table) or null if user not found
+ */
+export async function getUserIdFromEmail(email: string): Promise<string | null> {
+  try {
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.warn("[Supabase] Credentials not set, cannot look up user ID");
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from("users")
+      .select("id")
+      .eq("email", email.toLowerCase().trim())
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        // User not found
+        return null;
+      }
+      console.error("[Supabase] Error getting user ID:", error);
+      return null;
+    }
+
+    return data?.id || null;
+  } catch (error) {
+    console.error("[Supabase] Exception getting user ID:", error);
+    return null;
+  }
+}
+
 export async function getUserPlanInfo(email: string): Promise<UserPlanInfo | null> {
   try {
     if (!supabaseUrl || !supabaseServiceKey) {

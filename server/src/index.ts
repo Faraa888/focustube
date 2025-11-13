@@ -22,6 +22,7 @@ import {
   insertVideoSessions,
   pruneVideoData,
   insertJournalEntry,
+  getUserIdFromEmail,
   UserPlanInfo,
   supabase,
 } from "./supabase";
@@ -597,15 +598,22 @@ Important: Return ONLY valid JSON. No extra text or commentary.`;
 
     // Store classification for analytics (fire-and-forget)
     if (result && isVideoRequest && user_id) {
-      upsertVideoClassification({
-        user_id,
-        video_id: video_id || "",
-        video_title: video_title || text || "",
-        channel_name: channel_name || null,
-        video_category: video_category || null,
-        distraction_level: result.distraction_level || result.category || null,
-        category_primary: result.category_primary || null,
-        confidence_distraction: result.confidence_distraction || result.confidence || null,
+      // Look up UUID from email (user_id is email from extension)
+      getUserIdFromEmail(user_id.toLowerCase().trim()).then((userId) => {
+        if (!userId) {
+          console.warn("[AI Classify] User not found for email, skipping classification save:", user_id);
+          return;
+        }
+        return upsertVideoClassification({
+          user_id: userId, // Use UUID instead of email
+          video_id: video_id || "",
+          video_title: video_title || text || "",
+          channel_name: channel_name || null,
+          video_category: video_category || null,
+          distraction_level: result.distraction_level || result.category || null,
+          category_primary: result.category_primary || null,
+          confidence_distraction: result.confidence_distraction || result.confidence || null,
+        });
       }).catch((dbErr) => {
         console.warn("[AI Classify] Failed to upsert video classification (non-blocking):", dbErr);
       });
@@ -666,7 +674,16 @@ app.post("/video/update-watch-time", async (req, res) => {
       return res.status(400).json({ error: "Missing or invalid fields" });
     }
 
-    const success = await updateVideoWatchTime(user_id, video_id, watch_seconds);
+    // Look up UUID from email (user_id is email from extension)
+    const userEmail = user_id.toLowerCase().trim();
+    const userId = await getUserIdFromEmail(userEmail);
+    
+    if (!userId) {
+      console.warn("[Update Watch Time] User not found for email:", userEmail);
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const success = await updateVideoWatchTime(userId, video_id, watch_seconds);
     if (!success) {
       return res.status(500).json({ error: "Failed to update watch time" });
     }
@@ -1520,7 +1537,14 @@ app.post("/events/watch", async (req, res) => {
       return res.status(400).json({ ok: false, error: "events must be an array" });
     }
 
-    const userId = user_id.toLowerCase().trim();
+    // Look up UUID from email (user_id is email from extension)
+    const userEmail = user_id.toLowerCase().trim();
+    const userId = await getUserIdFromEmail(userEmail);
+    
+    if (!userId) {
+      console.warn("[Events] User not found for email:", userEmail);
+      return res.status(404).json({ ok: false, error: "User not found" });
+    }
     type SanitizedEvent = {
       video_id: string;
       video_title?: string | null;
