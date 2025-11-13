@@ -143,6 +143,13 @@ const Dashboard = () => {
               </div>
             </div>
 
+            {(stats.windowDays || stats.dataSource) && (
+              <div className="mb-6 text-center text-xs text-muted-foreground">
+                Data covers the last {stats.windowDays || 60} days
+                {stats.dataSource === "extension" ? " (syncing from extension storage)" : ""}.
+              </div>
+            )}
+
             {/* Watch-Time Map - Full width */}
             <div className="mb-8">
               <WatchTimeMap
@@ -172,7 +179,7 @@ const Dashboard = () => {
                 <CardHeader>
                   <CardTitle>Content Categories</CardTitle>
                   <CardDescription>
-                    What types of content you've been watching
+                    What types of content you've been watching over the last {stats.windowDays || 60} days
                   </CardDescription>
                 </CardHeader>
                 <CardContent>

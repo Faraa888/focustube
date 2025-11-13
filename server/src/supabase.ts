@@ -314,11 +314,13 @@ export async function updateVideoWatchTime(
 export async function insertVideoSessions(
   events: Array<{
     video_id: string;
-    title?: string;
-    channel?: string;
-    seconds: number;
-    started_at: string;
-    finished_at: string;
+    video_title?: string | null;
+    channel_name?: string | null;
+    watch_seconds: number;
+    watched_at: string;
+    distraction_level?: string | null;
+    category_primary?: string | null;
+    confidence_distraction?: number | null;
   }>,
   userId: string
 ): Promise<boolean> {
@@ -337,25 +339,19 @@ export async function insertVideoSessions(
       return false;
     }
 
-    // Prepare data for insertion
     const nowIso = new Date().toISOString();
-    const rows = events.map((event) => {
-      // Extract date from started_at (YYYY-MM-DD)
-      const dateStr = event.started_at.split("T")[0]; // "2025-01-15"
-
-      return {
-        user_id: userId,
-        video_id: event.video_id,
-        title: event.title || null,
-        channel: event.channel || null,
-        category: null, // Will be populated from AI classification if available
-        duration: null, // Video length (not available in watch events)
-        alignment: null, // Will be populated from AI classification if available
-        date: dateStr,
-        watch_seconds: event.seconds,
-        created_at: nowIso,
-      };
-    });
+    const rows = events.map((event) => ({
+      user_id: userId,
+      video_id: event.video_id,
+      video_title: event.video_title || null,
+      channel_name: event.channel_name || null,
+      watch_seconds: event.watch_seconds,
+      watched_at: event.watched_at || nowIso,
+      distraction_level: event.distraction_level || null,
+      category_primary: event.category_primary || null,
+      confidence_distraction: event.confidence_distraction ?? null,
+      created_at: nowIso,
+    }));
 
     // Insert batch
     const { error } = await supabase.from("video_sessions").insert(rows);
@@ -368,6 +364,60 @@ export async function insertVideoSessions(
     return true;
   } catch (error) {
     console.error("[Supabase] Exception inserting video sessions:", error);
+    return false;
+  }
+}
+
+export async function pruneVideoData(days: number, userId?: string): Promise<boolean> {
+  try {
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.warn("[Supabase] Credentials not set, cannot prune video data");
+      return false;
+    }
+
+    if (!days || days <= 0) {
+      return true;
+    }
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffIso = cutoff.toISOString();
+
+    const sessionQuery = supabase
+      .from("video_sessions")
+      .delete()
+      .lt("watched_at", cutoffIso);
+
+    if (userId) {
+      sessionQuery.eq("user_id", userId);
+    }
+
+    const classificationQuery = supabase
+      .from("video_classifications")
+      .delete()
+      .lt("updated_at", cutoffIso);
+
+    if (userId) {
+      classificationQuery.eq("user_id", userId);
+    }
+
+    const [{ error: sessionError }, { error: classificationError }] = await Promise.all([
+      sessionQuery,
+      classificationQuery,
+    ]);
+
+    if (sessionError) {
+      console.error("[Supabase] Error pruning video_sessions:", sessionError);
+      return false;
+    }
+    if (classificationError) {
+      console.error("[Supabase] Error pruning video_classifications:", classificationError);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("[Supabase] Exception pruning video data:", error);
     return false;
   }
 }

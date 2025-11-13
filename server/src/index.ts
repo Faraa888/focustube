@@ -19,6 +19,8 @@ import {
   updateUserPlan,
   upsertVideoClassification,
   updateVideoWatchTime,
+  insertVideoSessions,
+  pruneVideoData,
   insertJournalEntry,
   UserPlanInfo,
   supabase,
@@ -1165,7 +1167,8 @@ app.get("/dashboard/stats", async (req, res) => {
     }
 
     const extensionData = extData || {};
-    const watchHistory = Array.isArray(extensionData.watch_history) ? extensionData.watch_history : [];
+    let watchHistory = Array.isArray(extensionData.watch_history) ? extensionData.watch_history : [];
+    let watchHistorySource: "extension" | "supabase" = "extension";
     const settings = extensionData.settings || {};
     const spiralEvents = Array.isArray(settings.spiral_events) ? settings.spiral_events : [];
 
@@ -1175,6 +1178,48 @@ app.get("/dashboard/stats", async (req, res) => {
 
     const sevenDaysAgo = new Date(now);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const sixtyDaysAgo = new Date(now);
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+    try {
+      const { data: sessionRows, error: sessionError } = await supabase
+        .from("video_sessions")
+        .select("video_id, video_title, channel_name, watch_seconds, watched_at, distraction_level, category_primary, confidence_distraction")
+        .eq("user_id", userData.id)
+        .gte("watched_at", sixtyDaysAgo.toISOString())
+        .order("watched_at", { ascending: false });
+
+      if (sessionError) {
+        console.warn("[Dashboard] Failed to fetch video_sessions:", sessionError);
+      } else if (Array.isArray(sessionRows) && sessionRows.length > 0) {
+        watchHistory = sessionRows;
+        watchHistorySource = "supabase";
+      } else {
+        watchHistory = watchHistory.filter((entry: any) => {
+          if (!entry?.watched_at) return false;
+          return new Date(entry.watched_at) >= sixtyDaysAgo;
+        });
+      }
+      if (Array.isArray(watchHistory)) {
+        watchHistory = watchHistory.sort((a: any, b: any) => {
+          const timeA = new Date(a?.watched_at || 0).getTime();
+          const timeB = new Date(b?.watched_at || 0).getTime();
+          return timeB - timeA;
+        });
+      }
+    } catch (error) {
+      console.warn("[Dashboard] Exception fetching sessions:", (error as Error).message);
+      watchHistory = watchHistory.filter((entry: any) => {
+        if (!entry?.watched_at) return false;
+        return new Date(entry.watched_at) >= sixtyDaysAgo;
+      });
+      watchHistory = watchHistory.sort((a: any, b: any) => {
+        const timeA = new Date(a?.watched_at || 0).getTime();
+        const timeB = new Date(b?.watched_at || 0).getTime();
+        return timeB - timeA;
+      });
+    }
 
     // Helper accumulators
     let watchSecondsToday = 0;
@@ -1191,9 +1236,9 @@ app.get("/dashboard/stats", async (req, res) => {
       if (!entry?.watched_at) return;
 
       const watchedAt = new Date(entry.watched_at);
-      const seconds = Number(entry.seconds || 0);
-      const category = (entry.category || "neutral").toLowerCase();
-      const channel = (entry.channel || "Unknown").trim();
+      const seconds = Number(entry.watch_seconds ?? entry.seconds ?? 0);
+      const category = (entry.distraction_level ?? entry.category ?? "neutral").toLowerCase();
+      const channel = (entry.channel_name ?? entry.channel ?? "Unknown").trim();
 
       if (!Number.isFinite(seconds) || seconds <= 0) return;
 
@@ -1248,7 +1293,7 @@ app.get("/dashboard/stats", async (req, res) => {
         categoryBreakdown[category] = { videos: 0, seconds: 0 };
       }
       categoryBreakdown[category].videos += 1;
-      categoryBreakdown[category].seconds += Number(entry.seconds || 0);
+      categoryBreakdown[category].seconds += Number(entry.watch_seconds ?? entry.seconds ?? 0);
     });
 
     // Biggest distractions (top 5 channels by seconds)
@@ -1303,10 +1348,10 @@ app.get("/dashboard/stats", async (req, res) => {
       const watchedAt = new Date(entry.watched_at);
       if (watchedAt < thirtyDaysAgo) return;
       
-      const channel = (entry.channel || "Unknown").trim();
+      const channel = (entry.channel_name ?? entry.channel ?? "Unknown").trim();
       if (!channel || channel === "Unknown") return;
       
-      const seconds = Number(entry.seconds || 0);
+      const seconds = Number(entry.watch_seconds ?? entry.seconds ?? 0);
       totalWatchTimeLast30Days += seconds;
       
       if (!channelStats[channel]) {
@@ -1382,6 +1427,8 @@ app.get("/dashboard/stats", async (req, res) => {
       // Streak + weekly trend can be added later when we persist more history
       streakDays: 0,
       weeklyTrendMinutes: [0, 0, 0, 0, 0, 0, 0],
+      dataSource: watchHistorySource,
+      windowDays: 60,
     });
   } catch (error: any) {
     console.error("Error in /dashboard/stats:", error);
@@ -1461,13 +1508,73 @@ app.post("/user/update-plan", async (req, res) => {
  * Body: { video_id, title, channel, seconds, started_at, finished_at }[]
  * Returns 200 OK (no-op for MVP)
  */
-app.post("/events/watch", (req, res) => {
-  // MVP: Just log and return 200
-  const events = req.body;
-  if (Array.isArray(events) && events.length > 0) {
-    console.log(`[Events] Received ${events.length} watch event(s)`);
+app.post("/events/watch", async (req, res) => {
+  try {
+    const { user_id, events } = req.body || {};
+
+    if (!user_id || typeof user_id !== "string") {
+      return res.status(400).json({ ok: false, error: "user_id is required" });
+    }
+
+    if (!Array.isArray(events)) {
+      return res.status(400).json({ ok: false, error: "events must be an array" });
+    }
+
+    const userId = user_id.toLowerCase().trim();
+    type SanitizedEvent = {
+      video_id: string;
+      video_title?: string | null;
+      channel_name?: string | null;
+      watch_seconds: number;
+      watched_at: string;
+      distraction_level?: string | null;
+      category_primary?: string | null;
+      confidence_distraction?: number | null;
+    };
+
+    const sanitized: SanitizedEvent[] = events
+      .map((event: any): SanitizedEvent | null => {
+        if (!event || typeof event !== "object") return null;
+        const videoId = (event.video_id || "").trim();
+        const rawSeconds = Number(event.watch_seconds ?? event.seconds ?? 0);
+        if (!videoId || !Number.isFinite(rawSeconds)) return null;
+
+        const watchSeconds = Math.max(0, Math.floor(rawSeconds));
+        const watchedAt = event.watched_at || event.finished_at || new Date().toISOString();
+
+        return {
+          video_id: videoId,
+          video_title: event.video_title || event.title || null,
+          channel_name: event.channel_name || event.channel || null,
+          watch_seconds: watchSeconds,
+          watched_at: watchedAt,
+          distraction_level: event.distraction_level || event.category || null,
+          category_primary: event.category_primary || null,
+          confidence_distraction: event.confidence_distraction ?? null,
+        };
+      })
+      .filter((event): event is SanitizedEvent => event !== null)
+      .filter((event) => event.watch_seconds >= 45);
+
+    if (sanitized.length === 0) {
+      return res.json({ ok: true, count: 0 });
+    }
+
+    const inserted = await insertVideoSessions(sanitized, userId);
+    if (!inserted) {
+      return res.status(500).json({ ok: false, error: "Failed to insert video sessions" });
+    }
+
+    const pruned = await pruneVideoData(60, userId);
+    if (!pruned) {
+      console.warn("[Events] Video data pruning failed for", userId);
+    }
+
+    res.json({ ok: true, count: sanitized.length });
+  } catch (error: any) {
+    console.error("Error in /events/watch:", error);
+    res.status(500).json({ ok: false, error: "Internal server error" });
   }
-  res.status(200).json({ ok: true });
 });
 
 /**

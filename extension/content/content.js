@@ -1803,8 +1803,20 @@ async function showFocusWindowOverlay(focusWindowInfo) {
     </div>
   `;
   
+  // Prevent scrolling/interactions behind overlay
+  document.body.style.overflow = "hidden";
+  document.documentElement.style.overflow = "hidden";
+
   document.body.appendChild(overlay);
   console.log("[FT] ✅ Focus window overlay added to DOM (hard block)");
+}
+
+function removeFocusWindowOverlay() {
+  const overlay = document.getElementById("ft-focus-window-overlay");
+  if (overlay) overlay.remove();
+
+  document.body.style.overflow = "";
+  document.documentElement.style.overflow = "";
 }
 
 async function showSpiralNudge(spiralInfo) {
@@ -2901,6 +2913,11 @@ chrome.runtime.onMessage.addListener((msg) => {
     // Clear overlays & force fresh navigation logic
     removeOverlay();
     scheduleNav(0);
+  }
+
+  if (msg?.type === "FT_FORCE_NAV") {
+    scheduleNav(0);
+    return;
   }
 });
 

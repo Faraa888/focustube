@@ -43,10 +43,10 @@ export const TEST_MODE  = false;    // when true, disables blocking for QA/dev
 // ─────────────────────────────────────────────────────────────
 // SPIRAL DETECTION CONSTANTS
 // ─────────────────────────────────────────────────────────────
-export const SPIRAL_MIN_WATCH_SECONDS = 30;  // Minimum watch time (seconds) to count for spiral
+export const SPIRAL_MIN_WATCH_SECONDS = 45;  // Minimum watch time (seconds) to log long-form sessions
 export const SPIRAL_THRESHOLD_DAY = 3;       // Videos today to trigger nudge
 export const SPIRAL_THRESHOLD_WEEK = 5;      // Videos in last 7 days to trigger nudge
-export const SPIRAL_HISTORY_DAYS = 30;       // Keep watch history for 30 days (rolling window)
+export const SPIRAL_HISTORY_DAYS = 60;       // Keep watch history for 60 days (rolling window)
 
 // ─────────────────────────────────────────────────────────────
 // VERSIONING / FUTURE-PROOFING

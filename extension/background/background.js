@@ -49,6 +49,10 @@ async function LOG(...a) {
 function isProExperience(plan) {
   return plan === "pro" || plan === "trial";
 }
+
+const WATCH_CLASSIFICATION_DELAY_MS = 45 * 1000;
+let watchClassificationTimer = null;
+let watchClassificationTimerVideoId = null;
 // ─────────────────────────────────────────────────────────────
 // BOOT: Called on install or startup
 // ─────────────────────────────────────────────────────────────
@@ -168,6 +172,196 @@ setInterval(() => {
   });
 }, 15 * 60 * 1000); // 15 minutes
 
+function clearWatchClassificationTimer() {
+  if (watchClassificationTimer) {
+    clearTimeout(watchClassificationTimer);
+    watchClassificationTimer = null;
+    watchClassificationTimerVideoId = null;
+  }
+}
+
+function scheduleWatchClassification(videoId, videoMetadata, delayMs = WATCH_CLASSIFICATION_DELAY_MS) {
+  if (!videoId || !videoMetadata) return;
+
+  // Always clear existing timer so the newest delay wins
+  clearWatchClassificationTimer();
+
+  const delay = Math.max(0, Math.floor(delayMs));
+  watchClassificationTimerVideoId = videoId;
+  watchClassificationTimer = setTimeout(() => {
+    runDeferredWatchClassification(videoId, videoMetadata).catch((err) => {
+      console.warn("[FT] Deferred watch classification failed:", err);
+    });
+  }, delay);
+}
+
+async function runDeferredWatchClassification(videoId, videoMetadata, attempt = 1) {
+  try {
+    watchClassificationTimer = null;
+    watchClassificationTimerVideoId = null;
+
+    const { ft_current_video_classification } = await getLocal(["ft_current_video_classification"]);
+    if (!ft_current_video_classification || ft_current_video_classification.videoId !== videoId) {
+      return; // Video changed or no longer tracking
+    }
+
+    if (ft_current_video_classification.classification_ready) {
+      return; // Already classified
+    }
+
+    const startTime = ft_current_video_classification.startTime || Date.now();
+    const elapsed = Date.now() - startTime;
+    if (elapsed < WATCH_CLASSIFICATION_DELAY_MS) {
+      scheduleWatchClassification(videoId, videoMetadata, WATCH_CLASSIFICATION_DELAY_MS - elapsed);
+      return;
+    }
+
+    const requestTimestamp = Date.now();
+    lastClassificationRequest = { videoId, timestamp: requestTimestamp };
+
+    const aiClassification = await classifyContent(videoMetadata, "watch");
+    if (!aiClassification) {
+      throw new Error("classification_unavailable");
+    }
+
+    if (lastClassificationRequest.videoId !== videoId || lastClassificationRequest.timestamp !== requestTimestamp) {
+      return; // Video changed mid-classification
+    }
+
+    await persistWatchClassificationResult(videoMetadata, videoId, aiClassification);
+    await notifyWatchClassificationReady(videoId);
+  } catch (error) {
+    console.warn(`[FT] Deferred watch classification attempt ${attempt} failed:`, error?.message || error);
+    if (attempt < 3) {
+      const backoff = Math.min(1000 * Math.pow(2, attempt - 1), 10_000);
+      watchClassificationTimerVideoId = videoId;
+      watchClassificationTimer = setTimeout(() => {
+        runDeferredWatchClassification(videoId, videoMetadata, attempt + 1).catch((err) => {
+          console.warn("[FT] Deferred watch classification retry failed:", err);
+        });
+      }, backoff);
+    }
+  }
+}
+
+async function persistWatchClassificationResult(videoMetadata, videoId, aiClassification) {
+  const now = Date.now();
+
+  await setLocal({
+    ft_last_watch_classification: {
+      category_primary: aiClassification.category_primary,
+      category_secondary: aiClassification.category_secondary,
+      distraction_level: aiClassification.distraction_level,
+      confidence_category: aiClassification.confidence_category,
+      confidence_distraction: aiClassification.confidence_distraction,
+      goals_alignment: aiClassification.goals_alignment,
+      reasons: aiClassification.reasons,
+      suggestions_summary: aiClassification.suggestions_summary,
+      flags: aiClassification.flags,
+      category: aiClassification.category,
+      allowed: aiClassification.allowed,
+      confidence: aiClassification.confidence,
+      reason: aiClassification.reason,
+      tags: aiClassification.tags,
+      block_reason_code: aiClassification.block_reason_code,
+      action_hint: aiClassification.action_hint,
+      allowance_cost: aiClassification.allowance_cost,
+      title: videoMetadata.title,
+      video_id: videoId,
+      timestamp: now,
+    },
+  });
+
+  const { ft_current_video_classification } = await getLocal(["ft_current_video_classification"]);
+  const startTime = ft_current_video_classification?.startTime || now;
+
+  await setLocal({
+    ft_current_video_classification: {
+      ...(ft_current_video_classification || {}),
+      videoId,
+      startTime,
+      classification_ready: true,
+      video_title: videoMetadata.title || ft_current_video_classification?.video_title || "Unknown",
+      channel_name: videoMetadata.channel || ft_current_video_classification?.channel_name || "Unknown",
+      distraction_level: aiClassification.distraction_level || aiClassification.category || "neutral",
+      category_primary: aiClassification.category_primary || "Other",
+      confidence_distraction: aiClassification.confidence_distraction ?? aiClassification.confidence ?? null,
+    },
+  });
+}
+
+async function notifyWatchClassificationReady(videoId) {
+  try {
+    const tabs = await chrome.tabs.query({
+      url: [
+        "*://www.youtube.com/watch*",
+        "*://m.youtube.com/watch*",
+        "*://youtu.be/*"
+      ],
+    });
+
+    tabs.forEach((tab) => {
+      if (!tab?.id || !tab?.url) return;
+      const currentVideoId = extractVideoId(tab.url);
+      if (currentVideoId && currentVideoId === videoId) {
+        chrome.tabs.sendMessage(tab.id, { type: "FT_FORCE_NAV" }).catch(() => {
+          // Ignore errors (tab may not have the content script yet)
+        });
+      }
+    });
+  } catch (error) {
+    console.warn("[FT] Failed to notify classification readiness:", error?.message || error);
+  }
+}
+
+async function ensureWatchTrackingForVideo(videoMetadata, shouldScheduleClassifier) {
+  if (!videoMetadata?.video_id) return null;
+
+  const now = Date.now();
+  const videoId = videoMetadata.video_id;
+  const baseData = {
+    videoId,
+    video_title: videoMetadata.title || "Unknown",
+    channel_name: videoMetadata.channel || "Unknown",
+  };
+
+  const { ft_current_video_classification } = await getLocal(["ft_current_video_classification"]);
+  let tracking = ft_current_video_classification;
+
+  if (!tracking || tracking.videoId !== videoId) {
+    tracking = {
+      ...baseData,
+      startTime: now,
+      distraction_level: "neutral",
+      category_primary: "Other",
+      confidence_distraction: null,
+      classification_ready: false,
+    };
+    await setLocal({ ft_current_video_classification: tracking });
+  } else {
+    let updated = false;
+    if (tracking.video_title !== baseData.video_title || tracking.channel_name !== baseData.channel_name) {
+      tracking = { ...tracking, ...baseData };
+      updated = true;
+    }
+    if (typeof tracking.startTime !== "number") {
+      tracking = { ...tracking, startTime: now };
+      updated = true;
+    }
+    if (updated) {
+      await setLocal({ ft_current_video_classification: tracking });
+    }
+  }
+
+  if (shouldScheduleClassifier && !tracking.classification_ready) {
+    const elapsed = now - (tracking.startTime || now);
+    const remaining = WATCH_CLASSIFICATION_DELAY_MS - elapsed;
+    scheduleWatchClassification(videoId, videoMetadata, remaining > 0 ? remaining : 0);
+  }
+
+  return tracking;
+}
+
 // ─────────────────────────────────────────────────────────────
 // BACKGROUND SYNC: Sync extension data every hour
 // ─────────────────────────────────────────────────────────────
@@ -179,6 +373,7 @@ setInterval(() => {
 
 // Send batch on extension unload (fire-and-forget)
 chrome.runtime.onSuspend.addListener(() => {
+  clearWatchClassificationTimer();
   // Sync watch event batch
   sendWatchEventBatch().catch((err) => {
     console.warn("[FT] Unload watch event batch failed:", err);
@@ -827,10 +1022,10 @@ function extractVideoId(url) {
  * Called when user navigates away from a WATCH page
  * @param {string} videoId - Video ID
  * @param {number} startTime - Timestamp when video started
- * @param {string} category - Video category ("distracting" | "neutral" | "productive")
+ * @param {string} distractionLevel - Video category ("distracting" | "neutral" | "productive")
  * @returns {Promise<number>} - Time watched in seconds
  */
-async function finalizeVideoWatch(videoId, startTime, category, category_primary = null) {
+async function finalizeVideoWatch(videoId, startTime, distractionLevel, categoryPrimary = null) {
   if (!videoId || !startTime) {
     return 0;
   }
@@ -842,7 +1037,7 @@ async function finalizeVideoWatch(videoId, startTime, category, category_primary
     return 0;
   }
 
-  if (category === "distracting") {
+  if (distractionLevel === "distracting") {
     const { ft_allowance_seconds_left } = await getLocal(["ft_allowance_seconds_left"]);
     const currentAllowance = Number(ft_allowance_seconds_left || 600);
 
@@ -860,17 +1055,24 @@ async function finalizeVideoWatch(videoId, startTime, category, category_primary
 
   // Get video title and channel from current video classification
   const { ft_current_video_classification } = await getLocal(["ft_current_video_classification"]);
-  const title = ft_current_video_classification?.title || "Unknown";
-  const channel = ft_current_video_classification?.channel || "Unknown";
+  const videoTitle = ft_current_video_classification?.video_title || "Unknown";
+  const channelName = ft_current_video_classification?.channel_name || "Unknown";
+  const confidenceDistraction = ft_current_video_classification?.confidence_distraction ?? null;
 
   // Create watch event object
+  const finishedAtIso = new Date(endTime).toISOString();
+  const startedAtIso = new Date(startTime).toISOString();
+
   const watchEvent = {
     video_id: videoId,
-    title: title,
-    channel: channel,
-    seconds: durationSeconds,
-    started_at: new Date(startTime).toISOString(),
-    finished_at: new Date(endTime).toISOString(),
+    video_title: videoTitle,
+    channel_name: channelName,
+    watch_seconds: durationSeconds,
+    started_at: startedAtIso,
+    watched_at: finishedAtIso,
+    distraction_level: distractionLevel || "neutral",
+    category_primary: categoryPrimary || "Other",
+    confidence_distraction: confidenceDistraction,
   };
 
   // Add to queue (will be batched and sent later)
@@ -881,13 +1083,13 @@ async function finalizeVideoWatch(videoId, startTime, category, category_primary
 
   LOG("Watch event queued:", {
     videoId: videoId.substring(0, 10),
-    title: title.substring(0, 30),
+    title: videoTitle.substring(0, 30),
     duration: `${durationSeconds}s`,
     queueSize: queue.length,
   });
 
   // Also send to legacy endpoint (for backward compatibility)
-  sendWatchTimeToServer(videoId, durationSeconds, category).catch((err) => {
+  sendWatchTimeToServer(videoId, durationSeconds, distractionLevel).catch((err) => {
     console.warn("[FT] Failed to send watch time to server:", err?.message || err);
   });
 
@@ -895,7 +1097,7 @@ async function finalizeVideoWatch(videoId, startTime, category, category_primary
   // SPIRAL DETECTION: Track watch history and detect patterns
   // ─────────────────────────────────────────────────────────────
   // Only count videos watched for minimum duration
-  if (durationSeconds >= SPIRAL_MIN_WATCH_SECONDS && channel && channel !== "Unknown") {
+  if (durationSeconds >= SPIRAL_MIN_WATCH_SECONDS && channelName && channelName !== "Unknown") {
     try {
       // 1. Get current watch history
       const { ft_watch_history = [] } = await getLocal(["ft_watch_history"]);
@@ -903,12 +1105,15 @@ async function finalizeVideoWatch(videoId, startTime, category, category_primary
 
       // 2. Add new entry to history
       const watchHistoryEntry = {
-        channel: channel.trim(),
+        channel_name: channelName.trim(),
         video_id: videoId,
-        watched_at: new Date().toISOString(),
-        seconds: durationSeconds,
-        category: category || "neutral",
-        category_primary: category_primary || "Other"
+        video_title: videoTitle,
+        watched_at: finishedAtIso,
+        started_at: startedAtIso,
+        watch_seconds: durationSeconds,
+        distraction_level: distractionLevel || "neutral",
+        category_primary: categoryPrimary || "Other",
+        confidence_distraction: confidenceDistraction,
       };
       history.push(watchHistoryEntry);
 
@@ -930,12 +1135,12 @@ async function finalizeVideoWatch(videoId, startTime, category, category_primary
       const weekCounts = {};
 
       todayHistory.forEach(item => {
-        const ch = item.channel.trim();
+        const ch = (item.channel_name || "Unknown").trim();
         todayCounts[ch] = (todayCounts[ch] || 0) + 1;
       });
 
       recentHistory.forEach(item => {
-        const ch = item.channel.trim();
+        const ch = (item.channel_name || "Unknown").trim();
         weekCounts[ch] = (weekCounts[ch] || 0) + 1;
       });
 
@@ -943,7 +1148,7 @@ async function finalizeVideoWatch(videoId, startTime, category, category_primary
       const { ft_channel_spiral_count = {} } = await getLocal(["ft_channel_spiral_count"]);
       const spiralCounts = { ...ft_channel_spiral_count };
       
-      const channelKey = channel.trim();
+      const channelKey = channelName.trim();
       spiralCounts[channelKey] = {
         today: todayCounts[channelKey] || 0,
         this_week: weekCounts[channelKey] || 0,
@@ -1114,7 +1319,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   // - User enters a new WATCH page (need to finalize previous video first)
   const { ft_current_video_classification: prevVideo } = await getLocal(["ft_current_video_classification"]);
   if (prevVideo && prevVideo.startTime) {
-    const { videoId, category, category_primary, startTime } = prevVideo;
+    const { videoId, distraction_level, category_primary, startTime } = prevVideo;
     // Only finalize if:
     // - We're leaving WATCH page (going to different page type)
     // - OR we're entering a new WATCH page (different video ID)
@@ -1123,7 +1328,8 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     const isLeavingWatchPage = pageType !== "WATCH";
     
     if (isLeavingWatchPage || isNewVideo) {
-      await finalizeVideoWatch(videoId, startTime, category, category_primary);
+      clearWatchClassificationTimer();
+      await finalizeVideoWatch(videoId, startTime, distraction_level, category_primary);
       // Clear previous video tracking
       await setLocal({ ft_current_video_classification: null });
     }
@@ -1346,6 +1552,11 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     }
   }
 
+  let watchTrackingInfo = null;
+  if (pageType === "WATCH" && videoMetadata?.video_id) {
+    watchTrackingInfo = await ensureWatchTrackingForVideo(videoMetadata, isProExperience(plan));
+  }
+
   // 7. AI Classification (Pro users only)
   // Strategy: Search = logging only, Watch = primary action point (block/warn)
   let aiClassification = null;
@@ -1395,77 +1606,36 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
         console.warn("[FT] Error extracting search query:", e.message || e);
       }
     } else if (pageType === "WATCH" && videoMetadata && videoMetadata.title) {
-      // Timestamp-based request tracking (prevents race conditions from quick video switching)
       const videoId = videoMetadata.video_id || extractVideoId(url);
-      const requestTimestamp = Date.now();
-      
-      // Store this request as the latest
-      lastClassificationRequest = { videoId, timestamp: requestTimestamp };
-      
-      // Classify video with full metadata
-      aiClassification = await classifyContent(videoMetadata, "watch");
-      
-      // Only use classification if this is still the latest request (video hasn't changed)
-      if (aiClassification && lastClassificationRequest.timestamp === requestTimestamp) {
-        // Store classification result (full data for dev panel and analytics)
-        await setLocal({
-          ft_last_watch_classification: {
-            // New schema fields (full)
-            category_primary: aiClassification.category_primary,
-            category_secondary: aiClassification.category_secondary,
-            distraction_level: aiClassification.distraction_level,
-            confidence_category: aiClassification.confidence_category,
-            confidence_distraction: aiClassification.confidence_distraction,
-            goals_alignment: aiClassification.goals_alignment,
-            reasons: aiClassification.reasons,
-            suggestions_summary: aiClassification.suggestions_summary,
-            flags: aiClassification.flags,
-            // Old schema fields (for compatibility)
-            category: aiClassification.category,
-            allowed: aiClassification.allowed,
-            confidence: aiClassification.confidence,
-            reason: aiClassification.reason,
-            tags: aiClassification.tags,
-            block_reason_code: aiClassification.block_reason_code,
-            action_hint: aiClassification.action_hint,
-            allowance_cost: aiClassification.allowance_cost,
-            // Metadata
-            title: videoMetadata.title,
-            video_id: videoId,
-            timestamp: Date.now(),
-          },
-        });
-        LOG("AI Watch Classification:", { title: videoMetadata.title?.substring(0, 50) || "unknown", ...aiClassification });
+      if (videoId) {
+        const startTime = watchTrackingInfo?.startTime || Date.now();
+        const classificationReady = watchTrackingInfo?.classification_ready === true;
+        const elapsed = Date.now() - startTime;
 
-        // Track current video for watch-time analytics
-        if (videoId && aiClassification.allowed !== false) {
-          await setLocal({
-            ft_current_video_classification: {
-              videoId,
-              category: aiClassification.category,
-              category_primary: aiClassification.category_primary || "Other",
-              startTime: Date.now(),
-              title: videoMetadata.title || "Unknown",
-              channel: videoMetadata.channel || "Unknown",
-            },
-          });
-          LOG("Started tracking video watch:", {
+        if (classificationReady || elapsed >= WATCH_CLASSIFICATION_DELAY_MS) {
+          const requestTimestamp = Date.now();
+          lastClassificationRequest = { videoId, timestamp: requestTimestamp };
+
+          aiClassification = await classifyContent(videoMetadata, "watch");
+
+          if (aiClassification && lastClassificationRequest.timestamp === requestTimestamp) {
+            await persistWatchClassificationResult(videoMetadata, videoId, aiClassification);
+            LOG("AI Watch Classification:", { title: videoMetadata.title?.substring(0, 50) || "unknown", ...aiClassification });
+          } else if (aiClassification) {
+            LOG("AI Classification ignored (video changed during classification):", {
+              requestVideoId: videoId?.substring(0, 10),
+              currentVideoId: lastClassificationRequest.videoId?.substring(0, 10),
+              requestTime: requestTimestamp,
+              currentTime: lastClassificationRequest.timestamp,
+            });
+            aiClassification = null;
+          }
+        } else {
+          LOG("Watch classification deferred (under threshold)", {
             videoId: videoId.substring(0, 10),
-            category: aiClassification.category,
-            title: videoMetadata.title?.substring(0, 30) || "unknown",
-            channel: videoMetadata.channel?.substring(0, 30) || "unknown",
+            elapsedMs: elapsed,
+            thresholdMs: WATCH_CLASSIFICATION_DELAY_MS,
           });
-        }
-      } else {
-        // Request was superseded by newer video - don't store or use
-        if (aiClassification) {
-          LOG("AI Classification ignored (video changed during classification):", { 
-            requestVideoId: videoId?.substring(0, 10), 
-            currentVideoId: lastClassificationRequest.videoId?.substring(0, 10),
-            requestTime: requestTimestamp,
-            currentTime: lastClassificationRequest.timestamp
-          });
-          aiClassification = null; // Don't include in response
         }
       }
     }
