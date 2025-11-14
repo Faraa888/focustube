@@ -1837,11 +1837,12 @@ function startFocusWindowCheck() {
       return;
     }
     
-    // Check if focus window is enabled
-    const { ft_focus_window_enabled, ft_focus_window_start, ft_focus_window_end } = 
-      await chrome.storage.local.get(["ft_focus_window_enabled", "ft_focus_window_start", "ft_focus_window_end"]);
+    // Check if focus window is enabled (Pro/Trial feature only)
+    const { ft_focus_window_enabled, ft_focus_window_start, ft_focus_window_end, ft_plan } = 
+      await chrome.storage.local.get(["ft_focus_window_enabled", "ft_focus_window_start", "ft_focus_window_end", "ft_plan"]);
     
-    if (ft_focus_window_enabled) {
+    const plan = ft_plan || "free";
+    if (ft_focus_window_enabled && isProExperience(plan)) {
       const now = new Date();
       const currentHours = now.getHours();
       const currentMinutes = now.getMinutes();

@@ -1489,6 +1489,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   }
 
   // 6.4. Check focus window (if enabled) - BEFORE other blocking logic
+  // Focus window is a Pro/Trial feature only
   const { 
     ft_focus_window_enabled, 
     ft_focus_window_start, 
@@ -1499,7 +1500,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     "ft_focus_window_end"
   ]);
 
-  if (ft_focus_window_enabled) {
+  if (ft_focus_window_enabled && isProExperience(plan)) {
     const now = new Date();
     const currentHours = now.getHours();
     const currentMinutes = now.getMinutes();

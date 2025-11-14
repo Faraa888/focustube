@@ -475,6 +475,59 @@ export async function setTemporaryUnlock(minutes = 10) {
 // ─────────────────────────────────────────────────────────────
 
 /**
+ * Merge blocked channels from local and server sources
+ * - Combines both arrays, dedupes case-insensitively
+ * - Preserves original case (prefers server, falls back to local)
+ * - Never returns empty array unless both sources are truly empty
+ * @param {string[]} localChannels - Channels from local storage
+ * @param {string[]} serverChannels - Channels from server (may be null/undefined)
+ * @returns {string[]} Merged and deduplicated array
+ */
+function mergeBlockedChannels(localChannels, serverChannels) {
+  // Normalize inputs: treat null/undefined as empty array
+  const local = Array.isArray(localChannels) ? localChannels : [];
+  const server = Array.isArray(serverChannels) ? serverChannels : [];
+  
+  // If both are empty, return empty array
+  if (local.length === 0 && server.length === 0) {
+    return [];
+  }
+  
+  // If only one exists, use it (after filtering invalid entries)
+  if (local.length === 0) {
+    return server.filter(ch => ch && typeof ch === 'string' && ch.trim().length > 0);
+  }
+  if (server.length === 0) {
+    return local.filter(ch => ch && typeof ch === 'string' && ch.trim().length > 0);
+  }
+  
+  // Both exist: merge and dedupe
+  // Use Map with normalized (lowercase, trimmed) key to track seen channels
+  const channelMap = new Map(); // key: normalized name, value: original case string
+  
+  // Add local channels first (preserve local case initially)
+  local.forEach(channel => {
+    if (!channel || typeof channel !== 'string') return;
+    const normalized = channel.trim().toLowerCase();
+    if (normalized.length > 0 && !channelMap.has(normalized)) {
+      channelMap.set(normalized, channel.trim()); // Preserve original case
+    }
+  });
+  
+  // Add server channels (server case takes precedence if duplicate)
+  server.forEach(channel => {
+    if (!channel || typeof channel !== 'string') return;
+    const normalized = channel.trim().toLowerCase();
+    if (normalized.length > 0) {
+      channelMap.set(normalized, channel.trim()); // Server case overwrites local
+    }
+  });
+  
+  // Convert back to array
+  return Array.from(channelMap.values());
+}
+
+/**
  * Load extension data from server (blocked channels, watch history, etc.)
  * @returns {Promise<Object|null>} Extension data or null if failed
  */
@@ -514,7 +567,9 @@ export async function loadExtensionDataFromServer() {
     } = result.data;
     
     const { ft_watch_history: localWatchHistory = [] } = await getLocal(["ft_watch_history"]);
+    const { ft_blocked_channels: localBlockedChannels = [] } = await getLocal(["ft_blocked_channels"]);
     const serverWatchHistory = watch_history || [];
+    const serverBlockedChannels = blocked_channels;
     
     // Smart merge: combine both, dedupe by video_id + watched_at, keep most recent
     // This prevents data loss when server has old data and local has new data
@@ -549,8 +604,25 @@ export async function loadExtensionDataFromServer() {
     const mergedWatchHistory = Array.from(historyMap.values())
       .sort((a, b) => new Date(b.watched_at).getTime() - new Date(a.watched_at).getTime());
 
+    // Merge blocked channels: combine local + server, dedupe case-insensitively
+    // This prevents data loss when server has stale/empty data
+    const mergedBlockedChannels = mergeBlockedChannels(localBlockedChannels, serverBlockedChannels);
+    
+    // If server data was stale (local had channels server didn't), schedule background sync
+    const serverHadStaleData = Array.isArray(serverBlockedChannels) && 
+                                serverBlockedChannels.length < localBlockedChannels.length &&
+                                mergedBlockedChannels.length > serverBlockedChannels.length;
+    
+    if (serverHadStaleData) {
+      // Schedule background sync to update server with merged data
+      // Don't await - let it happen in background
+      saveExtensionDataToServer().catch((err) => {
+        console.warn("[FT] Background sync of merged blocked channels failed (non-critical):", err);
+      });
+    }
+
     const storageUpdate = {
-      ft_blocked_channels: blocked_channels || [],
+      ft_blocked_channels: mergedBlockedChannels,
       ft_watch_history: mergedWatchHistory,
       ft_channel_spiral_count: channel_spiral_count || {},
       ft_extension_settings: settings || {},

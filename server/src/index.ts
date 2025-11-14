@@ -950,20 +950,29 @@ app.get("/extension/get-data", async (req, res) => {
       });
     }
 
-    const userId = email.toLowerCase().trim();
+    // Get UUID from email (like dashboard does)
+    const userEmail = email.toLowerCase().trim();
+    const userId = await getUserIdFromEmail(userEmail);
+    
+    if (!userId) {
+      return res.status(404).json({
+        ok: false,
+        error: "User not found",
+      });
+    }
 
-    // Get extension data from Supabase
+    // Get extension data from Supabase using UUID
     const { data: extensionData, error: extensionError } = await supabase
       .from("extension_data")
       .select("*")
       .eq("user_id", userId)
       .single();
 
-    // Get user goals from users table
+    // Get user goals from users table (using email)
     const { data: userData, error: userError } = await supabase
       .from("users")
       .select("goals, anti_goals, distracting_channels")
-      .eq("email", userId)
+      .eq("email", userEmail)
       .single();
 
     // Parse goals (stored as TEXT in database, should be JSON array)
@@ -1076,9 +1085,18 @@ app.post("/extension/save-data", async (req, res) => {
       });
     }
 
-    const userId = email.toLowerCase().trim();
+    // Get UUID from email (like dashboard does)
+    const userEmail = email.toLowerCase().trim();
+    const userId = await getUserIdFromEmail(userEmail);
+    
+    if (!userId) {
+      return res.status(404).json({
+        ok: false,
+        error: "User not found",
+      });
+    }
 
-    // Upsert extension data (insert or update)
+    // Upsert extension data (insert or update) using UUID
     const { error: extensionError } = await supabase
       .from("extension_data")
       .upsert({
@@ -1118,13 +1136,13 @@ app.post("/extension/save-data", async (req, res) => {
           : (data.anti_goals || null);
       }
 
-      if (Object.keys(updateData).length > 0) {
-        updateData.updated_at = new Date().toISOString();
-        
-        const { error: userError } = await supabase
-          .from("users")
-          .update(updateData)
-          .eq("email", userId);
+        if (Object.keys(updateData).length > 0) {
+          updateData.updated_at = new Date().toISOString();
+          
+          const { error: userError } = await supabase
+            .from("users")
+            .update(updateData)
+            .eq("email", userEmail);
 
         if (userError) {
           console.error("[Extension Data] Error saving goals:", userError);
@@ -1173,10 +1191,20 @@ app.post("/extension/save-timer", async (req, res) => {
       });
     }
 
-    const userId = email.toLowerCase().trim();
+    // Get UUID from email (like dashboard does)
+    const userEmail = email.toLowerCase().trim();
+    const userId = await getUserIdFromEmail(userEmail);
+    
+    if (!userId) {
+      return res.status(404).json({
+        ok: false,
+        error: "User not found",
+      });
+    }
+
     const today = date || new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
-    // Get existing extension_data
+    // Get existing extension_data using UUID
     const { data: existingData, error: fetchError } = await supabase
       .from("extension_data")
       .select("settings")
@@ -1242,10 +1270,20 @@ app.get("/extension/get-timer", async (req, res) => {
       });
     }
 
-    const userId = email.toLowerCase().trim();
+    // Get UUID from email (like dashboard does)
+    const userEmail = email.toLowerCase().trim();
+    const userId = await getUserIdFromEmail(userEmail);
+    
+    if (!userId) {
+      return res.status(404).json({
+        ok: false,
+        error: "User not found",
+      });
+    }
+
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
-    // Get extension_data
+    // Get extension_data using UUID
     const { data, error } = await supabase
       .from("extension_data")
       .select("settings")
