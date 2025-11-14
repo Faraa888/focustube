@@ -1477,15 +1477,32 @@ app.get("/dashboard/stats", async (req, res) => {
     const cleanupSuggestionSeconds = topDistractionsThisWeek.reduce((sum, item) => sum + item.seconds, 0);
     const cleanupSuggestionMinutes = Math.round(cleanupSuggestionSeconds / 60);
 
-    // Hourly breakdown (0-23 hours) - aggregate all watch history by hour
-    const hourlyBreakdown = Array(24).fill(0).map((_, hour) => {
-      return watchHistory
+    // Hourly breakdown (0-23 hours) - 30-day window with category breakdown
+    const thirtyDaysAgoForHourly = new Date();
+    thirtyDaysAgoForHourly.setDate(thirtyDaysAgoForHourly.getDate() - 30);
+    
+    const hourlyBreakdown = Array(24).fill(null).map((_, hour) => {
+      const hourData = { productive: 0, neutral: 0, distracting: 0 };
+      
+      watchHistory
         .filter((w: any) => {
           if (!w?.watched_at) return false;
           const watchedAt = new Date(w.watched_at);
-          return watchedAt.getHours() === hour;
+          // 30-day window for hourly map
+          return watchedAt >= thirtyDaysAgoForHourly && watchedAt.getHours() === hour;
         })
-        .reduce((sum: number, w: any) => sum + (Number(w.watch_seconds ?? w.seconds ?? 0)), 0);
+        .forEach((w: any) => {
+          const seconds = Number(w.watch_seconds ?? w.seconds ?? 0);
+          const category = (w.distraction_level ?? w.category ?? "neutral").toLowerCase();
+          
+          if (category === "productive" || category === "neutral" || category === "distracting") {
+            hourData[category as keyof typeof hourData] += seconds;
+          } else {
+            hourData.neutral += seconds;
+          }
+        });
+      
+      return hourData;
     });
 
     // Spiral events (last 30 days, top 20 most recent)

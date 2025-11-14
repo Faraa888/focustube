@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface WatchTimeMapProps {
-  hourlyData: number[]; // Array of 24 numbers (seconds per hour)
+  hourlyData: number[] | Array<{ productive: number; neutral: number; distracting: number }>; // Array of 24 numbers (seconds per hour) or category breakdown
   breakdownWeek: {
     productive: number;
     neutral: number;
@@ -10,13 +10,32 @@ interface WatchTimeMapProps {
 }
 
 export default function WatchTimeMap({ hourlyData, breakdownWeek }: WatchTimeMapProps) {
-  // Convert seconds to minutes for display
-  const hourlyMinutes = hourlyData.map(seconds => Math.round(seconds / 60));
-  // Dynamic scale: max value + 20% padding for better visibility, minimum 15 minutes
-  const maxWatchTime = Math.max(...hourlyMinutes, 0);
+  // Handle both old format (number[]) and new format (category breakdown)
+  const hourlyBreakdown = hourlyData.map((item) => {
+    if (typeof item === "number") {
+      // Old format: just total seconds
+      return { productive: 0, neutral: item, distracting: 0 };
+    }
+    // New format: category breakdown
+    return item;
+  });
+
+  // Convert to minutes and calculate totals per hour
+  const hourlyMinutes = hourlyBreakdown.map((hour) => {
+    const totalSeconds = hour.productive + hour.neutral + hour.distracting;
+    return {
+      total: Math.round(totalSeconds / 60),
+      productive: Math.round(hour.productive / 60),
+      neutral: Math.round(hour.neutral / 60),
+      distracting: Math.round(hour.distracting / 60),
+    };
+  });
+
+  // Dynamic scale: tallest bar = 100% (with 10% padding for visual clarity)
+  const maxWatchTime = Math.max(...hourlyMinutes.map(h => h.total), 0);
   const maxMinutes = maxWatchTime > 0 
-    ? Math.max(Math.ceil(maxWatchTime * 1.2), 15) // 20% padding, min 15 min for visibility
-    : 60; // Default 60 if no data
+    ? Math.ceil(maxWatchTime * 1.1) // 10% padding, no minimum - scales to actual max
+    : 60; // Default 60 if no data at all
 
   // Calculate total for percentage breakdown
   const totalWeek = breakdownWeek.productive + breakdownWeek.neutral + breakdownWeek.distracting;
@@ -60,25 +79,35 @@ export default function WatchTimeMap({ hourlyData, breakdownWeek }: WatchTimeMap
 
           {/* Bar chart */}
           <div className="h-64 flex items-end justify-between gap-1">
-            {hourlyMinutes.map((minutes, hour) => {
-              const height = maxMinutes > 0 ? (minutes / maxMinutes) * 100 : 0;
-              // Use neutral color since we don't have per-hour category breakdown
-              // Could be enhanced later with backend changes to provide category per hour
-              const barColor = minutes > 0 ? "bg-blue-500" : "bg-muted";
+            {hourlyMinutes.map((hourData, hour) => {
+              const totalMinutes = hourData.total;
+              const height = maxMinutes > 0 ? (totalMinutes / maxMinutes) * 100 : 0;
+              
+              // Determine dominant category for color
+              let barColor = "bg-muted";
+              if (totalMinutes > 0) {
+                const maxCategory = Math.max(hourData.productive, hourData.neutral, hourData.distracting);
+                if (maxCategory === hourData.productive) {
+                  barColor = "bg-green-500";
+                } else if (maxCategory === hourData.distracting) {
+                  barColor = "bg-red-500";
+                } else {
+                  barColor = "bg-yellow-500";
+                }
+              }
 
               return (
                 <div key={hour} className="flex-1 flex flex-col items-center group relative">
                   <div
                     className={`w-full ${barColor} rounded-t transition-all hover:opacity-80 cursor-pointer`}
                     style={{ 
-                      height: `${Math.max(height, minutes > 0 ? 2 : 0)}%`, 
-                      minHeight: minutes > 0 ? "8px" : "0" // Increased from 4px to 8px for better visibility
+                      height: `${height}%`
                     }}
-                    title={`${formatHour(hour)}: ${minutes} min`}
+                    title={`${formatHour(hour)}: ${totalMinutes} min (P:${hourData.productive} N:${hourData.neutral} D:${hourData.distracting})`}
                   >
-                    {minutes > 0 && (
-                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-background/90 px-1 rounded">
-                        {minutes}m
+                    {totalMinutes > 0 && (
+                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-background/90 px-1 rounded z-10">
+                        {totalMinutes}m
                       </div>
                     )}
                   </div>
