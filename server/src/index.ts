@@ -1483,16 +1483,18 @@ app.get("/dashboard/stats", async (req, res) => {
     
     const hourlyBreakdown = Array(24).fill(null).map((_, hour) => {
       const hourData = { productive: 0, neutral: 0, distracting: 0 };
+      let totalSeconds = 0;
       
       watchHistory
         .filter((w: any) => {
           if (!w?.watched_at) return false;
           const watchedAt = new Date(w.watched_at);
-          // 30-day window for hourly map
           return watchedAt >= thirtyDaysAgoForHourly && watchedAt.getHours() === hour;
         })
         .forEach((w: any) => {
           const seconds = Number(w.watch_seconds ?? w.seconds ?? 0);
+          totalSeconds += seconds;
+          
           const category = (w.distraction_level ?? w.category ?? "neutral").toLowerCase();
           
           if (category === "productive" || category === "neutral" || category === "distracting") {
@@ -1501,6 +1503,11 @@ app.get("/dashboard/stats", async (req, res) => {
             hourData.neutral += seconds;
           }
         });
+      
+      // Fallback: if no category data but we have seconds, put it in neutral
+      if (totalSeconds > 0 && hourData.productive === 0 && hourData.neutral === 0 && hourData.distracting === 0) {
+        hourData.neutral = totalSeconds;
+      }
       
       return hourData;
     });
