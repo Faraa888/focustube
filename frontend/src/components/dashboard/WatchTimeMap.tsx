@@ -12,11 +12,10 @@ interface WatchTimeMapProps {
 export default function WatchTimeMap({ hourlyData, breakdownWeek }: WatchTimeMapProps) {
   // Convert seconds to minutes for display
   const hourlyMinutes = hourlyData.map(seconds => Math.round(seconds / 60));
-  // Dynamic scale: max value + 10% padding, but ensure minimum scale for visibility
+  // Dynamic scale: max value + 20% padding for better visibility, minimum 15 minutes
   const maxWatchTime = Math.max(...hourlyMinutes, 0);
-  // If max is very small (< 5 min), use 10 min as scale. Otherwise use max + 10%
   const maxMinutes = maxWatchTime > 0 
-    ? Math.max(Math.ceil(maxWatchTime * 1.1), maxWatchTime < 5 ? 10 : maxWatchTime)
+    ? Math.max(Math.ceil(maxWatchTime * 1.2), 15) // 20% padding, min 15 min for visibility
     : 60; // Default 60 if no data
 
   // Calculate total for percentage breakdown
@@ -63,25 +62,22 @@ export default function WatchTimeMap({ hourlyData, breakdownWeek }: WatchTimeMap
           <div className="h-64 flex items-end justify-between gap-1">
             {hourlyMinutes.map((minutes, hour) => {
               const height = maxMinutes > 0 ? (minutes / maxMinutes) * 100 : 0;
-              // Color based on hour (simplified - could be enhanced with actual category breakdown per hour)
-              const getColor = (hour: number) => {
-                // Morning hours (6-12) tend to be more productive
-                if (hour >= 6 && hour < 12) return "bg-green-500";
-                // Afternoon (12-18) mixed
-                if (hour >= 12 && hour < 18) return "bg-yellow-500";
-                // Evening/night (18-6) more distracting
-                return "bg-red-500";
-              };
+              // Use neutral color since we don't have per-hour category breakdown
+              // Could be enhanced later with backend changes to provide category per hour
+              const barColor = minutes > 0 ? "bg-blue-500" : "bg-muted";
 
               return (
                 <div key={hour} className="flex-1 flex flex-col items-center group relative">
                   <div
-                    className={`w-full ${getColor(hour)} rounded-t transition-all hover:opacity-80 cursor-pointer`}
-                    style={{ height: `${height}%`, minHeight: minutes > 0 ? "4px" : "0" }}
+                    className={`w-full ${barColor} rounded-t transition-all hover:opacity-80 cursor-pointer`}
+                    style={{ 
+                      height: `${Math.max(height, minutes > 0 ? 2 : 0)}%`, 
+                      minHeight: minutes > 0 ? "8px" : "0" // Increased from 4px to 8px for better visibility
+                    }}
                     title={`${formatHour(hour)}: ${minutes} min`}
                   >
                     {minutes > 0 && (
-                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-background/90 px-1 rounded">
                         {minutes}m
                       </div>
                     )}

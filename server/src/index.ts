@@ -1444,10 +1444,12 @@ app.get("/dashboard/stats", async (req, res) => {
     const watchTimeTodayMinutes = Math.round(watchSecondsToday / 60);
     const watchTimeWeekMinutes = Math.round(watchSecondsWeek / 60);
 
-    // Focus score (rolling 7 days) - count non-distracting (productive + neutral)
+    // Focus score (rolling 7 days) - based on time (seconds), not video counts
+    // Calculate as % of time spent on non-distracting content (productive + neutral)
+    const totalWeekSeconds = breakdownWeek.productive + breakdownWeek.neutral + breakdownWeek.distracting;
     const focusScore7Day =
-      productiveWeekVideos.total > 0
-        ? Math.round(((productiveWeekVideos.productive + productiveWeekVideos.neutral) / productiveWeekVideos.total) * 100)
+      totalWeekSeconds > 0
+        ? Math.round(((breakdownWeek.productive + breakdownWeek.neutral) / totalWeekSeconds) * 100)
         : 0;
 
     // Category breakdown: aggregate by category_primary (e.g., "Programming & Dev", "Entertainment")
