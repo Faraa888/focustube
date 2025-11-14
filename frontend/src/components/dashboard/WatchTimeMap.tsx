@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface WatchTimeMapProps {
-  hourlyData: number[] | Array<{ productive: number; neutral: number; distracting: number }>; // Array of 24 numbers (seconds per hour) or category breakdown
+  hourlyData: Array<{ label: string; distractingMinutes: number; totalMinutes: number }> | number[] | Array<{ productive: number; neutral: number; distracting: number }>;
   breakdownWeek: {
     productive: number;
     neutral: number;
@@ -10,119 +10,88 @@ interface WatchTimeMapProps {
 }
 
 export default function WatchTimeMap({ hourlyData, breakdownWeek }: WatchTimeMapProps) {
-  // Handle both old format (number[]) and new format (category breakdown)
-  const hourlyBreakdown = hourlyData.map((item) => {
-    if (typeof item === "number") {
-      // Old format: just total seconds
-      return { productive: 0, neutral: item, distracting: 0 };
-    }
-    // New format: category breakdown
-    return item;
-  });
+  // Handle new simplified format (5 time blocks)
+  let timeBlocks: Array<{ label: string; distractingMinutes: number; totalMinutes: number }>;
+  
+  if (Array.isArray(hourlyData) && hourlyData.length > 0 && typeof hourlyData[0] === 'object' && 'label' in hourlyData[0]) {
+    // New format: already grouped into 5 blocks
+    timeBlocks = hourlyData as Array<{ label: string; distractingMinutes: number; totalMinutes: number }>;
+  } else {
+    // Fallback: empty blocks
+    timeBlocks = [
+      { label: "12am to 8am", distractingMinutes: 0, totalMinutes: 0 },
+      { label: "8am to 12pm", distractingMinutes: 0, totalMinutes: 0 },
+      { label: "12pm to 4pm", distractingMinutes: 0, totalMinutes: 0 },
+      { label: "4pm to 8pm", distractingMinutes: 0, totalMinutes: 0 },
+      { label: "8pm to 12am", distractingMinutes: 0, totalMinutes: 0 },
+    ];
+  }
 
-  // Convert to minutes and calculate totals per hour
-  const hourlyMinutes = hourlyBreakdown.map((hour) => {
-    const totalSeconds = hour.productive + hour.neutral + hour.distracting;
-    return {
-      total: Math.round(totalSeconds / 60),
-      productive: Math.round(hour.productive / 60),
-      neutral: Math.round(hour.neutral / 60),
-      distracting: Math.round(hour.distracting / 60),
-    };
-  });
-
-  // Dynamic scale: tallest bar = 100% (with 10% padding for visual clarity)
-  const maxWatchTime = Math.max(...hourlyMinutes.map(h => h.total), 0);
-  const maxMinutes = maxWatchTime > 0 
-    ? Math.ceil(maxWatchTime * 1.1) // 10% padding, no minimum - scales to actual max
-    : 60; // Default 60 if no data at all
-
-  // Calculate total for percentage breakdown
-  const totalWeek = breakdownWeek.productive + breakdownWeek.neutral + breakdownWeek.distracting;
-  const productivePercent = totalWeek > 0 ? Math.round((breakdownWeek.productive / totalWeek) * 100) : 0;
-  const neutralPercent = totalWeek > 0 ? Math.round((breakdownWeek.neutral / totalWeek) * 100) : 0;
-  const distractingPercent = totalWeek > 0 ? Math.round((breakdownWeek.distracting / totalWeek) * 100) : 0;
-
-  // Format hour labels (12 AM, 2 AM, ..., 10 PM)
-  const formatHour = (hour: number) => {
-    if (hour === 0) return "12 AM";
-    if (hour < 12) return `${hour} AM`;
-    if (hour === 12) return "12 PM";
-    return `${hour - 12} PM`;
-  };
+  // Auto-scale Y-axis: tallest bar = 100% (with 10% padding)
+  const maxDistracting = Math.max(...timeBlocks.map(b => b.distractingMinutes), 0);
+  const maxMinutes = maxDistracting > 0 ? Math.ceil(maxDistracting * 1.1) : 10;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Watch-Time Map</CardTitle>
         <CardDescription>
-          When you watch YouTube throughout the day
+          Distracting content by time of day (last 30 days)
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {/* Breakdown summary */}
-          <div className="flex gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-green-500"></div>
-              <span>Productive: {productivePercent}%</span>
+        <div className="space-y-6">
+          {/* Y-axis labels */}
+          <div className="relative h-64">
+            {/* Y-axis scale */}
+            <div className="absolute left-0 top-0 bottom-0 w-12 flex flex-col justify-between text-xs text-muted-foreground">
+              {[maxMinutes, Math.round(maxMinutes * 0.75), Math.round(maxMinutes * 0.5), Math.round(maxMinutes * 0.25), 0].map((val) => (
+                <span key={val}>{val}</span>
+              ))}
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-              <span>Neutral: {neutralPercent}%</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-500"></div>
-              <span>Distracting: {distractingPercent}%</span>
+
+            {/* Chart area */}
+            <div className="ml-12 h-full flex items-end justify-between gap-4">
+              {timeBlocks.map((block, idx) => {
+                const height = maxMinutes > 0 ? (block.distractingMinutes / maxMinutes) * 100 : 0;
+                const percentage = block.totalMinutes > 0 ? Math.round((block.distractingMinutes / block.totalMinutes) * 100) : 0;
+
+                return (
+                  <div key={idx} className="flex-1 flex flex-col items-center group relative h-full">
+                    {/* Bar */}
+                    <div
+                      className="w-full bg-red-500 rounded-t transition-all hover:opacity-80 cursor-pointer relative"
+                      style={{ height: `${height}%` }}
+                      title={`${block.label}: ${block.distractingMinutes} min (${percentage}% of watch time)`}
+                    >
+                      {block.distractingMinutes > 0 && (
+                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-background/90 px-1 rounded z-10">
+                          {block.distractingMinutes}m
+                        </div>
+                      )}
+                    </div>
+
+                    {/* X-axis label */}
+                    <div className="text-xs text-muted-foreground mt-2 text-center">
+                      {block.label}
+                    </div>
+
+                    {/* Percentage below label */}
+                    <div className="text-xs font-medium text-red-500 mt-1">
+                      {percentage}%
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Bar chart */}
-          <div className="h-64 flex items-end justify-between gap-1">
-            {hourlyMinutes.map((hourData, hour) => {
-              const totalMinutes = hourData.total;
-              const height = maxMinutes > 0 ? (totalMinutes / maxMinutes) * 100 : 0;
-              
-              // Determine dominant category for color
-              let barColor = "bg-muted";
-              if (totalMinutes > 0) {
-                const maxCategory = Math.max(hourData.productive, hourData.neutral, hourData.distracting);
-                if (maxCategory === hourData.productive) {
-                  barColor = "bg-green-500";
-                } else if (maxCategory === hourData.distracting) {
-                  barColor = "bg-red-500";
-                } else {
-                  barColor = "bg-yellow-500";
-                }
-              }
-
-              return (
-                <div key={hour} className="flex-1 flex flex-col items-center group relative">
-                  <div
-                    className={`w-full ${barColor} rounded-t transition-all hover:opacity-80 cursor-pointer`}
-                    style={{ 
-                      height: `${height}%`
-                    }}
-                    title={`${formatHour(hour)}: ${totalMinutes} min (P:${hourData.productive} N:${hourData.neutral} D:${hourData.distracting})`}
-                  >
-                    {totalMinutes > 0 && (
-                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-background/90 px-1 rounded z-10">
-                        {totalMinutes}m
-                      </div>
-                    )}
-                  </div>
-                  {hour % 2 === 0 && (
-                    <div className="text-xs text-muted-foreground mt-1 transform -rotate-45 origin-top-left whitespace-nowrap">
-                      {formatHour(hour)}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          {/* Summary */}
+          <div className="text-sm text-muted-foreground text-center">
+            Total distracting: {timeBlocks.reduce((sum, b) => sum + b.distractingMinutes, 0)} min
           </div>
         </div>
       </CardContent>
     </Card>
   );
 }
-

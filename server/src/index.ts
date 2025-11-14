@@ -1477,39 +1477,43 @@ app.get("/dashboard/stats", async (req, res) => {
     const cleanupSuggestionSeconds = topDistractionsThisWeek.reduce((sum, item) => sum + item.seconds, 0);
     const cleanupSuggestionMinutes = Math.round(cleanupSuggestionSeconds / 60);
 
-    // Hourly breakdown (0-23 hours) - 30-day window with category breakdown
+    // Time blocks: 12am-8am, 8am-12pm, 12pm-4pm, 4pm-8pm, 8pm-12am (30-day window)
     const thirtyDaysAgoForHourly = new Date();
     thirtyDaysAgoForHourly.setDate(thirtyDaysAgoForHourly.getDate() - 30);
     
-    const hourlyBreakdown = Array(24).fill(null).map((_, hour) => {
-      const hourData = { productive: 0, neutral: 0, distracting: 0 };
+    const timeBlocks = [
+      { label: "12am to 8am", hours: [0, 1, 2, 3, 4, 5, 6, 7] },
+      { label: "8am to 12pm", hours: [8, 9, 10, 11] },
+      { label: "12pm to 4pm", hours: [12, 13, 14, 15] },
+      { label: "4pm to 8pm", hours: [16, 17, 18, 19] },
+      { label: "8pm to 12am", hours: [20, 21, 22, 23] },
+    ];
+    
+    const hourlyBreakdown = timeBlocks.map((block) => {
+      let distractingSeconds = 0;
       let totalSeconds = 0;
       
       watchHistory
         .filter((w: any) => {
           if (!w?.watched_at) return false;
           const watchedAt = new Date(w.watched_at);
-          return watchedAt >= thirtyDaysAgoForHourly && watchedAt.getHours() === hour;
+          return watchedAt >= thirtyDaysAgoForHourly && block.hours.includes(watchedAt.getHours());
         })
         .forEach((w: any) => {
           const seconds = Number(w.watch_seconds ?? w.seconds ?? 0);
           totalSeconds += seconds;
           
           const category = (w.distraction_level ?? w.category ?? "neutral").toLowerCase();
-          
-          if (category === "productive" || category === "neutral" || category === "distracting") {
-            hourData[category as keyof typeof hourData] += seconds;
-          } else {
-            hourData.neutral += seconds;
+          if (category === "distracting") {
+            distractingSeconds += seconds;
           }
         });
       
-      // Fallback: if no category data but we have seconds, put it in neutral
-      if (totalSeconds > 0 && hourData.productive === 0 && hourData.neutral === 0 && hourData.distracting === 0) {
-        hourData.neutral = totalSeconds;
-      }
-      
-      return hourData;
+      return {
+        label: block.label,
+        distractingMinutes: Math.round(distractingSeconds / 60),
+        totalMinutes: Math.round(totalSeconds / 60),
+      };
     });
 
     // Spiral events (last 30 days, top 20 most recent)
