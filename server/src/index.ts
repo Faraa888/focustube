@@ -1477,42 +1477,52 @@ app.get("/dashboard/stats", async (req, res) => {
     const cleanupSuggestionSeconds = topDistractionsThisWeek.reduce((sum, item) => sum + item.seconds, 0);
     const cleanupSuggestionMinutes = Math.round(cleanupSuggestionSeconds / 60);
 
-    // Time blocks: 12am-8am, 8am-12pm, 12pm-4pm, 4pm-8pm, 8pm-12am (30-day window)
-    const thirtyDaysAgoForHourly = new Date();
-    thirtyDaysAgoForHourly.setDate(thirtyDaysAgoForHourly.getDate() - 30);
+    // Time blocks: 12am-8am, 8am-12pm, 12pm-4pm, 4pm-8pm, 8pm-12am (7-day window, watch_seconds >= 45)
+    const sevenDaysAgoForHourly = new Date();
+    sevenDaysAgoForHourly.setDate(sevenDaysAgoForHourly.getDate() - 7);
     
     const timeBlocks = [
-      { label: "12am to 8am", hours: [0, 1, 2, 3, 4, 5, 6, 7] },
-      { label: "8am to 12pm", hours: [8, 9, 10, 11] },
-      { label: "12pm to 4pm", hours: [12, 13, 14, 15] },
-      { label: "4pm to 8pm", hours: [16, 17, 18, 19] },
-      { label: "8pm to 12am", hours: [20, 21, 22, 23] },
+      { label: "12am–8am", hours: [0, 1, 2, 3, 4, 5, 6, 7] },
+      { label: "8am–12pm", hours: [8, 9, 10, 11] },
+      { label: "12pm–4pm", hours: [12, 13, 14, 15] },
+      { label: "4pm–8pm", hours: [16, 17, 18, 19] },
+      { label: "8pm–12am", hours: [20, 21, 22, 23] },
     ];
     
     const hourlyBreakdown = timeBlocks.map((block) => {
       let distractingSeconds = 0;
-      let totalSeconds = 0;
+      let neutralSeconds = 0;
+      let productiveSeconds = 0;
       
       watchHistory
         .filter((w: any) => {
           if (!w?.watched_at) return false;
           const watchedAt = new Date(w.watched_at);
-          return watchedAt >= thirtyDaysAgoForHourly && block.hours.includes(watchedAt.getHours());
+          const seconds = Number(w.watch_seconds ?? w.seconds ?? 0);
+          // Filter: 7-day window AND watch_seconds >= 45 AND hour matches bucket
+          return watchedAt >= sevenDaysAgoForHourly && 
+                 seconds >= 45 && 
+                 block.hours.includes(watchedAt.getHours());
         })
         .forEach((w: any) => {
           const seconds = Number(w.watch_seconds ?? w.seconds ?? 0);
-          totalSeconds += seconds;
-          
           const category = (w.distraction_level ?? w.category ?? "neutral").toLowerCase();
+          
           if (category === "distracting") {
             distractingSeconds += seconds;
+          } else if (category === "productive") {
+            productiveSeconds += seconds;
+          } else {
+            neutralSeconds += seconds;
           }
         });
       
+      // Convert to minutes and round to 1 decimal place
       return {
-        label: block.label,
-        distractingMinutes: Math.round(distractingSeconds / 60),
-        totalMinutes: Math.round(totalSeconds / 60),
+        bucket: block.label,
+        distracting_minutes: Math.round((distractingSeconds / 60) * 10) / 10,
+        neutral_minutes: Math.round((neutralSeconds / 60) * 10) / 10,
+        productive_minutes: Math.round((productiveSeconds / 60) * 10) / 10,
       };
     });
 
@@ -1617,7 +1627,7 @@ app.get("/dashboard/stats", async (req, res) => {
         minutes: cleanupSuggestionMinutes,
         hasDistractions: cleanupSuggestionSeconds > 0,
       },
-      hourlyWatchTime: hourlyBreakdown, // Array of 24 numbers (seconds per hour, 0-23)
+      hourlyWatchTime: hourlyBreakdown, // Array of 5 time buckets with distracting/neutral/productive minutes (last 7 days, watch_seconds >= 45)
       spiralEvents: recentSpiralEvents, // Array of spiral detection events (last 7 days, top 20)
       // Streak + weekly trend can be added later when we persist more history
       streakDays: 0,

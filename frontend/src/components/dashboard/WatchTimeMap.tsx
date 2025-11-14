@@ -1,7 +1,15 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+
+interface WatchTimeBucket {
+  bucket: string;
+  distracting_minutes: number;
+  neutral_minutes: number;
+  productive_minutes: number;
+}
 
 interface WatchTimeMapProps {
-  hourlyData: Array<{ label: string; distractingMinutes: number; totalMinutes: number }> | number[] | Array<{ productive: number; neutral: number; distracting: number }>;
+  hourlyData: WatchTimeBucket[] | Array<{ label: string; distractingMinutes: number; totalMinutes: number }> | number[] | Array<{ productive: number; neutral: number; distracting: number }>;
   breakdownWeek: {
     productive: number;
     neutral: number;
@@ -9,88 +17,171 @@ interface WatchTimeMapProps {
   };
 }
 
+/**
+ * Watch-Time Overview Component
+ * 
+ * Stacked bar chart showing watch time by time-of-day buckets.
+ * 
+ * Y-axis scaling:
+ * - Calculates max from all bucket totals (distracting + neutral + productive)
+ * - Adds 15% headroom and rounds to a "nice" number (e.g., 17 → 20, 26 → 30)
+ * 
+ * Colors:
+ * - Distracting: #ed2b2b (red)
+ * - Neutral: #ffb800 (amber/yellow)
+ * - Productive: #00bb13 (green)
+ */
 export default function WatchTimeMap({ hourlyData, breakdownWeek }: WatchTimeMapProps) {
-  // Handle new simplified format (5 time blocks)
-  let timeBlocks: Array<{ label: string; distractingMinutes: number; totalMinutes: number }>;
+  // Handle new format: array of buckets with all 3 categories
+  let buckets: WatchTimeBucket[] = [];
   
-  if (Array.isArray(hourlyData) && hourlyData.length > 0 && typeof hourlyData[0] === 'object' && 'label' in hourlyData[0]) {
-    // New format: already grouped into 5 blocks
-    timeBlocks = hourlyData as Array<{ label: string; distractingMinutes: number; totalMinutes: number }>;
+  if (Array.isArray(hourlyData) && hourlyData.length > 0) {
+    const first = hourlyData[0];
+    if (typeof first === 'object' && 'bucket' in first && 'distracting_minutes' in first) {
+      // New format: already in correct shape
+      buckets = hourlyData as WatchTimeBucket[];
+    } else if (typeof first === 'object' && 'label' in first && 'distractingMinutes' in first) {
+      // Old format: convert to new format (only has distracting, set others to 0)
+      buckets = (hourlyData as Array<{ label: string; distractingMinutes: number; totalMinutes: number }>).map(item => ({
+        bucket: item.label,
+        distracting_minutes: item.distractingMinutes,
+        neutral_minutes: 0,
+        productive_minutes: 0,
+      }));
+    } else {
+      // Fallback: empty buckets
+      buckets = [
+        { bucket: "12am–8am", distracting_minutes: 0, neutral_minutes: 0, productive_minutes: 0 },
+        { bucket: "8am–12pm", distracting_minutes: 0, neutral_minutes: 0, productive_minutes: 0 },
+        { bucket: "12pm–4pm", distracting_minutes: 0, neutral_minutes: 0, productive_minutes: 0 },
+        { bucket: "4pm–8pm", distracting_minutes: 0, neutral_minutes: 0, productive_minutes: 0 },
+        { bucket: "8pm–12am", distracting_minutes: 0, neutral_minutes: 0, productive_minutes: 0 },
+      ];
+    }
   } else {
-    // Fallback: empty blocks
-    timeBlocks = [
-      { label: "12am to 8am", distractingMinutes: 0, totalMinutes: 0 },
-      { label: "8am to 12pm", distractingMinutes: 0, totalMinutes: 0 },
-      { label: "12pm to 4pm", distractingMinutes: 0, totalMinutes: 0 },
-      { label: "4pm to 8pm", distractingMinutes: 0, totalMinutes: 0 },
-      { label: "8pm to 12am", distractingMinutes: 0, totalMinutes: 0 },
+    // Fallback: empty buckets
+    buckets = [
+      { bucket: "12am–8am", distracting_minutes: 0, neutral_minutes: 0, productive_minutes: 0 },
+      { bucket: "8am–12pm", distracting_minutes: 0, neutral_minutes: 0, productive_minutes: 0 },
+      { bucket: "12pm–4pm", distracting_minutes: 0, neutral_minutes: 0, productive_minutes: 0 },
+      { bucket: "4pm–8pm", distracting_minutes: 0, neutral_minutes: 0, productive_minutes: 0 },
+      { bucket: "8pm–12am", distracting_minutes: 0, neutral_minutes: 0, productive_minutes: 0 },
     ];
   }
 
-  // Auto-scale Y-axis: tallest bar = 100% (with 10% padding)
-  const maxDistracting = Math.max(...timeBlocks.map(b => b.distractingMinutes), 0);
-  const maxMinutes = maxDistracting > 0 ? Math.ceil(maxDistracting * 1.1) : 10;
+  // Calculate Y-axis max with nice rounding and headroom
+  const calculateYAxisMax = (buckets: WatchTimeBucket[]): number => {
+    if (buckets.length === 0) return 20;
+
+    // Find max total (sum of all three categories per bucket)
+    const maxTotal = Math.max(
+      ...buckets.map(b => b.distracting_minutes + b.neutral_minutes + b.productive_minutes)
+    );
+
+    if (maxTotal === 0) return 20;
+
+    // Add 15% headroom
+    const withHeadroom = maxTotal * 1.15;
+
+    // Round to a "nice" number
+    const magnitude = Math.pow(10, Math.floor(Math.log10(withHeadroom)));
+    const normalized = withHeadroom / magnitude;
+    
+    let niceValue: number;
+    if (normalized <= 1) niceValue = 1;
+    else if (normalized <= 2) niceValue = 2;
+    else if (normalized <= 5) niceValue = 5;
+    else niceValue = 10;
+    
+    return niceValue * magnitude;
+  };
+
+  const yAxisMax = calculateYAxisMax(buckets);
+  const hasData = buckets.some(b => b.distracting_minutes + b.neutral_minutes + b.productive_minutes > 0);
+
+  if (!hasData) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Watch-Time Overview</CardTitle>
+          <CardDescription>When you watch YouTube throughout the day (last 7 days)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-64 flex items-center justify-center text-muted-foreground">
+            No watch time in this period yet.
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Watch-Time Map</CardTitle>
-        <CardDescription>
-          Distracting content by time of day (last 30 days)
-        </CardDescription>
+        <CardTitle>Watch-Time Overview</CardTitle>
+        <CardDescription>When you watch YouTube throughout the day (last 7 days)</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-6">
-          {/* Y-axis labels */}
-          <div className="relative h-64">
-            {/* Y-axis scale */}
-            <div className="absolute left-0 top-0 bottom-0 w-12 flex flex-col justify-between text-xs text-muted-foreground">
-              {[maxMinutes, Math.round(maxMinutes * 0.75), Math.round(maxMinutes * 0.5), Math.round(maxMinutes * 0.25), 0].map((val) => (
-                <span key={val}>{val}</span>
-              ))}
-            </div>
-
-            {/* Chart area */}
-            <div className="ml-12 h-full flex items-end justify-between gap-4">
-              {timeBlocks.map((block, idx) => {
-                const height = maxMinutes > 0 ? (block.distractingMinutes / maxMinutes) * 100 : 0;
-                const percentage = block.totalMinutes > 0 ? Math.round((block.distractingMinutes / block.totalMinutes) * 100) : 0;
-
-                return (
-                  <div key={idx} className="flex-1 flex flex-col items-center group relative h-full">
-                    {/* Bar */}
-                    <div
-                      className="w-full bg-red-500 rounded-t transition-all hover:opacity-80 cursor-pointer relative"
-                      style={{ height: `${height}%` }}
-                      title={`${block.label}: ${block.distractingMinutes} min (${percentage}% of watch time)`}
-                    >
-                      {block.distractingMinutes > 0 && (
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-background/90 px-1 rounded z-10">
-                          {block.distractingMinutes}m
-                        </div>
-                      )}
-                    </div>
-
-                    {/* X-axis label */}
-                    <div className="text-xs text-muted-foreground mt-2 text-center">
-                      {block.label}
-                    </div>
-
-                    {/* Percentage below label */}
-                    <div className="text-xs font-medium text-red-500 mt-1">
-                      {percentage}%
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Summary */}
-          <div className="text-sm text-muted-foreground text-center">
-            Total distracting: {timeBlocks.reduce((sum, b) => sum + b.distractingMinutes, 0)} min
-          </div>
-        </div>
+        <ResponsiveContainer width="100%" height={320}>
+          <BarChart
+            data={buckets}
+            margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
+            barCategoryGap="20%"
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
+            <XAxis 
+              dataKey="bucket" 
+              tick={{ fontSize: 12, fill: "#6b7280" }}
+              tickLine={{ stroke: "#e5e7eb" }}
+            />
+            <YAxis 
+              domain={[0, yAxisMax]}
+              tick={{ fontSize: 12, fill: "#6b7280" }}
+              tickLine={{ stroke: "#e5e7eb" }}
+              label={{ 
+                value: "Minutes", 
+                angle: -90, 
+                position: "insideLeft",
+                style: { textAnchor: "middle", fill: "#6b7280" }
+              }}
+            />
+            <Tooltip 
+              formatter={(value: number) => [`${value.toFixed(1)} min`, ""]}
+              labelStyle={{ fontWeight: "bold", marginBottom: "4px" }}
+              contentStyle={{ 
+                backgroundColor: "white", 
+                border: "1px solid #e5e7eb",
+                borderRadius: "6px",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
+              }}
+            />
+            <Legend 
+              wrapperStyle={{ paddingTop: "20px" }}
+              iconType="square"
+            />
+            <Bar 
+              dataKey="distracting_minutes" 
+              stackId="a" 
+              fill="#ed2b2b" 
+              name="Distracting"
+              radius={[0, 0, 0, 0]}
+            />
+            <Bar 
+              dataKey="neutral_minutes" 
+              stackId="a" 
+              fill="#ffb800" 
+              name="Neutral"
+              radius={[0, 0, 0, 0]}
+            />
+            <Bar 
+              dataKey="productive_minutes" 
+              stackId="a" 
+              fill="#00bb13" 
+              name="Productive"
+              radius={[4, 4, 0, 0]}
+            />
+          </BarChart>
+        </ResponsiveContainer>
       </CardContent>
     </Card>
   );
