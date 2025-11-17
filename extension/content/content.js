@@ -362,6 +362,47 @@ function isChromeContextValid() {
   }
 }
 
+/**
+ * Computes plan-aware settings (mirrors background getEffectiveSettings)
+ * Handles older fields like block_shorts/daily_limit for backward compatibility.
+ */
+function computeEffectiveSettings(plan = "free", rawSettings = {}) {
+  const effective = { ...(rawSettings || {}) };
+  const normalizedPlan = (plan || "free").toLowerCase();
+
+  // Convert legacy fields to the new schema if needed
+  if (rawSettings && rawSettings.block_shorts !== undefined && effective.shorts_mode === undefined) {
+    effective.shorts_mode = rawSettings.block_shorts ? "hard" : "timed";
+  }
+  if (rawSettings && rawSettings.daily_limit !== undefined && effective.daily_limit_minutes === undefined) {
+    effective.daily_limit_minutes = rawSettings.daily_limit;
+  }
+
+  if (!effective.shorts_mode) {
+    effective.shorts_mode = "timed";
+  }
+
+  if (normalizedPlan === "free") {
+    // Free plan enforces defaults regardless of stored values
+    effective.shorts_mode = "hard";
+    effective.hide_recommendations = true;
+    effective.daily_limit_minutes = 60;
+  } else if (normalizedPlan === "trial" || normalizedPlan === "pro") {
+    effective.hide_recommendations = effective.hide_recommendations ?? false;
+    const dailyLimit = effective.daily_limit_minutes ?? 90;
+    effective.daily_limit_minutes = dailyLimit;
+  } else {
+    // Test/unknown plans - use stored values with safe defaults
+    effective.hide_recommendations = effective.hide_recommendations ?? false;
+    effective.daily_limit_minutes = effective.daily_limit_minutes ?? 90;
+  }
+
+  // Keep legacy field in sync for any downstream usage
+  effective.daily_limit = effective.daily_limit_minutes;
+
+  return effective;
+}
+
 /** Stores original video state for restoration */
 let savedVideoStates = null;
 
@@ -2732,11 +2773,10 @@ async function startGlobalTimeTracking() {
         console.warn("[FT] Failed to get plan for limit check:", chrome.runtime.lastError.message);
       } else {
         const plan = ft_plan || "free";
-        // Get limit from settings (default: 60 for free, 90 for pro/trial)
+        // Get effective settings (plan-aware, handles legacy fields)
         const { ft_extension_settings = {} } = await chrome.storage.local.get(["ft_extension_settings"]);
-        const dailyLimitMin = ft_extension_settings.daily_limit !== undefined 
-          ? Number(ft_extension_settings.daily_limit) 
-          : (plan === "free" ? 60 : 90); // Default: 60 min for free, 90 min for pro/trial
+        const effectiveSettings = computeEffectiveSettings(plan, ft_extension_settings);
+        const dailyLimitMin = effectiveSettings.daily_limit_minutes;
         const limitSeconds = dailyLimitMin * 60;
         
         // Check if limit reached
@@ -3047,8 +3087,9 @@ function getNudgeMessage(style, type, context = {}) {
 function hideRecommendationsIfEnabled() {
   if (!isChromeContextValid()) return;
   
-  chrome.storage.local.get(["ft_extension_settings"]).then(({ ft_extension_settings = {} }) => {
-    const hideRecs = ft_extension_settings.hide_recommendations === true;
+  chrome.storage.local.get(["ft_extension_settings", "ft_plan"]).then(({ ft_extension_settings = {}, ft_plan = "free" }) => {
+    const plan = ft_plan || "free";
+    const { hide_recommendations: hideRecs } = computeEffectiveSettings(plan, ft_extension_settings);
     
     if (!hideRecs) {
       // Show recommendations if setting is off
@@ -3219,20 +3260,10 @@ async function handleNavigation() {
     }
     
     // ============================================================
-    // STEP 1: Reload fresh data from server FIRST (before any checks)
+    // STEP 1: FAST PATH: Immediate blocking check (using cached data)
     // ============================================================
-    try {
-      await chrome.runtime.sendMessage({ type: "FT_RELOAD_EXTENSION_DATA" });
-      // Wait a tiny bit for storage to update
-      await new Promise(resolve => setTimeout(resolve, 50));
-    } catch (e) {
-      console.warn("[FT] Failed to reload data (using cached):", e);
-      // Continue with cached data if reload fails
-    }
-    
-    // ============================================================
-    // STEP 2: FAST PATH: Immediate blocking check (with fresh data)
-    // ============================================================
+    // No server reload - use cached data from chrome.storage.local
+    // Data is synced from Supabase on boot/login only
     const videoId = extractVideoIdFromUrl();
     let channel = extractChannelFast(); // Fast extraction (meta tags first, then DOM)
     

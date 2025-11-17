@@ -3,6 +3,22 @@
 // This file runs in the background — it never touches the webpage directly.
 
 // ─────────────────────────────────────────────────────────────
+// SETTINGS SCHEMA
+// ─────────────────────────────────────────────────────────────
+// ft_extension_settings object structure (stored in Supabase extension_data.settings):
+// {
+//   hide_recommendations: boolean,           // Hide sidebar/homepage recommendations
+//   shorts_mode: "hard" | "timed" | "off",  // Shorts blocking mode
+//   daily_limit_minutes: number,             // Daily watch time limit in minutes
+//   nudge_style: "gentle" | "assertive" | "firm", // Nudge message style
+//   focus_window_enabled: boolean,           // Enable focus window time restriction
+//   focus_window_start: string,              // Start time in HH:MM format (24h)
+//   focus_window_end: string,                // End time in HH:MM format (24h)
+//   spiral_events: array                     // Array of spiral detection events
+// }
+// Supabase is the source of truth - local storage is cache only.
+
+// ─────────────────────────────────────────────────────────────
 // IMPORTS
 // ─────────────────────────────────────────────────────────────
 import {
@@ -556,7 +572,9 @@ export async function loadExtensionDataFromServer() {
       return null;
     }
 
-    // Save to local storage
+    // SUPABASE IS SOURCE OF TRUTH - Server data overwrites local cache directly
+    // No merge logic for blocked_channels, settings, goals, anti_goals
+    // Only watch_history is merged (append-only, local-first)
     const { 
       blocked_channels, 
       watch_history, 
@@ -566,31 +584,25 @@ export async function loadExtensionDataFromServer() {
       anti_goals
     } = result.data;
     
+    // Merge watch_history (append-only, local-first) - keep this merge
     const { ft_watch_history: localWatchHistory = [] } = await getLocal(["ft_watch_history"]);
-    const { ft_blocked_channels: localBlockedChannels = [] } = await getLocal(["ft_blocked_channels"]);
     const serverWatchHistory = watch_history || [];
-    const serverBlockedChannels = blocked_channels;
-    
-    // Smart merge: combine both, dedupe by video_id + watched_at, keep most recent
-    // This prevents data loss when server has old data and local has new data
     const historyMap = new Map();
 
     // Add local entries first
     localWatchHistory.forEach(entry => {
-      if (!entry.video_id || !entry.watched_at) return; // Skip invalid entries
+      if (!entry.video_id || !entry.watched_at) return;
       const key = `${entry.video_id}_${entry.watched_at}`;
       historyMap.set(key, entry);
     });
 
     // Add server entries (will only add if not already present, or if server has newer data)
     serverWatchHistory.forEach(entry => {
-      if (!entry.video_id || !entry.watched_at) return; // Skip invalid entries
+      if (!entry.video_id || !entry.watched_at) return;
       const key = `${entry.video_id}_${entry.watched_at}`;
       if (!historyMap.has(key)) {
-        // New entry from server - add it
         historyMap.set(key, entry);
       } else {
-        // Entry exists - keep the one with more recent watched_at timestamp
         const existing = historyMap.get(key);
         const existingTime = new Date(existing.watched_at).getTime();
         const serverTime = new Date(entry.watched_at).getTime();
@@ -600,29 +612,12 @@ export async function loadExtensionDataFromServer() {
       }
     });
 
-    // Convert back to array and sort by watched_at (newest first)
     const mergedWatchHistory = Array.from(historyMap.values())
       .sort((a, b) => new Date(b.watched_at).getTime() - new Date(a.watched_at).getTime());
 
-    // Merge blocked channels: combine local + server, dedupe case-insensitively
-    // This prevents data loss when server has stale/empty data
-    const mergedBlockedChannels = mergeBlockedChannels(localBlockedChannels, serverBlockedChannels);
-    
-    // If server data was stale (local had channels server didn't), schedule background sync
-    const serverHadStaleData = Array.isArray(serverBlockedChannels) && 
-                                serverBlockedChannels.length < localBlockedChannels.length &&
-                                mergedBlockedChannels.length > serverBlockedChannels.length;
-    
-    if (serverHadStaleData) {
-      // Schedule background sync to update server with merged data
-      // Don't await - let it happen in background
-      saveExtensionDataToServer().catch((err) => {
-        console.warn("[FT] Background sync of merged blocked channels failed (non-critical):", err);
-      });
-    }
-
+    // Server data overwrites local cache - no merge for these fields
     const storageUpdate = {
-      ft_blocked_channels: mergedBlockedChannels,
+      ft_blocked_channels: Array.isArray(blocked_channels) ? blocked_channels : [],
       ft_watch_history: mergedWatchHistory,
       ft_channel_spiral_count: channel_spiral_count || {},
       ft_extension_settings: settings || {},
@@ -732,59 +727,46 @@ export async function saveExtensionDataToServer(data = null) {
       spiral_events: ft_spiral_events, // Store in settings JSONB for now
     };
 
-    // Use provided data or fall back to local storage
-    const toSave = data || {
-      blocked_channels: ft_blocked_channels,
-      watch_history: ft_watch_history,
-      channel_spiral_count: ft_channel_spiral_count,
-      settings: settingsToSave,
-      goals: ft_user_goals,
-      anti_goals: ft_user_anti_goals,
-      channel_lifetime_stats: ft_channel_lifetime_stats,
-    };
+    // If data is provided: send ONLY those keys (no merging from local)
+    // If data is null: full sync, send everything from local
+    let toSave;
     
-    // Always merge missing fields from local storage (even if data is provided)
     if (data) {
-      // Merge core fields if not provided
-      if (data.blocked_channels === undefined) {
-        toSave.blocked_channels = ft_blocked_channels;
+      // Partial save - only send explicitly provided fields
+      toSave = {};
+      if (data.blocked_channels !== undefined) {
+        toSave.blocked_channels = data.blocked_channels;
       }
-      if (data.watch_history === undefined) {
-        toSave.watch_history = ft_watch_history;
+      if (data.watch_history !== undefined) {
+        toSave.watch_history = data.watch_history;
       }
-      if (data.channel_spiral_count === undefined) {
-        toSave.channel_spiral_count = ft_channel_spiral_count;
+      if (data.channel_spiral_count !== undefined) {
+        toSave.channel_spiral_count = data.channel_spiral_count;
       }
-    }
-    
-    // Always ensure settings include focus window and spiral_events (even if data is provided)
-    if (!data || !data.settings) {
-      toSave.settings = settingsToSave;
+      if (data.settings !== undefined) {
+        // Settings always sent as complete object, never partial merge
+        toSave.settings = data.settings;
+      }
+      if (data.goals !== undefined) {
+        toSave.goals = data.goals;
+      }
+      if (data.anti_goals !== undefined) {
+        toSave.anti_goals = data.anti_goals;
+      }
+      if (data.channel_lifetime_stats !== undefined) {
+        toSave.channel_lifetime_stats = data.channel_lifetime_stats;
+      }
     } else {
-      // Merge focus window and spiral_events into provided settings
-      toSave.settings = {
-        ...data.settings,
-        focus_window_enabled: data.settings.focus_window_enabled !== undefined 
-          ? data.settings.focus_window_enabled 
-          : ft_focus_window_enabled,
-        focus_window_start: data.settings.focus_window_start || ft_focus_window_start,
-        focus_window_end: data.settings.focus_window_end || ft_focus_window_end,
-        spiral_events: data.settings.spiral_events !== undefined 
-          ? data.settings.spiral_events 
-          : ft_spiral_events,
+      // Full sync - send everything from local
+      toSave = {
+        blocked_channels: ft_blocked_channels,
+        watch_history: ft_watch_history,
+        channel_spiral_count: ft_channel_spiral_count,
+        settings: settingsToSave,
+        goals: ft_user_goals,
+        anti_goals: ft_user_anti_goals,
+        channel_lifetime_stats: ft_channel_lifetime_stats,
       };
-    }
-
-    // Always include goals, anti_goals, and lifetime stats if they exist in local storage (even if data is provided)
-    // This ensures they are synced whenever we save
-    if (!data || data.goals === undefined) {
-      toSave.goals = ft_user_goals;
-    }
-    if (!data || data.anti_goals === undefined) {
-      toSave.anti_goals = ft_user_anti_goals;
-    }
-    if (!data || data.channel_lifetime_stats === undefined) {
-      toSave.channel_lifetime_stats = ft_channel_lifetime_stats;
     }
 
     const response = await fetch(`${SERVER_URL}/extension/save-data`, {
@@ -816,6 +798,62 @@ export async function saveExtensionDataToServer(data = null) {
     console.warn("[FT] Error saving extension data:", error.message);
     return false;
   }
+}
+
+/**
+ * Get effective settings based on plan (plan-aware settings)
+ * Free plan enforces defaults, Pro/Trial use stored settings
+ * @param {string} plan - User plan: "free" | "trial" | "pro" | "test"
+ * @param {Object} rawSettings - Raw settings from ft_extension_settings
+ * @returns {Object} Effective settings to use for blocking logic
+ */
+export function getEffectiveSettings(plan, rawSettings = {}) {
+  const effective = { ...rawSettings };
+  
+  // BACKWARD COMPATIBILITY: Convert old field names to new format
+  // Convert block_shorts (boolean) to shorts_mode (string) if needed
+  if (rawSettings.block_shorts !== undefined && rawSettings.shorts_mode === undefined) {
+    effective.shorts_mode = rawSettings.block_shorts ? "hard" : "timed";
+  }
+  
+  // Convert daily_limit to daily_limit_minutes if needed
+  if (rawSettings.daily_limit !== undefined && rawSettings.daily_limit_minutes === undefined) {
+    effective.daily_limit_minutes = rawSettings.daily_limit;
+  }
+  
+  // Ensure shorts_mode exists (default to "timed" if not set)
+  if (!effective.shorts_mode) {
+    effective.shorts_mode = "timed";
+  }
+  
+  if (plan === "free") {
+    // Free plan: Force Free defaults, ignore Pro settings
+    effective.shorts_mode = "hard";
+    effective.hide_recommendations = true;
+    // Support both daily_limit and daily_limit_minutes for backward compatibility
+    effective.daily_limit_minutes = 60;
+    effective.daily_limit = 60; // Legacy field name
+    // Other settings can use defaults or be undefined
+  } else if (plan === "trial" || plan === "pro") {
+    // Pro/Trial: Use stored settings with sensible defaults
+    effective.shorts_mode = effective.shorts_mode || "timed";
+    effective.hide_recommendations = rawSettings.hide_recommendations ?? false;
+    // Support both daily_limit and daily_limit_minutes for backward compatibility
+    const dailyLimit = effective.daily_limit_minutes || rawSettings.daily_limit || 90;
+    effective.daily_limit_minutes = dailyLimit;
+    effective.daily_limit = dailyLimit; // Legacy field name
+    // Apply all other settings from rawSettings
+    effective.nudge_style = rawSettings.nudge_style || "firm";
+    effective.focus_window_enabled = rawSettings.focus_window_enabled ?? false;
+    effective.focus_window_start = rawSettings.focus_window_start || "13:00";
+    effective.focus_window_end = rawSettings.focus_window_end || "18:00";
+    effective.spiral_events = rawSettings.spiral_events || [];
+  } else {
+    // Test plan or unknown: use raw settings as-is (with conversions applied)
+    return effective;
+  }
+  
+  return effective;
 }
 
 /**

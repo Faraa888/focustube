@@ -21,6 +21,7 @@ import {
   loadExtensionDataFromServer, // load extension data from server
   saveExtensionDataToServer, // save extension data to server
   saveTimerToServer,        // save timer to server for cross-device sync
+  getEffectiveSettings,    // get plan-aware effective settings
 } from "../lib/state.js";
 
 import { evaluateBlock } from "../lib/rules.js";
@@ -610,6 +611,8 @@ async function handleMessage(msg) {
   }
 
   if (msg?.type === "FT_RELOAD_EXTENSION_DATA") {
+    // Explicit sync from Supabase (triggered by user action or website)
+    // Only called on explicit sync, not on navigation
     await loadExtensionDataFromServer().catch((err) => {
       LOG("Failed to reload extension data:", err);
     });
@@ -623,11 +626,12 @@ async function handleMessage(msg) {
     }
     
     const { ft_blocked_channels = [] } = await getLocal(["ft_blocked_channels"]);
-    const blockedChannels = Array.isArray(ft_blocked_channels) ? [...ft_blocked_channels] : [];
+    const currentList = Array.isArray(ft_blocked_channels) ? [...ft_blocked_channels] : [];
     
     // Check if already blocked (case-insensitive)
     const channelLower = channel.toLowerCase().trim();
-    const isAlreadyBlocked = blockedChannels.some(blocked => {
+    const normalizedChannel = channel.trim();
+    const isAlreadyBlocked = currentList.some(blocked => {
       const blockedLower = blocked.toLowerCase().trim();
       return blockedLower === channelLower || 
              channelLower.includes(blockedLower) || 
@@ -635,34 +639,43 @@ async function handleMessage(msg) {
     });
     
     if (!isAlreadyBlocked) {
-      blockedChannels.push(channel);
+      // Store previous state for rollback
+      const previousList = [...currentList];
+      const newList = [...previousList, normalizedChannel];
+      
+      // Optimistic update: update local cache immediately
       await setLocal({ 
-        ft_blocked_channels: blockedChannels,
+        ft_blocked_channels: newList,
         ft_spiral_detected: null  // Clear spiral flag
       });
-      LOG("Channel blocked permanently:", channel);
+      LOG("Channel blocked (optimistic update):", normalizedChannel);
       
-      // Sync to server IMMEDIATELY
+      // Save to Supabase (source of truth)
       try {
-        await saveExtensionDataToServer({
-          blocked_channels: blockedChannels
+        const saved = await saveExtensionDataToServer({
+          blocked_channels: newList
         });
-        LOG("Channel block saved to server successfully");
         
-        // Pull fresh data from server to confirm sync
-        await loadExtensionDataFromServer().catch((err) => {
-          LOG("Failed to reload data after block (non-critical):", err);
-          // Non-critical - data is already saved, this is just to confirm
-        });
-    } catch (err) {
-        LOG("Failed to save permanent block to server:", err);
-        // Still return success - data is in local storage, will sync on next hourly sync
+        if (saved) {
+          LOG("✅ Channel block saved to Supabase:", normalizedChannel);
+          // No reload needed - we already have the correct data in cache
+        } else {
+          // Save failed - rollback local cache
+          await setLocal({ ft_blocked_channels: previousList });
+          LOG("⚠️ Failed to save to Supabase, rolled back local cache");
+          return { ok: false, error: "Failed to save to Supabase" };
+        }
+      } catch (err) {
+        // Save failed - rollback local cache
+        await setLocal({ ft_blocked_channels: previousList });
+        LOG("⚠️ Error saving to Supabase, rolled back:", err);
+        return { ok: false, error: err.message || "Failed to save to Supabase" };
       }
     } else {
-      LOG("Channel already blocked:", channel);
+      LOG("Channel already blocked:", normalizedChannel);
     }
     
-    return { ok: true, channel };
+    return { ok: true, channel: normalizedChannel };
   }
 
   if (msg?.type === "FT_SYNC_PLAN") {
@@ -1464,9 +1477,12 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   // 6. Read plan + limits (needed for block shorts check)
   const { plan, config } = await getPlanConfig();
 
-  // 6.1. Apply block shorts setting if enabled
-  const extensionSettings = state.ft_extension_settings || {};
-  if (extensionSettings.block_shorts === true && isProExperience(plan)) {
+  // 6.1. Get effective settings (plan-aware)
+  const rawSettings = state.ft_extension_settings || {};
+  const effectiveSettings = getEffectiveSettings(plan, rawSettings);
+
+  // 6.2. Apply block shorts setting if enabled (using effective settings)
+  if (effectiveSettings.shorts_mode === "hard" && isProExperience(plan)) {
     // If block_shorts is enabled, set ft_pro_manual_block_shorts and ft_block_shorts_today
     if (!state.ft_pro_manual_block_shorts || !state.ft_block_shorts_today) {
       await setLocal({
@@ -1476,8 +1492,8 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
       state.ft_pro_manual_block_shorts = true;
       state.ft_block_shorts_today = true;
     }
-  } else if (extensionSettings.block_shorts === false && isProExperience(plan)) {
-    // If block_shorts is disabled, clear the flags (allow Pro tracking/reminders)
+  } else if (effectiveSettings.shorts_mode !== "hard" && isProExperience(plan)) {
+    // If shorts_mode is not "hard", clear the flags (allow Pro tracking/reminders)
     if (state.ft_pro_manual_block_shorts || state.ft_block_shorts_today) {
       await setLocal({
         ft_pro_manual_block_shorts: false,
@@ -1767,8 +1783,9 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   const channel = (pageType === "WATCH" && videoMetadata) ? videoMetadata.channel : null;
   const blockedChannels = state.ft_blocked_channels || [];
   
-  // Get extension settings for daily limit and other settings
-  const { ft_extension_settings = {} } = await getLocal(["ft_extension_settings"]);
+  // Get effective settings (plan-aware)
+  const rawSettings = state.ft_extension_settings || {};
+  const effectiveSettings = getEffectiveSettings(plan, rawSettings);
   
   const ctx = {
     plan,
@@ -1783,7 +1800,8 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     channel,
     blockedChannels,
     aiClassification, // Add AI classification to context
-    ft_extension_settings, // Add extension settings for daily limit and other configs
+    ft_extension_settings: rawSettings, // Keep raw settings for backward compatibility
+    effectiveSettings, // Plan-aware effective settings (used by rules.js)
   };
 
   // 10. Check AI classification and allowance (Pro users only)
