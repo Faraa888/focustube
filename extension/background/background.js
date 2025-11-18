@@ -1477,7 +1477,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   // 6. Read plan + limits (needed for block shorts check)
   const { plan, config } = await getPlanConfig();
 
-  // 6.1. Get effective settings (plan-aware)
+  // Get effective settings (plan-aware)
   const rawSettings = state.ft_extension_settings || {};
   const effectiveSettings = getEffectiveSettings(plan, rawSettings);
 
@@ -1783,9 +1783,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   const channel = (pageType === "WATCH" && videoMetadata) ? videoMetadata.channel : null;
   const blockedChannels = state.ft_blocked_channels || [];
   
-  // Get effective settings (plan-aware)
-  const rawSettings = state.ft_extension_settings || {};
-  const effectiveSettings = getEffectiveSettings(plan, rawSettings);
+  
   
   const ctx = {
     plan,

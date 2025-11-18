@@ -16,18 +16,19 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
   - Status view: `Account`
 
 ### Onboarding View (shown when no email)
-- **Welcome text:** `Welcome to FocusTube! Get started with Pro features or continue with Free.`
+- **Welcome text:** `Welcome to FocusTube. Start with full access — no card required. Try the Pro features for 14 days. No pressure. Just focus.`
 - **Feature grid items:**
-  - `AI Content Filtering`
+  - `Smart AI Filtering`
+  - `Targetted Channel Blocking`
   - `14-Day Free Trial`
-  - `Analytics Dashboard`
-  - `Custom Goals`
-  - `Extended Time Limits`
-  - `Shorts Allowed`
+  - `Insight Dashboard`
+  - `Custom Focus Goals`
+  - `Flexible Time Limits`
+  - `Stronger Shorts & Feed Control`
   - `More Searches`
-  - `Journal System`
+  - `Private Journal System`
 - **Buttons:**
-  - `Sign up for Pro/Trial`
+  - `Start 14- Day Trial`
   - `Sign in`
   - `Continue with Free`
 
@@ -43,8 +44,8 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 - **Email display:** Shows user's email
 - **Plan display:** `Plan: ${PLAN}` (e.g., "Plan: FREE", "Plan: PRO", "Plan: TRIAL")
 - **Trial banner (if on trial):**
-  - Title: `Pro trial active` OR `Pro trial: X day(s) left`
-  - Subtitle: `Keep AI filtering and insights by upgrading.`
+  - Title: `Pro trial: X day(s) left`
+  - Subtitle: `Keep AI filtering, channel blocking and insights by upgrading.`
   - Button: `Upgrade`
 - **Button:** `Manage Account`
 
@@ -66,33 +67,33 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 
 ### 1. Free Plan Shorts Block Overlay
 - **Title:** `FocusTube Active`
-- **Message:** `Shorts are blocked on the Free plan to help you stay focused. Upgrade to Pro to watch Shorts with smart tracking and controls.`
+- **Message:** `Shorts are blocked on the Free plan to reduce distraction. Upgrade to Pro to unlock Shorts with smart filters and focus tracking.`
 - **Buttons:**
   - `Back to Home Screen`
   - `Upgrade to Pro`
 
 ### 2. Onboarding Overlay (first-time users)
 - **Title:** `🎯 Welcome to FocusTube!`
-- **Intro:** `Get started by connecting your account to unlock Pro features.`
+- **Intro:** `Start strong. Sign in to your account to unlock Pro features and take control of your YouTube habits.`
 - **Instructions box:**
   - Header: `Click the FocusTube extension icon` (top right of your browser) to:
   - Bullet points:
-    - `Sign up for Pro/Trial (14-day free trial)`
-    - `Sign in if you already have an account`
+    - `Start your 14-day free Pro trial)`
+    - `Sign in to an existing account`
     - `Continue with Free plan`
 - **Buttons:**
   - `Got it, I'll click the icon`
-  - `Skip for now`
+  - `Skip for now` (Can delete)
 
 ### 3. Pro Manual Shorts Block Overlay
 - **Title:** `🎯 Shorts Blocked!`
-- **Message:** `You have chosen to block Shorts for today and have chosen discipline. This decision will help you stay focused and productive.`
+- **Message:** ` You've blocked Shorts for today. One less spiral to fall into — one more step toward focus.`
 - **Button:** `Continue`
 
 ### 4. Global Daily Limit Overlay
 - **Title:** `FocusTube Limit Reached`
 - **Icon:** `🔒` (lock emoji)
-- **Intro:** `You've reached your daily limit for YouTube use.`
+- **Intro:** `You've hit your YouTube limit for the day. Time to reset your focus.`
 - **Stats displayed:**
   - `Time watched today: ${timeText}`
   - `Shorts viewed: ${shortsViewed}`
@@ -125,20 +126,20 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 - **Countdown timer:** Shows `10` seconds, auto-dismisses
 - **Buttons:**
   - `Continue`
-  - `Block for Today`
-  - `Block Permanently`
+  - `Block YouTube for Today`
+  - `Block Channel Permanently`
 
 ### 8. Channel Block Confirmation Dialog
 - **Title:** `Block Channel?`
-- **Message:** `Well done! Eliminating distractions helps you stay focused.`
+- **Message:** `Removing distractions is real progress.`
 - **Confirmation:** `Block "${channelName}"?`
 - **Buttons:**
   - `Cancel`
   - `Block Channel`
 
 ### 9. AI Distracting Content Popup (Commented out but exists)
-- **Title:** `⚠️ This content is not aligned with your goals`
-- **Message:** `${classification.reason || "This content may distract you from your goals"}`
+- **Title:** `⚠️ This content may not align with your goals`
+- **Message:** `${classification.reason || "This content may pull you off track"}`
 - **Cost text (if applicable):** `This will use ${amount} of your daily video allowance` OR `This will use ${amount} minutes of your daily time allowance`
 - **Allowance text (if applicable):** `Remaining allowance: ${allowanceText}`
 - **Buttons:**
@@ -147,7 +148,7 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 
 ### 10. Journal Nudge Popup
 - **Title:** `What pulled you off track?`
-- **Subtitle:** `You've been watching ${videoTitle}${videoChannel ? ` from ${videoChannel}` : ''} for a minute.`
+- **Subtitle:** `You've been watching ${videoTitle}${videoChannel ? ` from ${videoChannel}` : ''} for a while.`
 - **Textarea placeholder:** `${styleMessage}` (varies by nudge style - see below)
 - **Buttons:**
   - `Save`
@@ -161,19 +162,19 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 - Spiral: `Still learning?`
 - Time limit: `Take a break?`
 - Focus window: `Maybe step away?`
-- Journal: `What made you click on this? What were you feeling?`
+- Journal: `What made you click on this? What were you hoping to feel?`
 
 **Direct style:**
 - Spiral: `Check your goals`
 - Time limit: `You're over your limit`
 - Focus window: `Time to focus`
-- Journal: `What made you click on this? What were you feeling?`
+- Journal: `What were you trying to avoid?`
 
 **Firm style:**
 - Spiral: `Time's up`
 - Time limit: `Blocked for today`
 - Focus window: `Focus now`
-- Journal: `What made you click on this? What were you feeling?`
+- Journal: `Write down what triggered you`
 
 ---
 
@@ -183,54 +184,64 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 **File:** `frontend/src/pages/Home.tsx`
 
 #### Hero Section
-- **Badge:** `14-day free trial • No credit card required`
-- **Headline:** `Use YouTube on purpose.`
-- **Subheadline:** `Stop research spirals. FocusTube filters noise, sets limits, and nudges you back to intent.`
+- **Badge:** `Free for 14 days • No card needed`
+- **Headline:** `YouTube without the spiral.`
+- **Subheadline:** `FocusTube filters out distractions, sets smart limits, and nudges you back to your goals — so you stop spiraling and start doing.`
 - **Buttons:**
-  - `Start 14-Day Free Trial`
+  - `Start Free Trial`
   - `Install Extension`
-- **Hero image alt:** `FocusTube dashboard showing focus metrics and analytics`
+- **Hero image alt:** `FocusTube dashboard showing daily usage, focus score, and distractions blocked`
 
-#### Social Proof Section
+#### Social Proof Section (LETS REMOVE THIS SECTION AS ITS ALL FAKE FOR NOW)
 - **Stat 1:** `10,000+` / `Active users`
 - **Stat 2:** `45%` / `Avg. distraction reduction`
 - **Stat 3:** `4.8/5` / `Chrome Store rating`
 
 #### Problem Statement
-- **Headline:** `You don't need more discipline.`
-- **Subheadline:** `You need better defaults. FocusTube gives you the guardrails to stay intentional without fighting yourself every click.`
+- **Headline:** `You don't need more willpower.`
+- **Subheadline:** `You’ve deleted the app. You’ve blocked Shorts. You’ve unsubscribed from channels.`
+`And yet, you still fall down the rabbit hole.` 
+`FocusTube helps you break the cycle — with smarter limits and actual accountability.`
 
 #### How It Works
 - **Section title:** `How it works`
 - **Step 1:**
   - Number: `1`
   - Title: `Install`
-  - Description: `Add the extension to Chrome in one click. No complex setup.`
+  - Description: `Add the extension to Chrome in one click. Setup takes 3 seconds.`
 - **Step 2:**
   - Number: `2`
   - Title: `Set goals`
-  - Description: `Tell FocusTube what you're learning and what distracts you.`
+  - Description: `Tell FocusTube what you're working on and what tends to derail you.`
 - **Step 3:**
   - Number: `3`
   - Title: `Browse with guardrails`
-  - Description: `FocusTube filters distractions and nudges you back on track.`
+  - Description: `As you use YouTube, FocusTube filters content, tracks habits, and nudges you back on track when you slip.`
 
 #### Features Grid
-- **Section title:** `Built for intentional creators`
-- **Subtitle:** `Smarter limits. AI clarity. Fast, gentle nudges.`
+- **Section title:** `What it does`
+- **Subtitle:** `Built for people who know better — but still spiral.`
 - **Feature cards:**
-  1. **Blocks Shorts**
-     - Description: `Hide the endless scroll of YouTube Shorts so you stay focused on your learning path.`
-  2. **AI Filtering**
-     - Description: `Smart content filtering that understands your goals and filters out distractions automatically.`
-  3. **Time Nudges**
-     - Description: `Gentle reminders when you've been browsing too long, not harsh lockouts that frustrate you.`
-  4. **Personal Insights**
-     - Description: `See your focus trends, watch patterns, and progress toward your learning goals.`
-  5. **Privacy First**
-     - Description: `All processing happens locally. Your viewing history never leaves your device.`
-  6. **Zero Friction**
-     - Description: `Works seamlessly with YouTube. No clunky overlays or broken features.`
+	1. **Distraction Detection**
+	•	Description: `Analyzes video titles, channels, and tags to flag likely distractions. Helps you spot the trap — before you're in it.`
+	2. **Spiral Detection**
+	•	Description: `Watches for binge patterns or repeat views. Nudges you gently when you're drifting into a loop.`
+	3.**Blocks Shorts**
+	•	Description: `Wipe out the infinite scroll by default, keep full control if you want it.`
+	4.**Time Boundaries**
+	•	Description: `Set daily limits and focus windows. Use YouTube with intention — not on impulse.`
+	5.**Smart Nudges**
+	•	Description: `Contextual popups that ask the right questions at the right time. Never shaming — always helpful.`
+	6.	**Personal Dashboard**
+	•	Description: `Track how you're using YouTube. Spot your weak moments. Celebrate when you stay focused.`
+	7.	**Channel Blocking**
+	•	Description: `Pick channels that derail you and block them permanently. One click. No second guessing.`
+	8.	**Focus Goals**
+	•	Description: `Tell FocusTube what matters to you. Used to train the AI, personalize nudges, and give more relevant insights.`
+
+#### (NEW SECTION) Who's It For
+- **Section title:** `Made for people who know better - but still spiral`
+- **Paragraph** `FocusTube isn't for dopamine detox monks or zero-inbox purists. It's for people trying to get things done- who want to learn, build improve but get derailed by YouTube just a little too easily. If you've ever gone in to watch one video... and resurfaced 2 hours later, this is for you.`
 
 #### Free vs Pro Section
 - **Section title:** `Free vs Pro`
@@ -238,38 +249,38 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
   - Title: `Free`
   - Features:
     - `Block YouTube Shorts`
-    - `Basic search filtering`
     - `Daily time limit`
-  - Button: `Get Started`
+    - `Daily search limit`
+  - Button: `Use for free`
 - **Pro Plan:**
   - Badge: `Most Popular`
   - Title: `Pro`
   - Features:
-    - `Everything in Free`
-    - `AI content filtering`
-    - `Advanced dashboard & insights`
-    - `Custom focus goals`
-    - `Priority support`
-  - Button: `View Pricing`
+    - `Distraction nudges & spiral detection`
+    - `AI-powered video filtering`
+    - `Targetted channel blocking`
+    - `Full dahsboard & insights`
+    - `Custom goals & focus-time settings`
+    - `Focus journal prompts`
+    - `Priority support and access to new features`
+  - Button: `Start 14-Day Free Trial (No card needed)`
 
 #### FAQ Section
 - **Section title:** `Frequently Asked Questions`
 - **Q1:** `How long is the free trial?`
-  - **A1:** `14 days, no credit card required. You get full access to Pro features during the trial period.`
+  - **A1:** `14 days. No card needed. You get full access to Pro features during the trial period.`
 - **Q2:** `Is my data private?`
-  - **A2:** `Yes. All processing happens locally in your browser. We never see or store your YouTube viewing history.`
+  - **A2:** `We don’t sell your data. Ever. Some features process locally, some use secure APIs. Nothing is sold or tracked externally.`
 - **Q3:** `How much does Pro cost?`
-  - **A3:** `$7/month or $60/year (save 30%). See full pricing details on our pricing page.`
-- **Q4:** `Can I uninstall anytime?`
-  - **A4:** `Absolutely. Uninstall from Chrome like any extension. No lock-in, cancel your subscription anytime.`
-- **Q5:** `Does it only work on Chrome?`
-  - **A5:** `Currently yes, Chrome and Edge (Chromium-based). Firefox and Safari support coming soon.`
-- **Q6:** `How does AI filtering work?`
-  - **A6:** `Our AI analyzes video titles, thumbnails, and descriptions to match against your goals and filter out distractions, all processed locally.`
+  - **A3:** `$4.99/month or $49.99/year. Cancel Anytime`
+- **Q4:** `Does it only work on Chrome?`
+  - **A4:** `Currently yes, Chrome and Edge (Chromium-based). Safari and Firefox support coming soon.`
+- **Q5:** `What does the AI actually do?`
+  - **A5:** `FocusTube looks at video titles, tags, and channels to detect likely distractions. It's simple, effective, and fast. Over time, it learns from your habits to filter based on *your* goals.`
 
 #### Final CTA Section
 - **Headline:** `Ready to reclaim your focus?`
-- **Subheadline:** `FocusTube isn't about blocking everything. It's about helping you use YouTube the way you meant to.`
+- **Subheadline:** `YouTube’s not the problem. Losing control is. FocusTube helps you stay intentional, without blocking everything.`
 - **Button:** `Start 14-Day Free Trial`
 - **Footnote:** `No credit card required • Cancel anytime`
 

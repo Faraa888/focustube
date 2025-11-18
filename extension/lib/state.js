@@ -615,38 +615,106 @@ export async function loadExtensionDataFromServer() {
     const mergedWatchHistory = Array.from(historyMap.values())
       .sort((a, b) => new Date(b.watched_at).getTime() - new Date(a.watched_at).getTime());
 
-    // Server data overwrites local cache - no merge for these fields
+    // ─────────────────────────────────────────────────────────────
+    // PRESERVE LOCAL DATA ON SERVER FAILURE
+    // Only update fields if server has valid data (not null/undefined)
+    // If server returns null → keep existing local data
+    // ─────────────────────────────────────────────────────────────
+    
+    // Get current local data BEFORE building storageUpdate
+    const currentLocal = await getLocal([
+      "ft_blocked_channels",
+      "ft_extension_settings",
+      "ft_user_goals",
+      "ft_user_anti_goals"
+    ]);
+    
     const storageUpdate = {
-      ft_blocked_channels: Array.isArray(blocked_channels) ? blocked_channels : [],
-      ft_watch_history: mergedWatchHistory,
-      ft_channel_spiral_count: channel_spiral_count || {},
-      ft_extension_settings: settings || {},
+      ft_watch_history: mergedWatchHistory, // Always merge watch history
     };
     
-    // Load focus window settings and spiral events from settings object if present
-    if (settings && typeof settings === 'object') {
-      if (settings.focus_window_enabled !== undefined) {
-        storageUpdate.ft_focus_window_enabled = settings.focus_window_enabled;
+    // Blocked channels: Only update if server has valid data
+    if (blocked_channels !== undefined && blocked_channels !== null) {
+      // Server has data - use it
+      storageUpdate.ft_blocked_channels = Array.isArray(blocked_channels) ? blocked_channels : [];
+    } else {
+      // Server returned null/undefined - KEEP existing local data
+      if (Array.isArray(currentLocal.ft_blocked_channels) && currentLocal.ft_blocked_channels.length > 0) {
+        console.warn("[FT] Server returned null/undefined blocked_channels, keeping local data");
+        // Don't set it in storageUpdate - keep existing local data
+      } else {
+        // Local is also empty - set to empty (new user)
+        storageUpdate.ft_blocked_channels = [];
       }
-      if (settings.focus_window_start !== undefined) {
-        storageUpdate.ft_focus_window_start = settings.focus_window_start;
+    }
+    
+    // Channel spiral count: Only update if server has valid data
+    if (channel_spiral_count !== undefined && channel_spiral_count !== null) {
+      storageUpdate.ft_channel_spiral_count = channel_spiral_count || {};
+    } else {
+      // Keep existing local data
+      const currentSpiral = await getLocal(["ft_channel_spiral_count"]);
+      if (currentSpiral.ft_channel_spiral_count && Object.keys(currentSpiral.ft_channel_spiral_count).length > 0) {
+        console.warn("[FT] Server returned null/undefined channel_spiral_count, keeping local data");
+        // Don't set it - keep existing
+      } else {
+        storageUpdate.ft_channel_spiral_count = {};
       }
-      if (settings.focus_window_end !== undefined) {
-        storageUpdate.ft_focus_window_end = settings.focus_window_end;
+    }
+    
+    // Settings: Only update if server has valid data
+    if (settings !== undefined && settings !== null) {
+      storageUpdate.ft_extension_settings = settings || {};
+      
+      // Load focus window settings and spiral events from settings object if present
+      if (settings && typeof settings === 'object') {
+        if (settings.focus_window_enabled !== undefined) {
+          storageUpdate.ft_focus_window_enabled = settings.focus_window_enabled;
+        }
+        if (settings.focus_window_start !== undefined) {
+          storageUpdate.ft_focus_window_start = settings.focus_window_start;
+        }
+        if (settings.focus_window_end !== undefined) {
+          storageUpdate.ft_focus_window_end = settings.focus_window_end;
+        }
+        if (settings.spiral_events !== undefined) {
+          storageUpdate.ft_spiral_events = Array.isArray(settings.spiral_events) ? settings.spiral_events : [];
+        }
       }
-      if (settings.spiral_events !== undefined) {
-        storageUpdate.ft_spiral_events = Array.isArray(settings.spiral_events) ? settings.spiral_events : [];
+    } else {
+      // Server returned null - KEEP existing local data
+      if (Object.keys(currentLocal.ft_extension_settings || {}).length > 0) {
+        console.warn("[FT] Server returned null/undefined settings, keeping local data");
+        // Don't set it - keep existing
+      } else {
+        storageUpdate.ft_extension_settings = {};
       }
     }
 
-    // Load goals if provided (from users table)
-    if (goals !== undefined) {
+    // Goals: Only update if server has valid data
+    if (goals !== undefined && goals !== null) {
       storageUpdate.ft_user_goals = Array.isArray(goals) ? goals : [];
+    } else {
+      // Server returned null - KEEP existing local data
+      if (Array.isArray(currentLocal.ft_user_goals) && currentLocal.ft_user_goals.length > 0) {
+        console.warn("[FT] Server returned null/undefined goals, keeping local data");
+        // Don't set it - keep existing
+      } else {
+        storageUpdate.ft_user_goals = [];
+      }
     }
 
-    // Load anti_goals if provided (from users table)
-    if (anti_goals !== undefined) {
+    // Anti-goals: Only update if server has valid data
+    if (anti_goals !== undefined && anti_goals !== null) {
       storageUpdate.ft_user_anti_goals = Array.isArray(anti_goals) ? anti_goals : [];
+    } else {
+      // Server returned null - KEEP existing local data
+      if (Array.isArray(currentLocal.ft_user_anti_goals) && currentLocal.ft_user_anti_goals.length > 0) {
+        console.warn("[FT] Server returned null/undefined anti_goals, keeping local data");
+        // Don't set it - keep existing
+      } else {
+        storageUpdate.ft_user_anti_goals = [];
+      }
     }
 
     // Load distracting_channels if provided (from users table)
@@ -758,8 +826,15 @@ export async function saveExtensionDataToServer(data = null) {
       }
     } else {
       // Full sync - send everything from local
+      // ─────────────────────────────────────────────────────────────
+      // SAFETY: Skip blocked_channels if local is empty
+      // Prevents sending empty array that could wipe server data
+      // ─────────────────────────────────────────────────────────────
       toSave = {
-        blocked_channels: ft_blocked_channels,
+        // Only include blocked_channels if local has data
+        ...(Array.isArray(ft_blocked_channels) && ft_blocked_channels.length > 0
+          ? { blocked_channels: ft_blocked_channels }
+          : {}), // Omit field if empty
         watch_history: ft_watch_history,
         channel_spiral_count: ft_channel_spiral_count,
         settings: settingsToSave,

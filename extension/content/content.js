@@ -2043,6 +2043,92 @@ let buttonInjectionObserver = null;
 let pendingButtonChannel = null;
 
 /**
+ * Waits for a channel name to appear in the DOM (polling helper)
+ * @param {number} timeoutMs - Maximum time to wait
+ * @param {number} pollInterval - How often to poll (ms)
+ * @returns {Promise<string|null>}
+ */
+function waitForChannelName(timeoutMs = 5000, pollInterval = 100) {
+  console.log("[FT content] Waiting for channel name...", { timeoutMs, pollInterval });
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    const poll = () => {
+      const channel = extractChannelFast();
+      if (channel) {
+        console.log("[FT content] Channel detected while waiting:", channel);
+        resolve(channel);
+        return;
+      }
+      if (Date.now() - start >= timeoutMs) {
+        reject(new Error("Channel name not found within timeout"));
+        return;
+      }
+      setTimeout(poll, pollInterval);
+    };
+    poll();
+  });
+}
+
+/**
+ * Ensures the block button logic runs once the DOM is ready.
+ * Called on initial script load.
+ */
+function initBlockingButtonBootstrap() {
+  console.log("[FT content] Block button bootstrap init. readyState =", document.readyState);
+  const start = () => {
+    console.log("[FT content] DOM ready → ensuring initial block button");
+    ensureInitialBlockButton();
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener(
+      "DOMContentLoaded",
+      () => {
+        console.log("[FT content] DOMContentLoaded fired");
+        start();
+      },
+      { once: true }
+    );
+  } else {
+    start();
+  }
+}
+
+/**
+ * Attempts to set up the block button on the current page (if watch page)
+ */
+function ensureInitialBlockButton() {
+  const pageType = detectPageType();
+  console.log("[FT content] ensureInitialBlockButton pageType:", pageType);
+  if (pageType !== "WATCH") {
+    console.log("[FT content] Not on WATCH page during bootstrap, skipping button ensure");
+    return;
+  }
+
+  const videoId = extractVideoIdFromUrl();
+  if (!videoId) {
+    console.log("[FT content] No video ID detected yet, will rely on SPA observer");
+    return;
+  }
+
+  let channel = extractChannelFast();
+  if (channel) {
+    console.log("[FT content] Bootstrap channel detected:", channel);
+    setupButtonInjectionObserver(channel);
+  } else {
+    console.log("[FT content] Channel not ready on bootstrap, waiting...");
+    waitForChannelName()
+      .then((name) => {
+        setupButtonInjectionObserver(name);
+      })
+      .catch((err) => {
+        console.warn("[FT content] Bootstrap channel wait timed out:", err.message);
+        // Still set up observer without a name; it will retry when channel appears
+        setupButtonInjectionObserver(null);
+      });
+  }
+}
+
+/**
  * Checks if channel is blocked, then either redirects or injects button
  * @param {string} channelName - Name of channel
  * @param {Element} channelElement - Not used anymore (kept for compatibility)
@@ -2079,7 +2165,7 @@ async function checkBlockingAndInjectButton(channelName, channelElement) {
  * Sets up MutationObserver to watch for channel element, then injects button or redirects
  * @param {string} channelName - Name of channel
  */
-function setupButtonInjectionObserver(channelName) {
+function setupButtonInjectionObserver(channelName = null) {
   // Clear any existing observer
   if (buttonInjectionObserver) {
     buttonInjectionObserver.disconnect();
@@ -2092,13 +2178,8 @@ function setupButtonInjectionObserver(channelName) {
     existingBtn.remove();
   }
   
-  if (!channelName) {
-    console.warn("[FT] No channel name provided for button injection");
-    return;
-  }
-  
   pendingButtonChannel = channelName;
-  console.log("[FT] Setting up button injection observer for:", channelName);
+  console.log("[FT] Setting up button injection observer for:", channelName || "(pending detection)");
   
   const channelSelectors = [
     "ytd-channel-name a",
@@ -2115,12 +2196,15 @@ function setupButtonInjectionObserver(channelName) {
     // For fixed position, we can inject immediately - just verify we're on a watch page
     // by checking if we have a video ID
     const videoId = extractVideoIdFromUrl();
+    const channelToUse = pendingButtonChannel || extractChannelFast();
     if (videoId) {
+      if (!channelToUse) {
+        console.log("[FT] Watch page detected but channel missing, waiting...");
+        return false;
+      }
       // On watch page, check blocking and inject
-      console.log("[FT] Watch page detected, checking blocking and injecting button");
-      // We don't need channelElement for fixed position, but checkBlockingAndInjectButton expects it
-      // So we'll just call injectBlockChannelButton directly after checking blocking
-      checkBlockingAndInjectButton(channelName, null); // Pass null, function will handle it
+      console.log("[FT] Watch page detected, checking blocking and injecting button for:", channelToUse);
+      checkBlockingAndInjectButton(channelToUse, null);
       return true; // Successfully injected
     }
     
@@ -3267,20 +3351,27 @@ async function handleNavigation() {
     const videoId = extractVideoIdFromUrl();
     let channel = extractChannelFast(); // Fast extraction (meta tags first, then DOM)
     
-    // If channel not found immediately, wait 500ms and retry once (for SPA navigation lag)
+    // If channel not found immediately, keep waiting (handles first-load lag)
     if (!channel && videoId) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      channel = extractChannelFast(); // Retry once
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        channel = extractChannelFast();
+        if (!channel) {
+          channel = await waitForChannelName();
+        }
+      } catch (err) {
+        console.warn("[FT] Channel still missing after wait:", err.message);
+        channel = null;
+      }
     }
     
-    if (channel && videoId) {
+    if (videoId) {
       // Check blocked channels immediately (already in memory)
       try {
         const { ft_blocked_channels = [] } = await chrome.storage.local.get(["ft_blocked_channels"]);
         const blockedChannels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
         
-        // Quick blocking check (before setting up observer)
-        if (blockedChannels.length > 0) {
+        if (channel && blockedChannels.length > 0) {
           const channelLower = channel.toLowerCase().trim();
           const isBlocked = blockedChannels.some(blocked => {
             const blockedLower = blocked.toLowerCase().trim();
@@ -3296,11 +3387,13 @@ async function handleNavigation() {
             window.location.href = "https://www.youtube.com/";
             return; // Stop here, don't continue
           }
+        } else if (!channel) {
+          console.log("[FT] Channel still missing during fast check, will inject once detected");
         }
         
-        // Channel is NOT blocked - set up observer to inject button when element appears
+        // Channel is NOT blocked (or not yet known) - set up observer to inject button when ready
         // Observer will also re-check blocking when element appears (with fresh data)
-        console.log("[FT] Channel not blocked, setting up button injection observer for:", channel);
+        console.log("[FT] Setting up button injection observer for current page");
         setupButtonInjectionObserver(channel);
       } catch (e) {
         console.warn("[FT] Error checking blocked channels (fast path):", e.message);
@@ -4587,6 +4680,9 @@ history.replaceState = function(...args) {
 // Initialize global time tracking (tracks time on all YouTube pages)
 // Start tracking immediately when script loads
 startGlobalTimeTracking().catch(console.error);
+
+// Ensure block button logic runs on first load
+initBlockingButtonBootstrap();
 
 // Initial run (debounced for consistency)
 scheduleNav(0);

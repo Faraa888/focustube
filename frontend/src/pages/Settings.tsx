@@ -436,9 +436,6 @@ const Settings = () => {
     setNewChannelName("");
   };
 
-  const handleRemoveChannel = (index: number) => {
-    setBlockedChannels(blockedChannels.filter((_, i) => i !== index));
-  };
 
   // Save controls settings
   const handleSaveControls = async () => {
@@ -694,6 +691,12 @@ const Settings = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="bg-muted/50 p-3 rounded-lg border">
+                  <p className="text-sm text-muted-foreground">
+                    Channels are permanently blocked once added. Use the monthly reset feature to clear all (coming soon).
+                  </p>
+                </div>
+                
                 <div className="flex gap-2">
                   <Input
                     placeholder="Enter channel name (e.g., Eddie Hall)"
@@ -729,14 +732,6 @@ const Settings = () => {
                         className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                       >
                         <span className="font-medium">{channel}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemoveChannel(index)}
-                          className="h-8 w-8 p-0"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
                       </div>
                     ))}
                   </div>

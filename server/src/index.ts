@@ -1096,15 +1096,80 @@ app.post("/extension/save-data", async (req, res) => {
       });
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // SAFETY CHECK: Reject if blocked_channels list shrinks
+    // Channels are permanently blocked - list can only grow
+    // ─────────────────────────────────────────────────────────────
+    if (data.blocked_channels !== undefined) {
+      const incomingChannels = Array.isArray(data.blocked_channels) ? data.blocked_channels : [];
+      const incomingCount = incomingChannels.length;
+      
+      // Check for admin override
+      const adminSecret = req.headers['x-admin-secret'];
+      const isAdminOverride = data.forceClear === true && 
+                               process.env.ADMIN_SECRET && 
+                               adminSecret === process.env.ADMIN_SECRET;
+      
+      // Get current blocked_channels from Supabase
+      const { data: currentData } = await supabase
+        .from("extension_data")
+        .select("blocked_channels")
+        .eq("user_id", userId)
+        .single();
+      
+      const currentChannels = currentData?.blocked_channels || [];
+      const currentCount = Array.isArray(currentChannels) ? currentChannels.length : 0;
+      
+      // Log the update attempt
+      console.log(`[Extension Data] Blocked channels update attempt:`, {
+        userId: userId.substring(0, 8) + "...",
+        email: userEmail,
+        currentCount: currentCount,
+        incomingCount: incomingCount,
+        isAdminOverride: isAdminOverride,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Admin override: Allow clear if forceClear flag is set with correct secret
+      if (isAdminOverride) {
+        console.log(`[Extension Data] [ADMIN] Force clear allowed for ${userEmail}`);
+        // Allow the save to proceed
+      } else {
+        // REJECT if list gets smaller (user trying to remove channels)
+        if (incomingCount < currentCount) {
+          console.error(`[Extension Data] [SAFETY] Rejecting blocked_channels update: ${currentCount} → ${incomingCount} (list cannot shrink)`);
+          return res.status(400).json({
+            ok: false,
+            error: "Cannot remove blocked channels. Channels are permanently blocked. Use monthly reset feature to clear all.",
+            currentCount: currentCount,
+            incomingCount: incomingCount
+          });
+        }
+        
+        // REJECT if list is empty and user has existing channels
+        if (incomingCount === 0 && currentCount > 0) {
+          console.error(`[Extension Data] [SAFETY] Rejecting empty blocked_channels (user has ${currentCount} channels)`);
+          return res.status(400).json({
+            ok: false,
+            error: "Cannot clear all blocked channels. Channels are permanently blocked.",
+            currentCount: currentCount
+          });
+        }
+        
+        // Allow if: new user (both 0) OR list growing (incoming >= current)
+        console.log(`[Extension Data] Blocked channels update allowed: ${currentCount} → ${incomingCount}`);
+      }
+    }
+
     // Upsert extension data (insert or update) using UUID
     const { error: extensionError } = await supabase
       .from("extension_data")
       .upsert({
         user_id: userId,
-        blocked_channels: data.blocked_channels || [],
-        watch_history: data.watch_history || [],
-        channel_spiral_count: data.channel_spiral_count || {},
-        settings: data.settings || {},
+        blocked_channels: data.blocked_channels !== undefined ? data.blocked_channels : undefined,
+        watch_history: data.watch_history !== undefined ? data.watch_history : undefined,
+        channel_spiral_count: data.channel_spiral_count !== undefined ? data.channel_spiral_count : undefined,
+        settings: data.settings !== undefined ? data.settings : undefined,
         updated_at: new Date().toISOString(),
       }, {
         onConflict: "user_id",
