@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Clock, TrendingUp, Flame, AlertCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { toast } from "@/hooks/use-toast";
 import FocusScore from "@/components/dashboard/FocusScore";
 import WatchTimeMap from "@/components/dashboard/WatchTimeMap";
 import SpiralFeed from "@/components/dashboard/SpiralFeed";
@@ -22,10 +23,12 @@ const Dashboard = () => {
   const [stats, setStats] = useState<any>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [blockedChannels, setBlockedChannels] = useState<string[]>([]);
+  const [blockingChannel, setBlockingChannel] = useState<string | null>(null);
 
-  // Fetch dashboard stats
+  // Fetch dashboard stats and blocked channels
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchData = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user?.email) {
@@ -33,22 +36,34 @@ const Dashboard = () => {
           return;
         }
 
-        const response = await fetch(
+        // Fetch stats
+        const statsResponse = await fetch(
           `https://focustube-backend-4xah.onrender.com/dashboard/stats?email=${encodeURIComponent(user.email)}`
         );
 
-        if (!response.ok) {
-          throw new Error(`Failed to fetch stats: ${response.status}`);
+        if (!statsResponse.ok) {
+          throw new Error(`Failed to fetch stats: ${statsResponse.status}`);
         }
 
-        const data = await response.json();
-        if (data.ok) {
-          setStats(data);
+        const statsData = await statsResponse.json();
+        if (statsData.ok) {
+          setStats(statsData);
         } else {
-          throw new Error(data.error || "Failed to load stats");
+          throw new Error(statsData.error || "Failed to load stats");
+        }
+
+        // Fetch blocked channels
+        const blockedResponse = await fetch(
+          `https://focustube-backend-4xah.onrender.com/extension/get-data?email=${encodeURIComponent(user.email)}`
+        );
+
+        if (blockedResponse.ok) {
+          const blockedData = await blockedResponse.json();
+          const blocked = blockedData.ok && blockedData.data?.blocked_channels ? blockedData.data.blocked_channels : [];
+          setBlockedChannels(blocked.map((ch: string) => ch.toLowerCase().trim()));
         }
       } catch (error: any) {
-        console.error("Error fetching dashboard stats:", error);
+        console.error("Error fetching dashboard data:", error);
         setStatsError(error.message || "Failed to load dashboard data");
       } finally {
         setStatsLoading(false);
@@ -56,7 +71,7 @@ const Dashboard = () => {
     };
 
     if (isAuthenticated) {
-      fetchStats();
+      fetchData();
     }
   }, [isAuthenticated]);
 
@@ -179,7 +194,7 @@ const Dashboard = () => {
                 <CardHeader>
                   <CardTitle>Content Categories</CardTitle>
                   <CardDescription>
-                    What types of content you've been watching over the last {stats.windowDays || 60} days
+                    What types of content you've been watching (last 30 days, ranked by watch time)
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -210,7 +225,7 @@ const Dashboard = () => {
                 <CardHeader>
                   <CardTitle>Biggest Distractions This Week</CardTitle>
                   <CardDescription>
-                    Top channels pulling you off-track
+                    Top distracting channels by watch time (last 7 days)
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -228,45 +243,72 @@ const Dashboard = () => {
                             </div>
                           </div>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={async () => {
-                            // Block channel logic (similar to ChannelAudit)
-                            const { data: { user } } = await supabase.auth.getUser();
-                            if (!user?.email) return;
-                            
-                            const response = await fetch(
-                              `https://focustube-backend-4xah.onrender.com/extension/get-data?email=${encodeURIComponent(user.email)}`
-                            );
-                            const result = await response.json();
-                            const currentBlocked = result.ok && result.data?.blocked_channels ? result.data.blocked_channels : [];
-                            const updatedBlocked = [...currentBlocked, distraction.channel];
-                            
-                            await fetch("https://focustube-backend-4xah.onrender.com/extension/save-data", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                email: user.email,
-                                data: { blocked_channels: updatedBlocked },
-                              }),
-                            });
-                            
-                            // Notify extension to reload settings immediately (no page reload needed)
-                            try {
-                              window.postMessage({
-                                type: "FT_RELOAD_SETTINGS",
-                                requestId: `dashboard_block_${Date.now()}`
-                              }, window.location.origin);
-                            } catch (err) {
-                              console.log("Extension not available for immediate sync");
-                            }
-                            
-                            window.location.reload();
-                          }}
-                        >
-                          Block
-                        </Button>
+                        {blockedChannels.includes(distraction.channel.toLowerCase().trim()) ? (
+                          <Badge variant="secondary" className="px-3 py-1">
+                            Blocked
+                          </Badge>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              setBlockingChannel(distraction.channel);
+                              try {
+                                const { data: { user } } = await supabase.auth.getUser();
+                                if (!user?.email) return;
+                                
+                                const response = await fetch(
+                                  `https://focustube-backend-4xah.onrender.com/extension/get-data?email=${encodeURIComponent(user.email)}`
+                                );
+                                const result = await response.json();
+                                const currentBlocked = result.ok && result.data?.blocked_channels ? result.data.blocked_channels : [];
+                                const updatedBlocked = [...currentBlocked, distraction.channel];
+                                
+                                const saveResponse = await fetch("https://focustube-backend-4xah.onrender.com/extension/save-data", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    email: user.email,
+                                    data: { blocked_channels: updatedBlocked },
+                                  }),
+                                });
+                                
+                                if (saveResponse.ok) {
+                                  setBlockedChannels([...blockedChannels, distraction.channel.toLowerCase().trim()]);
+                                  
+                                  toast({
+                                    title: "Channel blocked",
+                                    description: "Well done! Eliminating distractions helps you stay focused.",
+                                  });
+                                  
+                                  // Notify extension to reload settings immediately
+                                  try {
+                                    window.postMessage({
+                                      type: "FT_RELOAD_SETTINGS",
+                                      requestId: `dashboard_block_${Date.now()}`
+                                    }, window.location.origin);
+                                  } catch (err) {
+                                    console.log("Extension not available for immediate sync");
+                                  }
+                                } else {
+                                  throw new Error("Failed to save");
+                                }
+                              } catch (error: any) {
+                                console.error("Error blocking channel:", error);
+                                toast({
+                                  title: "Error",
+                                  description: "Failed to block channel. Please try again.",
+                                  variant: "destructive",
+                                });
+                              } finally {
+                                setBlockingChannel(null);
+                              }
+                            }}
+                            disabled={blockingChannel === distraction.channel}
+                          >
+                            {blockingChannel === distraction.channel ? "Blocking..." : "Block"}
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -274,25 +316,7 @@ const Dashboard = () => {
               </Card>
             )}
 
-            {/* Cleanup Suggestion */}
-            {stats.cleanupSuggestion?.hasDistractions && (
-              <Card className="mb-8 border-primary/50 bg-primary/5">
-                <CardContent className="pt-6">
-                  <div className="flex items-start gap-4">
-                    <AlertCircle className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h3 className="font-semibold mb-1">Consider Cleaning Up?</h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        You watched {stats.cleanupSuggestion.minutes} minutes of content from channels you've marked as distracting this week.
-                      </p>
-                      <Button asChild variant="outline">
-                        <Link to="/app/settings">Block All Distractions</Link>
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {/* Cleanup Suggestion - Removed "Block All Distractions" button per user request */}
           </>
         )}
 

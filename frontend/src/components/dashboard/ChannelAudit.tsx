@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Channel {
   channel: string;
@@ -19,6 +19,37 @@ interface ChannelAuditProps {
 
 export default function ChannelAudit({ channels }: ChannelAuditProps) {
   const [blocking, setBlocking] = useState<string | null>(null);
+  const [blockedChannels, setBlockedChannels] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load blocked channels on mount
+  useEffect(() => {
+    const loadBlockedChannels = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.email) {
+          setLoading(false);
+          return;
+        }
+
+        const response = await fetch(
+          `https://focustube-backend-4xah.onrender.com/extension/get-data?email=${encodeURIComponent(user.email)}`
+        );
+
+        if (response.ok) {
+          const result = await response.json();
+          const blocked = result.ok && result.data?.blocked_channels ? result.data.blocked_channels : [];
+          setBlockedChannels(blocked.map((ch: string) => ch.toLowerCase().trim()));
+        }
+      } catch (error) {
+        console.error("Error loading blocked channels:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadBlockedChannels();
+  }, []);
 
   const handleBlock = async (channelName: string) => {
     setBlocking(channelName);
@@ -78,6 +109,9 @@ export default function ChannelAudit({ channels }: ChannelAuditProps) {
       );
 
       if (saveResponse.ok) {
+        // Update local state
+        setBlockedChannels([...blockedChannels, channelName.toLowerCase().trim()]);
+        
         toast({
           title: "Channel blocked",
           description: "Well done! Eliminating distractions helps you stay focused.",
@@ -92,9 +126,6 @@ export default function ChannelAudit({ channels }: ChannelAuditProps) {
         } catch (err) {
           console.log("Extension not available for immediate sync (will sync on next reload)");
         }
-        
-        // Refresh page to update list (channel will be removed from audit list)
-        window.location.reload();
       } else {
         throw new Error("Failed to save");
       }
@@ -115,9 +146,9 @@ export default function ChannelAudit({ channels }: ChannelAuditProps) {
       <Card>
         <CardHeader>
           <CardTitle>Most Viewed Channels</CardTitle>
-          <CardDescription>
-            Your top channels by watch time
-          </CardDescription>
+        <CardDescription>
+          Your top channels by watch time (last 30 days)
+        </CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground text-center py-8">
@@ -133,7 +164,7 @@ export default function ChannelAudit({ channels }: ChannelAuditProps) {
       <CardHeader>
         <CardTitle>Most Viewed Channels</CardTitle>
         <CardDescription>
-          Your top channels by watch time
+          Your top channels by watch time (last 30 days)
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -157,14 +188,20 @@ export default function ChannelAudit({ channels }: ChannelAuditProps) {
                   </div>
                 </div>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleBlock(channel.channel)}
-                disabled={blocking === channel.channel}
-              >
-                {blocking === channel.channel ? "Blocking..." : "Block"}
-              </Button>
+              {blockedChannels.includes(channel.channel.toLowerCase().trim()) ? (
+                <Badge variant="secondary" className="px-3 py-1">
+                  Blocked
+                </Badge>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleBlock(channel.channel)}
+                  disabled={blocking === channel.channel || loading}
+                >
+                  {blocking === channel.channel ? "Blocking..." : "Block"}
+                </Button>
+              )}
             </div>
           ))}
         </div>

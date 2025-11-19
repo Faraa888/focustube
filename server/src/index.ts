@@ -1577,9 +1577,14 @@ app.get("/dashboard/stats", async (req, res) => {
         ? Math.round(((breakdownWeek.productive + breakdownWeek.neutral) / totalWeekSeconds) * 100)
         : 0;
 
-    // Category breakdown: aggregate by category_primary (e.g., "Programming & Dev", "Entertainment")
+    // Category breakdown: aggregate by category_primary (last 30 days, matching Most Viewed Channels)
     const categoryBreakdown: Record<string, { videos: number; seconds: number }> = {};
     watchHistory.forEach((entry: any) => {
+      // Only count entries from last 30 days (matching Most Viewed Channels time window)
+      if (!entry.watched_at) return;
+      const watchedAt = new Date(entry.watched_at);
+      if (watchedAt < thirtyDaysAgo) return;
+      
       const category = (entry.category_primary || "Other").trim();
       if (!categoryBreakdown[category]) {
         categoryBreakdown[category] = { videos: 0, seconds: 0 };
@@ -1669,6 +1674,9 @@ app.get("/dashboard/stats", async (req, res) => {
     const thirtyDaysAgo = new Date(now);
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
+    // Category breakdown - also use last 30 days (matching Most Viewed Channels)
+    const categoryBreakdown30Days: Record<string, { videos: number; seconds: number }> = {};
+    
     const channelStats: Record<string, { videos: number; seconds: number; firstWatched: string | null; lastWatched: string | null }> = {};
     let totalWatchTimeLast30Days = 0; // Total seconds watched in last 30 days
     
@@ -1725,7 +1733,7 @@ app.get("/dashboard/stats", async (req, res) => {
           lastWatched: stats.lastWatched,
         };
       })
-      .sort((a, b) => b.videos - a.videos) // Sort by video count (most watched first)
+      .sort((a, b) => b.seconds - a.seconds) // Sort by watch time (most viewed first)
       .slice(0, 5); // Top 5 channels
 
     return res.json({
@@ -1745,7 +1753,7 @@ app.get("/dashboard/stats", async (req, res) => {
           videos: stats.videos,
           minutes: Math.round(stats.seconds / 60),
         }))
-        .sort((a, b) => b.videos - a.videos)
+        .sort((a, b) => b.minutes - a.minutes) // Sort by watch time (minutes), not video count
         .slice(0, 10), // Top 10 categories
       cleanupSuggestion: {
         seconds: cleanupSuggestionSeconds,

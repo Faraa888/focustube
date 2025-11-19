@@ -19,8 +19,9 @@ export default function WeeklySummary({
 }: WeeklySummaryProps) {
   // Calculate percentages
   const totalWeek = breakdownWeek.productive + breakdownWeek.neutral + breakdownWeek.distracting;
-  const productivePercent = totalWeek > 0 ? Math.round((breakdownWeek.productive / totalWeek) * 100) : 0;
-  const distractingPercent = totalWeek > 0 ? Math.round((breakdownWeek.distracting / totalWeek) * 100) : 0;
+  const goalFocusedPercent = totalWeek > 0 ? Math.round((breakdownWeek.productive / totalWeek) * 100) : 0;
+  const neutralPercent = totalWeek > 0 ? Math.round((breakdownWeek.neutral / totalWeek) * 100) : 0;
+  const distractionsPercent = totalWeek > 0 ? Math.round((breakdownWeek.distracting / totalWeek) * 100) : 0;
 
 
   const hours = Math.floor(thisWeekMinutes / 60);
@@ -42,25 +43,21 @@ export default function WeeklySummary({
             <div className="text-xs text-muted-foreground">Total watch time</div>
           </div>
           <div>
-            <div className="text-2xl font-bold">{productivePercent}%</div>
-            <div className="text-xs text-muted-foreground">Educational</div>
+            <div className="text-2xl font-bold">{goalFocusedPercent}%</div>
+            <div className="text-xs text-muted-foreground">Goal Focused</div>
           </div>
           <div>
-            <div className="text-2xl font-bold">{distractingPercent}%</div>
-            <div className="text-xs text-muted-foreground">Entertainment</div>
+            <div className="text-2xl font-bold">{distractionsPercent}%</div>
+            <div className="text-xs text-muted-foreground">Distractions</div>
           </div>
         </div>
-
-        {/* Removed peak viewing text - calculation was inaccurate without hourly category breakdown */}
-
-        {distractingPercent > 50 && (
-          <div className="pt-4 border-t">
-            <p className="text-sm text-muted-foreground mb-3">
-              Consider cleaning up? You watched {distractingPercent}% distracting content this week.
-            </p>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/app/settings">Block All Distractions</Link>
-            </Button>
+        
+        {/* Neutral category shown separately if > 0 */}
+        {neutralPercent > 0 && (
+          <div className="pt-2 border-t">
+            <div className="text-sm text-muted-foreground">
+              <span className="font-medium">Neutral:</span> {neutralPercent}%
+            </div>
           </div>
         )}
       </CardContent>
