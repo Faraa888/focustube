@@ -1162,6 +1162,13 @@ app.post("/extension/save-data", async (req, res) => {
     }
 
     // Upsert extension data (insert or update) using UUID
+    if (data.user_id && data.user_id !== userId) {
+      return res.status(400).json({
+        ok: false,
+        error: "user_id does not match authenticated user",
+      });
+    }
+
     const { error: extensionError } = await supabase
       .from("extension_data")
       .upsert({
@@ -1435,8 +1442,8 @@ app.get("/dashboard/stats", async (req, res) => {
     }
 
     const extensionData = extData || {};
-    let watchHistory = Array.isArray(extensionData.watch_history) ? extensionData.watch_history : [];
-    let watchHistorySource: "extension" | "supabase" = "extension";
+    let watchHistory: any[] = [];
+    let watchHistorySource: "extension" | "supabase" = "supabase";
     const settings = extensionData.settings || {};
     const spiralEvents = Array.isArray(settings.spiral_events) ? settings.spiral_events : [];
 
@@ -1463,13 +1470,8 @@ app.get("/dashboard/stats", async (req, res) => {
       } else if (Array.isArray(sessionRows) && sessionRows.length > 0) {
         watchHistory = sessionRows;
         watchHistorySource = "supabase";
-      } else {
-        watchHistory = watchHistory.filter((entry: any) => {
-          if (!entry?.watched_at) return false;
-          return new Date(entry.watched_at) >= sixtyDaysAgo;
-        });
       }
-      if (Array.isArray(watchHistory)) {
+      if (Array.isArray(watchHistory) && watchHistory.length > 0) {
         watchHistory = watchHistory.sort((a: any, b: any) => {
           const timeA = new Date(a?.watched_at || 0).getTime();
           const timeB = new Date(b?.watched_at || 0).getTime();
@@ -1478,14 +1480,34 @@ app.get("/dashboard/stats", async (req, res) => {
       }
     } catch (error) {
       console.warn("[Dashboard] Exception fetching sessions:", (error as Error).message);
-      watchHistory = watchHistory.filter((entry: any) => {
-        if (!entry?.watched_at) return false;
-        return new Date(entry.watched_at) >= sixtyDaysAgo;
-      });
-      watchHistory = watchHistory.sort((a: any, b: any) => {
-        const timeA = new Date(a?.watched_at || 0).getTime();
-        const timeB = new Date(b?.watched_at || 0).getTime();
-        return timeB - timeA;
+    }
+
+    if (!Array.isArray(watchHistory) || watchHistory.length === 0) {
+      return res.json({
+        ok: true,
+        hasData: false,
+        message: "no_watch_history",
+        focusScore7Day: 0,
+        watchTime: {
+          todayMinutes: 0,
+          thisWeekMinutes: 0,
+          breakdownToday: { productive: 0, neutral: 0, distracting: 0 },
+          breakdownWeek: { productive: 0, neutral: 0, distracting: 0 },
+        },
+        topDistractionsThisWeek: [],
+        topChannels: [],
+        categoryBreakdown: [],
+        cleanupSuggestion: {
+          seconds: 0,
+          minutes: 0,
+          hasDistractions: false,
+        },
+        hourlyWatchTime: [],
+        spiralEvents: [],
+        streakDays: 0,
+        weeklyTrendMinutes: [0, 0, 0, 0, 0, 0, 0],
+        dataSource: watchHistorySource,
+        windowDays: 60,
       });
     }
 

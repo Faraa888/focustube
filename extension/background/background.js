@@ -24,6 +24,21 @@ import {
   getEffectiveSettings,    // get plan-aware effective settings
 } from "../lib/state.js";
 
+async function clearUserScopedData() {
+  await setLocal({
+    ft_blocked_channels: [],
+    ft_blocked_channels_today: [],
+    ft_watch_history: [],
+    ft_channel_spiral_count: {},
+    ft_extension_settings: {},
+    ft_user_goals: [],
+    ft_user_anti_goals: [],
+    ft_user_distraction_channels: [],
+    ft_watch_event_queue: [],
+    ft_data_owner_email: null,
+  });
+}
+
 import { evaluateBlock } from "../lib/rules.js";
 import { getServerUrlForBackground } from "../lib/config.js";
 import {
@@ -55,6 +70,10 @@ function isProExperience(plan) {
 const WATCH_CLASSIFICATION_DELAY_MS = 45 * 1000;
 let watchClassificationTimer = null;
 let watchClassificationTimerVideoId = null;
+const WATCH_SYNC_MIN_SECONDS = 30;
+const WATCH_SYNC_QUEUE_THRESHOLD = 3;
+const WATCH_SYNC_MAX_DELAY_MS = 60 * 1000;
+let watchEventFlushTimer = null;
 // ─────────────────────────────────────────────────────────────
 // BOOT: Called on install or startup
 // ─────────────────────────────────────────────────────────────
@@ -182,12 +201,36 @@ async function sendWatchEventBatch() {
   }
 }
 
-// Send batch every 15 minutes
-setInterval(() => {
-  sendWatchEventBatch().catch((err) => {
-    console.warn("[FT] Background watch event batch failed:", err);
-  });
-}, 15 * 60 * 1000); // 15 minutes
+async function flushWatchEventQueue(reason = "manual") {
+  if (watchEventFlushTimer) {
+    clearTimeout(watchEventFlushTimer);
+    watchEventFlushTimer = null;
+  }
+  const success = await sendWatchEventBatch();
+  if (!success) {
+    console.warn(`[FT] Watch event batch flush failed (${reason})`);
+  } else {
+    LOG("Watch event batch flushed:", { reason });
+  }
+}
+
+function scheduleWatchEventFlush(queueSize) {
+  if (queueSize >= WATCH_SYNC_QUEUE_THRESHOLD) {
+    flushWatchEventQueue("threshold").catch((err) => {
+      console.warn("[FT] Threshold watch event flush failed:", err?.message || err);
+    });
+    return;
+  }
+  if (watchEventFlushTimer) {
+    return;
+  }
+  watchEventFlushTimer = setTimeout(() => {
+    watchEventFlushTimer = null;
+    flushWatchEventQueue("timer").catch((err) => {
+      console.warn("[FT] Timed watch event flush failed:", err?.message || err);
+    });
+  }, WATCH_SYNC_MAX_DELAY_MS);
+}
 
 function clearWatchClassificationTimer() {
   if (watchClassificationTimer) {
@@ -407,7 +450,7 @@ setInterval(() => {
 chrome.runtime.onSuspend.addListener(() => {
   clearWatchClassificationTimer();
   // Sync watch event batch
-  sendWatchEventBatch().catch((err) => {
+  flushWatchEventQueue("suspend").catch((err) => {
     console.warn("[FT] Unload watch event batch failed:", err);
   });
   
@@ -469,6 +512,7 @@ async function handleMessage(msg) {
       return { ok: false, error: "Email is required" };
     }
     await setLocal({ ft_user_email: email });
+    await clearUserScopedData();
     LOG("Email stored from website:", email);
     
     // Sync plan from server
@@ -526,6 +570,7 @@ async function handleMessage(msg) {
     // IMPORTANT: Timer counters (ft_watch_seconds_today, etc.) are NOT cleared on logout
     // They persist in local storage so daily limits continue across logout/login sessions
     // They only reset at midnight via maybeRotateCounters() or when explicitly reset
+    await clearUserScopedData();
     await chrome.storage.local.remove([
       "ft_user_email",      // Auth only
       "ft_plan",             // Auth only
@@ -1172,6 +1217,14 @@ async function finalizeVideoWatch(videoId, startTime, distractionLevel, category
   const channelName = ft_current_video_classification?.channel_name || "Unknown";
   const confidenceDistraction = ft_current_video_classification?.confidence_distraction ?? null;
 
+  if (durationSeconds < WATCH_SYNC_MIN_SECONDS) {
+    LOG("Watch event ignored (below minimum duration)", {
+      videoId,
+      duration: durationSeconds,
+    });
+    return;
+  }
+
   // Create watch event object
   const finishedAtIso = new Date(endTime).toISOString();
   const startedAtIso = new Date(startTime).toISOString();
@@ -1194,10 +1247,7 @@ async function finalizeVideoWatch(videoId, startTime, distractionLevel, category
   queue.push(watchEvent);
   await setLocal({ ft_watch_event_queue: queue });
 
-  // Immediately try to send batch (fire-and-forget, don't block)
-  sendWatchEventBatch().catch((err) => {
-    console.warn("[FT] Immediate watch event batch send failed (will retry later):", err?.message || err);
-  });
+  scheduleWatchEventFlush(queue.length);
 
 
   LOG("Watch event queued:", {

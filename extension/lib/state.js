@@ -47,6 +47,7 @@ const DEFAULTS = {
   ft_user_anti_goals: [],         // user anti-goals array (what distracts them)
   ft_user_distraction_channels: [], // user distraction channels array (channels that derail them)
   ft_onboarding_completed: false, // true = user has completed onboarding
+  ft_data_owner_email: null,      // normalized email that owns the cached data
   ft_reset_period: "daily",       // daily | weekly | monthly
   ft_last_reset_key: "",          // stores last date/week/month key
 
@@ -349,6 +350,42 @@ export async function setPlan(plan) {
 // Server URL (production)
 const SERVER_URL = "https://focustube-backend-4xah.onrender.com";
 
+function normalizeEmail(email) {
+  return email ? email.trim().toLowerCase() : "";
+}
+
+async function ensureLocalOwnerEmail(expectedEmail) {
+  const normalized = normalizeEmail(expectedEmail);
+  if (!normalized) {
+    return false;
+  }
+  const { ft_data_owner_email = null } = await getLocal(["ft_data_owner_email"]);
+  if (!ft_data_owner_email) {
+    await setLocal({ ft_data_owner_email: normalized });
+    return true;
+  }
+  if (ft_data_owner_email === normalized) {
+    return true;
+  }
+  console.warn("[FT] Local data owner mismatch. Clearing user-scoped cache before syncing.", {
+    expected: normalized,
+    current: ft_data_owner_email,
+  });
+  await setLocal({
+    ft_blocked_channels: [],
+    ft_blocked_channels_today: [],
+    ft_watch_history: [],
+    ft_channel_spiral_count: {},
+    ft_extension_settings: {},
+    ft_user_goals: [],
+    ft_user_anti_goals: [],
+    ft_user_distraction_channels: [],
+    ft_watch_event_queue: [],
+    ft_data_owner_email: normalized,
+  });
+  return false;
+}
+
 // Debounce: only sync once per 30 seconds
 let lastSyncTime = 0;
 const SYNC_DEBOUNCE_MS = 30 * 1000; // 30 seconds
@@ -555,6 +592,7 @@ export async function loadExtensionDataFromServer() {
       console.log("[FT] No email set, skipping extension data load");
       return null;
     }
+    const normalizedEmail = normalizeEmail(ft_user_email);
 
     const response = await fetch(
       `${SERVER_URL}/extension/get-data?email=${encodeURIComponent(ft_user_email)}`
@@ -631,6 +669,7 @@ export async function loadExtensionDataFromServer() {
     
     const storageUpdate = {
       ft_watch_history: mergedWatchHistory, // Always merge watch history
+      ft_data_owner_email: normalizedEmail,
     };
     
     // Blocked channels: Only update if server has valid data
@@ -758,6 +797,11 @@ export async function saveExtensionDataToServer(data = null) {
       console.log("[FT] No email set, skipping extension data save");
       return false;
     }
+    const ownerReady = await ensureLocalOwnerEmail(ft_user_email);
+    if (!ownerReady) {
+      console.warn("[FT] Local cache belonged to a different user. Skipping save until server reload completes.");
+      return false;
+    }
 
     // Get current local data
     const {
@@ -805,9 +849,6 @@ export async function saveExtensionDataToServer(data = null) {
       if (data.blocked_channels !== undefined) {
         toSave.blocked_channels = data.blocked_channels;
       }
-      if (data.watch_history !== undefined) {
-        toSave.watch_history = data.watch_history;
-      }
       if (data.channel_spiral_count !== undefined) {
         toSave.channel_spiral_count = data.channel_spiral_count;
       }
@@ -835,7 +876,6 @@ export async function saveExtensionDataToServer(data = null) {
         ...(Array.isArray(ft_blocked_channels) && ft_blocked_channels.length > 0
           ? { blocked_channels: ft_blocked_channels }
           : {}), // Omit field if empty
-        watch_history: ft_watch_history,
         channel_spiral_count: ft_channel_spiral_count,
         settings: settingsToSave,
         goals: ft_user_goals,
