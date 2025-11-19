@@ -1674,8 +1674,7 @@ app.get("/dashboard/stats", async (req, res) => {
       .slice(0, 20); // Top 20 most recent
 
     // Most viewed channels - calculate from watch_history (last 30 days)
-    const thirtyDaysAgo = new Date(now);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // thirtyDaysAgo already declared above (line 1457) - remove this duplicate
     
     // Category breakdown - also use last 30 days (matching Most Viewed Channels)
     const categoryBreakdown30Days: Record<string, { videos: number; seconds: number }> = {};
