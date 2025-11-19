@@ -1535,7 +1535,7 @@ app.get("/dashboard/stats", async (req, res) => {
 
       if (!Number.isFinite(seconds) || seconds <= 0) return;
 
-      // Today stats
+      // Today stats - watched_at is already UTC from database
       if (watchedAt >= startOfToday) {
         watchSecondsToday += seconds;
         if (breakdownToday[category as keyof typeof breakdownToday] !== undefined) {
@@ -1543,7 +1543,7 @@ app.get("/dashboard/stats", async (req, res) => {
         }
       }
 
-      // 7-day rolling window ("this week")
+      // 7-day rolling window - watched_at is already UTC from database
       if (watchedAt >= sevenDaysAgo) {
         watchSecondsWeek += seconds;
         if (breakdownWeek[category as keyof typeof breakdownWeek] !== undefined) {
