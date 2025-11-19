@@ -1738,6 +1738,38 @@ app.get("/dashboard/stats", async (req, res) => {
       .sort((a, b) => b.seconds - a.seconds) // Sort by watch time (most viewed first)
       .slice(0, 5); // Top 5 channels
 
+    // TEMP DEBUG: Check what's being counted
+    console.log(`[Dashboard Debug] 7-day calculation:`, {
+      sevenDaysAgo: sevenDaysAgo.toISOString(),
+      sevenDaysAgoLocal: sevenDaysAgo.toString(),
+      now: now.toISOString(),
+      nowLocal: now.toString(),
+      totalVideos: watchHistory.length,
+      weekSeconds: watchSecondsWeek,
+      weekMinutes: watchTimeWeekMinutes,
+      videosInWeek: watchHistory.filter((e: any) => {
+        const d = new Date(e.watched_at);
+        return d >= sevenDaysAgo;
+      }).length
+    });
+    
+    // Check those 3 specific videos
+    const problemVideos = watchHistory.filter((e: any) => {
+      const channel = (e.channel_name || e.channel || "").toLowerCase();
+      return channel.includes("alex yee") || 
+             channel.includes("unknown") || 
+             channel.includes("nico felich");
+    });
+    if (problemVideos.length > 0) {
+      console.log(`[Dashboard Debug] Problem videos:`, problemVideos.map((v: any) => ({
+        channel: v.channel_name || v.channel,
+        watched_at: v.watched_at,
+        watch_seconds: v.watch_seconds,
+        isInWeek: new Date(v.watched_at) >= sevenDaysAgo,
+        sevenDaysAgo: sevenDaysAgo.toISOString()
+      })));
+    }
+
     return res.json({
       ok: true,
       focusScore7Day,
