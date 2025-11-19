@@ -15,12 +15,14 @@ const Header = () => {
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   // Check auth status
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setIsAuthenticated(!!session);
+      setUserEmail(session?.user?.email ?? null);
       setLoading(false);
     };
 
@@ -29,6 +31,7 @@ const Header = () => {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(!!session);
+      setUserEmail(session?.user?.email ?? null);
     });
 
     return () => subscription.unsubscribe();
@@ -96,6 +99,11 @@ const Header = () => {
                 <Link to="/app/settings" className="text-foreground hover:text-primary transition-colors text-sm font-medium">
                   Settings
                 </Link>
+                {isAuthenticated && userEmail && (
+                  <span className="text-sm text-muted-foreground font-medium">
+                    Logged in as <span className="text-primary">{userEmail}</span>
+                  </span>
+                )}
                 <Button 
                   variant="ghost" 
                   size="sm"
@@ -148,6 +156,13 @@ const Header = () => {
                       <Link to="/app/settings" className="text-lg font-medium hover:text-primary transition-colors">
                         Settings
                       </Link>
+                      {isAuthenticated && userEmail && (
+                        <p className="text-sm text-muted-foreground font-medium">
+                          Logged in as <span className="text-primary">{userEmail}</span>
+                        </p>
+                      )}
+                      
+                      
                       <Button 
                         variant="outline" 
                         onClick={handleLogout}
