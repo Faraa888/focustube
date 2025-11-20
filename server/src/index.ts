@@ -110,18 +110,34 @@ if (openaiApiKey) {
 // ─────────────────────────────────────────────────────────────
 interface ClassifierPrompt {
   version: string;
+  model_hint?: string;
   role: string;
-  constraints: string[];
-  input_schema: any;
-  output_schema: any;
-  decision_rules: string[];
-  allowance_mapping: any;
-  examples: any[];
-  failsafe: any;
+  core_logic: string[];
+  global_channel_tag?: {
+    description?: string;
   rules?: string[];
-  category_set?: string[];
-  distraction_levels?: Record<string, string>;
+  };
+  shorts_rule?: string;
+  inputs?: Record<string, any>;
+  steps: string[];
+  output_schema: Record<string, any>;
+  fallback: {
+    category: string;
+    distraction_level: string;
+    confidence: number;
+    goals_alignment: string;
+    reasons: string[];
+  };
+  examples?: any[];
 }
+
+const DEFAULT_CLASSIFIER_OUTPUT_SCHEMA = {
+  category: "string",
+  distraction_level: "productive | neutral | distracting",
+  confidence: "number between 0 and 1",
+  goals_alignment: "aligned | partially_aligned | misaligned",
+  reasons: ["string", "string"]
+};
 
 let classifierPrompt: ClassifierPrompt | null = null;
 
@@ -205,12 +221,14 @@ app.get("/health", (req, res) => {
  * Caches results for 24h per user/text
  */
 app.post("/ai/classify", async (req, res) => {
+  let fallbackLegacyResponse: any = null;
   try {
     const { 
       user_id, 
       text, // For search queries
       context, 
       user_goals,
+      global_tag,
       // Video metadata fields
       video_id: initialVideoId,
       video_title,
@@ -304,161 +322,216 @@ app.post("/ai/classify", async (req, res) => {
       return res.json(cachedResult);
     }
 
-    // Fallback result if OpenAI is not configured or fails
-    // Use failsafe from prompt config if available, then map to old schema for compatibility
-    const failsafeNew = classifierPrompt?.failsafe || {
-      category_primary: "Other",
-      category_secondary: [],
+    const relatedVideosList = Array.isArray(related_videos) ? related_videos : [];
+    const derivedShortsRatio = relatedVideosList.length > 0
+      ? relatedVideosList.filter((video: any) => video?.is_shorts).length / relatedVideosList.length
+      : 0;
+
+    const buildSuggestionsSummary = (incoming?: any) => ({
+      on_goal_ratio: typeof incoming?.on_goal_ratio === "number" ? incoming.on_goal_ratio : 0,
+      shorts_ratio: typeof incoming?.shorts_ratio === "number" ? incoming.shorts_ratio : derivedShortsRatio,
+      dominant_themes: Array.isArray(incoming?.dominant_themes) ? incoming.dominant_themes : [],
+    });
+
+    const buildFlags = (incoming: any, distractionLevel: string) => ({
+      is_shorts: typeof incoming?.is_shorts === "boolean" ? incoming.is_shorts : Boolean(is_shorts),
+      clickbait_likelihood:
+        typeof incoming?.clickbait_likelihood === "number"
+          ? incoming.clickbait_likelihood
+          : distractionLevel === "distracting"
+            ? 0.75
+            : 0.25,
+      time_sink_risk:
+        typeof incoming?.time_sink_risk === "number"
+          ? incoming.time_sink_risk
+          : distractionLevel === "distracting"
+            ? 0.8
+            : distractionLevel === "neutral"
+              ? 0.4
+              : 0.15,
+    });
+
+    const toLegacyResult = (payload: {
+      category_primary: string;
+      category_secondary?: string[];
+      distraction_level: string;
+      confidence: number;
+      goals_alignment: string;
+      reasons: string[];
+      suggestions_summary?: any;
+      flags?: any;
+    }) => {
+      const confidenceValue = typeof payload.confidence === "number" ? payload.confidence : 0.4;
+      const reasonsList =
+        Array.isArray(payload.reasons) && payload.reasons.length > 0
+          ? payload.reasons.slice(0, 2)
+          : ["No reason provided"];
+      const suggestionsSummary = buildSuggestionsSummary(payload.suggestions_summary);
+      const flags = buildFlags(payload.flags, payload.distraction_level);
+      const blockReasonCode =
+        flags.time_sink_risk > 0.7
+          ? "likely-rabbit-hole"
+          : flags.clickbait_likelihood > 0.7
+            ? "clickbait"
+            : "ok";
+      const actionHint =
+        payload.distraction_level === "distracting"
+          ? flags.time_sink_risk > 0.7
+            ? "block"
+            : "soft-warn"
+          : "allow";
+      const allowanceCost =
+        payload.distraction_level === "distracting"
+          ? { type: "video", amount: 1 }
+          : { type: "none", amount: 0 };
+      const allowed = payload.distraction_level !== "distracting";
+
+      return {
+        category_primary: payload.category_primary,
+        category_secondary: payload.category_secondary || [],
+        distraction_level: payload.distraction_level,
+        confidence_category: confidenceValue,
+        confidence_distraction: confidenceValue,
+        goals_alignment: payload.goals_alignment,
+        reasons: reasonsList,
+        suggestions_summary: suggestionsSummary,
+        flags,
+        allowed,
+        category: payload.distraction_level,
+        confidence: confidenceValue,
+        reason: reasonsList.join("; "),
+        tags: suggestionsSummary.dominant_themes,
+        block_reason_code: blockReasonCode,
+        action_hint: actionHint,
+        allowance_cost: allowanceCost,
+      };
+    };
+
+    const fallbackTemplate = classifierPrompt?.fallback || {
+      category: "other",
       distraction_level: "neutral",
-      confidence_category: 0.2,
-      confidence_distraction: 0.2,
+      confidence: 0.4,
       goals_alignment: "unknown",
       reasons: ["fallback"],
-      suggestions_summary: {
-        on_goal_ratio: 0.0,
-        shorts_ratio: 0.0,
-        dominant_themes: []
-      },
-      flags: {
-        is_shorts: false,
-        clickbait_likelihood: 0.0,
-        time_sink_risk: 0.0
-      }
     };
-    
-    // Map new schema to old for backward compatibility
-    let result: any = {
-      // New schema fields (full)
-      ...failsafeNew,
-      // Old schema fields (for compatibility)
-      category: failsafeNew.distraction_level || "neutral",
-      confidence: failsafeNew.confidence_distraction || 0.5,
-      reason: Array.isArray(failsafeNew.reasons) ? failsafeNew.reasons.join("; ") : (failsafeNew.reasons || "fallback"),
-      tags: failsafeNew.suggestions_summary?.dominant_themes || [],
-      block_reason_code: failsafeNew.flags?.time_sink_risk > 0.7 ? "likely-rabbit-hole" : "ok",
-      action_hint: failsafeNew.distraction_level === "distracting" && failsafeNew.flags?.time_sink_risk > 0.7 ? "block" : "allow",
-      allowance_cost: failsafeNew.distraction_level === "distracting" ? { type: "video", amount: 1 } : { type: "none", amount: 0 },
-      allowed: failsafeNew.distraction_level !== "distracting"
-    };
+
+    const fallbackLegacy = toLegacyResult({
+      category_primary: fallbackTemplate.category || "other",
+      category_secondary: [],
+      distraction_level: fallbackTemplate.distraction_level || "neutral",
+      confidence: typeof fallbackTemplate.confidence === "number" ? fallbackTemplate.confidence : 0.4,
+      goals_alignment: fallbackTemplate.goals_alignment || "unknown",
+      reasons:
+        Array.isArray(fallbackTemplate.reasons) && fallbackTemplate.reasons.length > 0
+          ? fallbackTemplate.reasons.slice(0, 2)
+          : ["fallback"],
+    });
+
+    fallbackLegacyResponse = fallbackLegacy;
+    let result: any = fallbackLegacy;
 
     // Call OpenAI if configured
     if (openaiClient) {
       console.log("[AI Classify] Calling OpenAI API...");
       try {
-        // Build prompt from JSON config or use default
-        let systemPrompt = "You are a content classifier that categorizes YouTube content for productivity. Respond with only one word: productive, neutral, or distracting.";
-        
-        let contentText = "";
-        if (isVideoRequest) {
-          contentText = `Video: "${video_title.replace(/"/g, '\\"')}"`;
-          if (video_description) contentText += `\nDescription: "${video_description.substring(0, 200).replace(/"/g, '\\"')}"`;
-          if (channel_name) contentText += `\nChannel: ${channel_name}`;
-          if (video_category) contentText += `\nCategory: ${video_category}`;
-        } else {
-          contentText = `Content: "${text.replace(/"/g, '\\"')}"`;
+        const modelToUse =
+          process.env.OPENAI_CLASSIFIER_MODEL ||
+          classifierPrompt?.model_hint ||
+          "gpt-4o-mini";
+
+        const effectiveOutputSchema = classifierPrompt?.output_schema || DEFAULT_CLASSIFIER_OUTPUT_SCHEMA;
+        const coreLogic = classifierPrompt?.core_logic || [
+          "Productive = directly supports the user's stated goals.",
+          "Neutral = practical or educational but not aligned with goals.",
+          "Distracting = entertainment, gossip, sports highlights, vlogs, memes, gaming, reaction videos, compilations, or clickbait spirals.",
+        ];
+        const stepInstructions = classifierPrompt?.steps || [
+          "Identify the topic from title + channel.",
+          "Compare the topic to user goals.",
+          "Decide productive vs neutral vs distracting.",
+          "Provide two short reasons and stay concise.",
+        ];
+
+        const systemSections = [
+          classifierPrompt?.role || "You classify YouTube videos for FocusTube.",
+          "",
+          "Core logic:",
+          coreLogic.map((line, idx) => `${idx + 1}. ${line}`).join("\n"),
+        ];
+
+        if (classifierPrompt?.global_channel_tag) {
+          const tagInfo = classifierPrompt.global_channel_tag;
+          systemSections.push(
+            "",
+            "Global channel tag rules:",
+            tagInfo.description || "",
+            (tagInfo.rules || []).map((rule: string, idx: number) => `${idx + 1}. ${rule}`).join("\n")
+          );
         }
-        
-        let userPrompt = `Classify this YouTube content as one of three categories:
-- "productive": Educational, learning, skill-building, informative content
-- "neutral": Entertainment, relaxation, general interest content
-- "distracting": Time-wasting, addictive, low-value content
 
-${contentText}
-${context ? `Context: ${context}` : ""}
+        if (classifierPrompt?.shorts_rule) {
+          systemSections.push("", `Shorts rule: ${classifierPrompt.shorts_rule}`);
+        }
 
-Respond with ONLY one word: "productive", "neutral", or "distracting".`;
+        systemSections.push("", "Only return valid JSON. No prose.");
 
-        // Use improved prompt if available
-        if (classifierPrompt) {
-          // Build simplified system prompt
-          const rules = classifierPrompt.rules || [];
-          const categorySet = classifierPrompt.category_set || [];
-          const distractionLevels = classifierPrompt.distraction_levels || {};
-          
-          systemPrompt = `${classifierPrompt.role}
+        let systemPrompt = systemSections.filter(Boolean).join("\n");
 
-Key Rules:
-${rules.map((r: string, i: number) => `${i + 1}. ${r}`).join("\n")}
-
-Distraction Levels:
-${Object.entries(distractionLevels).map(([level, desc]) => `- ${level}: ${desc}`).join("\n")}
-
-Category Guidelines (prefer these, but use descriptive name if content doesn't fit):
-${categorySet.join(", ")}`;
-          
-          // Build user prompt in natural language format
-          let videoInfoText = "";
-          
+        const infoLines: string[] = [];
           if (isVideoRequest) {
-            // Format video data in readable way
-            videoInfoText = `Title: ${video_title || "Unknown"}`;
-            
+          infoLines.push(`Title: ${video_title || "Unknown"}`);
             if (video_description) {
               const descPreview = video_description.substring(0, 300);
-              videoInfoText += `\nDescription: ${descPreview}${video_description.length > 300 ? "..." : ""}`;
-            }
-            
-            if (channel_name) {
-              videoInfoText += `\nChannel: ${channel_name}`;
-            }
-            
-            if (video_category) {
-              videoInfoText += `\nYouTube Category: ${video_category}`;
-            }
-            
+            infoLines.push(`Description: ${descPreview}${video_description.length > 300 ? "..." : ""}`);
+          }
+          if (channel_name) infoLines.push(`Channel: ${channel_name}`);
+          if (video_category) infoLines.push(`YouTube Category: ${video_category}`);
             if (video_tags && Array.isArray(video_tags) && video_tags.length > 0) {
-              videoInfoText += `\nTags: ${video_tags.slice(0, 5).join(", ")}${video_tags.length > 5 ? "..." : ""}`;
-            }
-            
-            if (is_shorts) {
-              videoInfoText += `\nType: Shorts video`;
-            }
-            
+            infoLines.push(`Tags: ${video_tags.slice(0, 5).join(", ")}${video_tags.length > 5 ? "..." : ""}`);
+          }
+          if (is_shorts) infoLines.push("Type: Shorts video");
             if (duration_seconds) {
               const minutes = Math.floor(duration_seconds / 60);
               const seconds = duration_seconds % 60;
-              videoInfoText += `\nDuration: ${minutes}:${seconds.toString().padStart(2, '0')}`;
-            }
-            
-            // Add related videos context
-            if (related_videos && Array.isArray(related_videos) && related_videos.length > 0) {
-              videoInfoText += `\n\nRelated Videos:`;
-              related_videos.slice(0, 3).forEach((rv: any, idx: number) => {
-                const title = typeof rv === "string" ? rv : (rv.title || "Unknown");
-                const channel = typeof rv === "object" ? (rv.channel_name || "") : "";
-                const isShorts = typeof rv === "object" ? (rv.is_shorts || false) : false;
-                videoInfoText += `\n${idx + 1}. ${title}${channel ? ` (${channel})` : ""}${isShorts ? " [Shorts]" : ""}`;
-              });
+            infoLines.push(`Duration: ${minutes}m ${seconds}s`);
             }
           } else {
-            // Search query
-            videoInfoText = `Search Query: ${text || "Unknown"}`;
-          }
-          
-          // Add user goals if available
-          let goalsText = "";
-          if (user_goals && Array.isArray(user_goals) && user_goals.length > 0) {
-            goalsText = `\n\nUser Goals: ${user_goals.join(", ")}`;
-          }
-          
-          // Build step-by-step classification prompt
-          userPrompt = `Classify this YouTube content:
-
-${videoInfoText}${goalsText}
-
-Answer these questions:
-1. What category does this belong to? (Use category guidelines above, or a descriptive name if it doesn't fit)
-2. Is it productive, neutral, or distracting? (Based on user goals if provided)
-3. Why? (Provide 2 short reasons, max 120 chars each)
-
-Return your answer as JSON matching this format:
-${JSON.stringify(classifierPrompt.output_schema, null, 2)}
-
-Important: Return ONLY valid JSON. No extra text or commentary.`;
+          infoLines.push(`Search Query: ${text || "Unknown query"}`);
         }
 
+        const goalsLine =
+          user_goals && Array.isArray(user_goals) && user_goals.length > 0
+            ? user_goals.join(", ")
+            : "not provided";
+
+        const suggestionsPreview =
+          relatedVideosList.slice(0, 5)
+            .map((video: any, idx: number) => {
+              const title = video?.title || `Untitled suggestion ${idx + 1}`;
+              return `- ${title}${video?.is_shorts ? " (Shorts)" : ""}`;
+            })
+            .join("\n") || "- none provided";
+
+        const stepsSection = stepInstructions.map((step, idx) => `${idx + 1}. ${step}`).join("\n");
+
+        let userPrompt = `Video context:
+${infoLines.join("\n")}
+
+User goals: ${goalsLine}
+Global channel tag: ${global_tag || "none"}
+Nearby suggestions:
+${suggestionsPreview}
+
+Follow these steps:
+${stepsSection}
+
+Return JSON matching this schema:
+${JSON.stringify(effectiveOutputSchema, null, 2)}
+
+No extra commentary.`;
+
         const completion = await openaiClient.chat.completions.create({
-          model: "gpt-3.5-turbo",
+          model: modelToUse,
           messages: [
             {
               role: "system",
@@ -470,7 +543,7 @@ Important: Return ONLY valid JSON. No extra text or commentary.`;
             },
           ],
           temperature: 0.3,
-          max_tokens: 500, // Increased for detailed structured JSON response (new schema has more fields)
+          max_tokens: 350,
           response_format: { type: "json_object" }, // Force JSON output
         });
 
@@ -485,13 +558,13 @@ Important: Return ONLY valid JSON. No extra text or commentary.`;
           // Retry once with strict instruction
           try {
             const retryCompletion = await openaiClient.chat.completions.create({
-              model: "gpt-3.5-turbo",
+              model: modelToUse,
               messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: userPrompt + "\n\nReturn ONLY valid JSON. No prose." }
               ],
               temperature: 0.3,
-              max_tokens: 500,
+              max_tokens: 350,
               response_format: { type: "json_object" },
             });
             const retryText = retryCompletion.choices[0]?.message?.content?.trim() || "";
@@ -504,72 +577,40 @@ Important: Return ONLY valid JSON. No extra text or commentary.`;
 
         // Validate and normalize new schema response
         if (parsedResponse) {
-          // Extract new schema fields
-          const categoryPrimary = parsedResponse.category_primary || "Other";
+          const categoryPrimary =
+            parsedResponse.category ||
+            parsedResponse.category_primary ||
+            "other";
           const categorySecondary = parsedResponse.category_secondary || [];
-          const distractionLevel = parsedResponse.distraction_level || "neutral";
-          const confidenceCategory = parsedResponse.confidence_category || 0.5;
-          const confidenceDistraction = parsedResponse.confidence_distraction || 0.5;
+          const distractionLevel =
+            parsedResponse.distraction_level ||
+            parsedResponse.category ||
+            "neutral";
+          const confidenceValue =
+            typeof parsedResponse.confidence === "number"
+              ? parsedResponse.confidence
+              : typeof parsedResponse.confidence_distraction === "number"
+                ? parsedResponse.confidence_distraction
+                : 0.5;
           const goalsAlignment = parsedResponse.goals_alignment || "unknown";
-          const reasons = Array.isArray(parsedResponse.reasons) ? parsedResponse.reasons : [parsedResponse.reason || "No reason provided"];
-          const suggestionsSummary = parsedResponse.suggestions_summary || {
-            on_goal_ratio: 0.0,
-            shorts_ratio: 0.0,
-            dominant_themes: []
-          };
-          const flags = parsedResponse.flags || {
-            is_shorts: is_shorts || false,
-            clickbait_likelihood: 0.0,
-            time_sink_risk: 0.0
-          };
+          const reasons =
+            Array.isArray(parsedResponse.reasons) && parsedResponse.reasons.length > 0
+              ? parsedResponse.reasons.slice(0, 2)
+              : ["No reason provided"];
 
-          // Map new schema to old for backward compatibility
-          const category = distractionLevel; // distraction_level maps to old category
-          const confidence = confidenceDistraction; // Use distraction confidence
-          const reason = reasons.join("; "); // Join reasons array
-          const tags = suggestionsSummary.dominant_themes || [];
-          const blockReasonCode = flags.time_sink_risk > 0.7 ? "likely-rabbit-hole" : 
-                                 flags.clickbait_likelihood > 0.7 ? "clickbait" : "ok";
-          const actionHint = distractionLevel === "distracting" && flags.time_sink_risk > 0.7 ? "block" :
-                           distractionLevel === "distracting" ? "soft-warn" : "allow";
-          const allowanceCost = distractionLevel === "distracting" ? { type: "video", amount: 1 } : { type: "none", amount: 0 };
-          const allowed = distractionLevel !== "distracting";
-
-          // Build full result with both new and old schema
-          result = {
-            // New schema (full)
+          result = toLegacyResult({
             category_primary: categoryPrimary,
             category_secondary: categorySecondary,
             distraction_level: distractionLevel,
-            confidence_category: confidenceCategory,
-            confidence_distraction: confidenceDistraction,
+            confidence: confidenceValue,
             goals_alignment: goalsAlignment,
-            reasons: reasons,
-            suggestions_summary: suggestionsSummary,
-            flags: flags,
-            // Old schema (for compatibility)
-            allowed,
-            category,
-            confidence,
-            reason,
-            tags,
-            block_reason_code: blockReasonCode,
-            action_hint: actionHint,
-            allowance_cost: allowanceCost,
-          };
+            reasons,
+            suggestions_summary: parsedResponse.suggestions_summary,
+            flags: parsedResponse.flags,
+          });
         } else {
           // If parsing failed completely, use failsafe
-          result = {
-            ...failsafeNew,
-            category: failsafeNew.distraction_level,
-            confidence: failsafeNew.confidence_distraction,
-            reason: Array.isArray(failsafeNew.reasons) ? failsafeNew.reasons.join("; ") : (failsafeNew.reasons || "fallback"),
-            tags: failsafeNew.suggestions_summary?.dominant_themes || [],
-            block_reason_code: failsafeNew.flags?.time_sink_risk > 0.7 ? "likely-rabbit-hole" : "ok",
-            action_hint: failsafeNew.distraction_level === "distracting" ? "block" : "allow",
-            allowance_cost: failsafeNew.distraction_level === "distracting" ? { type: "video", amount: 1 } : { type: "none", amount: 0 },
-            allowed: failsafeNew.distraction_level !== "distracting"
-          };
+          result = { ...fallbackLegacy };
         }
 
         const displayTitle = isVideoRequest ? video_title : (text || "unknown");
@@ -579,17 +620,7 @@ Important: Return ONLY valid JSON. No extra text or commentary.`;
       } catch (openaiError: any) {
         console.error("[AI Classify] ❌ OpenAI error:", openaiError.message || openaiError);
         // Fallback to failsafe from prompt config (already mapped above)
-        result = {
-          ...failsafeNew,
-          category: failsafeNew.distraction_level,
-          confidence: failsafeNew.confidence_distraction,
-          reason: Array.isArray(failsafeNew.reasons) ? failsafeNew.reasons.join("; ") : (failsafeNew.reasons || "fallback"),
-          tags: failsafeNew.suggestions_summary?.dominant_themes || [],
-          block_reason_code: failsafeNew.flags?.time_sink_risk > 0.7 ? "likely-rabbit-hole" : "ok",
-          action_hint: failsafeNew.distraction_level === "distracting" ? "block" : "allow",
-          allowance_cost: failsafeNew.distraction_level === "distracting" ? { type: "video", amount: 1 } : { type: "none", amount: 0 },
-          allowed: failsafeNew.distraction_level !== "distracting"
-        };
+        result = { ...fallbackLegacy };
       }
     } else {
       console.warn("[AI Classify] ⚠️ OpenAI client not initialized - using failsafe (returning neutral)");
@@ -627,32 +658,38 @@ Important: Return ONLY valid JSON. No extra text or commentary.`;
     console.error("Error in /ai/classify:", error);
     // Always return a valid response, even on error
     // Use failsafe from prompt config
-    const failsafeNew = classifierPrompt?.failsafe || {
-      category_primary: "Other",
-      category_secondary: [],
-      distraction_level: "neutral",
-      confidence_category: 0.2,
-      confidence_distraction: 0.2,
-      goals_alignment: "unknown",
-      reasons: ["error_fallback"],
-      suggestions_summary: {
-        on_goal_ratio: 0.0,
-        shorts_ratio: 0.0,
-        dominant_themes: []
-      },
-      flags: {
-        is_shorts: false,
-        clickbait_likelihood: 0.0,
-        time_sink_risk: 0.0
-      }
-    };
-    
+    const errorFallback =
+      fallbackLegacyResponse ||
+      {
+        category_primary: "other",
+        category_secondary: [],
+        distraction_level: "neutral",
+        confidence_category: 0.4,
+        confidence_distraction: 0.4,
+        goals_alignment: "unknown",
+        reasons: ["fallback", "classifier unavailable"],
+        suggestions_summary: {
+          on_goal_ratio: 0,
+          shorts_ratio: 0,
+          dominant_themes: [],
+        },
+        flags: {
+          is_shorts: false,
+          clickbait_likelihood: 0.2,
+          time_sink_risk: 0.2,
+        },
+        category: "neutral",
+        confidence: 0.4,
+        reason: "fallback; classifier unavailable",
+        tags: [],
+        block_reason_code: "ok",
+        action_hint: "allow",
+        allowance_cost: { type: "none", amount: 0 },
+        allowed: true,
+      };
+
     res.status(500).json({
-      ...failsafeNew,
-      category: failsafeNew.distraction_level,
-      confidence: failsafeNew.confidence_distraction,
-      reason: Array.isArray(failsafeNew.reasons) ? failsafeNew.reasons.join("; ") : (failsafeNew.reasons || "error_fallback"),
-      tags: failsafeNew.suggestions_summary?.dominant_themes || [],
+      ...errorFallback,
       block_reason_code: "unknown",
       action_hint: "allow",
       allowance_cost: { type: "none", amount: 0 },

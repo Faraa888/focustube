@@ -1317,10 +1317,84 @@ async function finalizeVideoWatch(videoId, startTime, distractionLevel, category
       const { ft_channel_spiral_count = {} } = await getLocal(["ft_channel_spiral_count"]);
       const spiralCounts = { ...ft_channel_spiral_count };
       
+      // 5.1. Apply decay to existing counts (before updating with new data)
+      const now = Date.now();
+      const DECAY_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+      for (const [ch, data] of Object.entries(spiralCounts)) {
+        if (data && data.last_watched && data.this_week > 0) {
+          const lastWatched = new Date(data.last_watched).getTime();
+          const hoursSinceLastWatch = (now - lastWatched) / (60 * 60 * 1000);
+          const decayIntervals = Math.floor(hoursSinceLastWatch / 24); // Full 24h periods
+          if (decayIntervals > 0) {
+            const newWeekCount = Math.max(0, data.this_week - decayIntervals);
+            if (newWeekCount !== data.this_week) {
+              LOG(`[Spiral Decay] ${ch}: ${data.this_week} → ${newWeekCount} (${decayIntervals} intervals)`);
+              spiralCounts[ch].this_week = newWeekCount;
+            }
+          }
+        }
+      }
+      
+      // 5.2. Detect consecutive videos from same channel (for trend weighting)
       const channelKey = channelName.trim();
+      let consecutiveCount = 1; // Current video counts as 1
+      const CONSECUTIVE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+      const currentTime = new Date(finishedAtIso).getTime();
+      
+      // Check recent history for consecutive videos from same channel
+      for (let i = recentHistory.length - 1; i >= 0; i--) {
+        const item = recentHistory[i];
+        if (item.channel_name && item.channel_name.trim() === channelKey && item.watched_at) {
+          const itemTime = new Date(item.watched_at).getTime();
+          const timeDiff = currentTime - itemTime;
+          if (timeDiff > 0 && timeDiff <= CONSECUTIVE_WINDOW_MS) {
+            consecutiveCount++;
+          } else if (timeDiff > CONSECUTIVE_WINDOW_MS) {
+            break; // Stop if gap is too large
+          }
+        }
+      }
+      
+      // 5.3. Check if channel was classified as distracting (for weighting eligibility)
+      const lastClassification = recentHistory
+        .filter(item => item.channel_name && item.channel_name.trim() === channelKey)
+        .sort((a, b) => new Date(b.watched_at) - new Date(a.watched_at))[0];
+      
+      const isDistractingChannel = lastClassification && 
+        lastClassification.distraction_level === "distracting" &&
+        (lastClassification.confidence_distraction || 0) > 0.7;
+      
+      // 5.4. Apply trend weighting multipliers (only for distracting channels)
+      let todayWeight = 1.0;
+      let weekWeight = 1.0;
+      if (isDistractingChannel && consecutiveCount > 1) {
+        if (consecutiveCount === 2) {
+          todayWeight = 1.5;
+          weekWeight = 1.5;
+        } else if (consecutiveCount >= 3) {
+          todayWeight = 2.0;
+          weekWeight = 2.0;
+        }
+        LOG(`[Spiral Weight] ${channelKey}: ${consecutiveCount} consecutive, weights: today=${todayWeight}, week=${weekWeight}`);
+      }
+      
+      // 5.5. Calculate base counts and apply weighting
+      // Note: todayCounts/weekCounts already include the current video (added to history at line 1287)
+      // So we need to count excluding current video, then add it back with weight
+      const baseTodayCount = todayCounts[channelKey] || 0;
+      const baseWeekCount = weekCounts[channelKey] || 0;
+      
+      // If weighting applies, the current video contributes (weight - 1) extra
+      // So: baseCount already has +1 for current video, we add (weight - 1) more
+      const todayExtra = (todayWeight > 1.0) ? (todayWeight - 1.0) : 0;
+      const weekExtra = (weekWeight > 1.0) ? (weekWeight - 1.0) : 0;
+      
+      const weightedToday = baseTodayCount + todayExtra;
+      const weightedWeek = baseWeekCount + weekExtra;
+      
       spiralCounts[channelKey] = {
-        today: todayCounts[channelKey] || 0,
-        this_week: weekCounts[channelKey] || 0,
+        today: Math.round(weightedToday * 10) / 10, // Round to 1 decimal
+        this_week: Math.round(weightedWeek * 10) / 10,
         last_watched: new Date().toISOString()
       };
 
