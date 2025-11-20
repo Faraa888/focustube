@@ -23,17 +23,17 @@ const Home = () => {
         <div className="container mx-auto max-w-6xl">
           <div className="text-center mb-12">
             <Badge variant="secondary" className="mb-4">
-              14-day free trial • No credit card required
+              Free for 14 days • No card needed
             </Badge>
             <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
-              Use YouTube on purpose.
+              YouTube without the spiral.
             </h1>
             <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto mb-8">
-              Stop research spirals. FocusTube filters noise, sets limits, and nudges you back to intent.
+              FocusTube filters out distractions, sets smart limits, and nudges you back to your goals — so you stop spiraling and start doing.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button size="lg" asChild data-evt="start_trial">
-                <Link to="/signup">Start 14-Day Free Trial</Link>
+                <Link to="/signup">Start Free Trial</Link>
               </Button>
               <Button size="lg" variant="outline" asChild>
                 <Link to="/download">Install Extension</Link>
@@ -44,43 +44,26 @@ const Home = () => {
           <div className="relative rounded-lg overflow-hidden border border-border shadow-2xl">
             <img 
               src={heroImage} 
-              alt="FocusTube dashboard showing focus metrics and analytics"
+              alt="FocusTube dashboard showing daily usage, focus score, and distractions blocked"
               className="w-full h-auto"
             />
           </div>
         </div>
       </section>
 
-      {/* Social Proof */}
-      <section className="py-12 px-4 bg-card/50">
-        <div className="container mx-auto max-w-4xl text-center">
-          <div className="flex flex-wrap justify-center items-center gap-8 text-muted-foreground">
-            <div>
-              <div className="text-3xl font-bold text-foreground">10,000+</div>
-              <div className="text-sm">Active users</div>
-            </div>
-            <div className="h-12 w-px bg-border" />
-            <div>
-              <div className="text-3xl font-bold text-foreground">45%</div>
-              <div className="text-sm">Avg. distraction reduction</div>
-            </div>
-            <div className="h-12 w-px bg-border" />
-            <div>
-              <div className="text-3xl font-bold text-foreground">4.8/5</div>
-              <div className="text-sm">Chrome Store rating</div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Problem Statement */}
       <section className="py-20 px-4">
         <div className="container mx-auto max-w-4xl text-center">
           <h2 className="text-3xl md:text-5xl font-bold mb-6">
-            You don't need more discipline.
+            You don't need more willpower.
           </h2>
           <p className="text-xl text-muted-foreground mb-8">
-            You need better defaults. FocusTube gives you the guardrails to stay intentional without fighting yourself every click.
+            You've deleted the app. You've blocked Shorts. You've unsubscribed from channels.
+            <br />
+            And yet, you still fall down the rabbit hole.
+            <br />
+            FocusTube helps you break the cycle — with smarter limits and actual accountability.
           </p>
         </div>
       </section>
@@ -98,7 +81,7 @@ const Home = () => {
               </div>
               <h3 className="text-xl font-semibold mb-2">Install</h3>
               <p className="text-muted-foreground">
-                Add the extension to Chrome in one click. No complex setup.
+                Add the extension to Chrome in one click. Setup takes 3 seconds.
               </p>
             </div>
             <div className="text-center">
@@ -107,7 +90,7 @@ const Home = () => {
               </div>
               <h3 className="text-xl font-semibold mb-2">Set goals</h3>
               <p className="text-muted-foreground">
-                Tell FocusTube what you're learning and what distracts you.
+                Tell FocusTube what you're working on and what tends to derail you.
               </p>
             </div>
             <div className="text-center">
@@ -116,7 +99,7 @@ const Home = () => {
               </div>
               <h3 className="text-xl font-semibold mb-2">Browse with guardrails</h3>
               <p className="text-muted-foreground">
-                FocusTube filters distractions and nudges you back on track.
+                As you use YouTube, FocusTube filters content, tracks habits, and nudges you back on track when you slip.
               </p>
             </div>
           </div>
@@ -127,43 +110,65 @@ const Home = () => {
       <section className="py-20 px-4">
         <div className="container mx-auto max-w-6xl">
           <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">
-            Built for intentional creators
+            What it does
           </h2>
           <p className="text-xl text-muted-foreground text-center mb-12">
-            Smarter limits. AI clarity. Fast, gentle nudges.
+            Built for people who know better — but still spiral.
           </p>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             <FeatureCard
-              icon={Ban}
-              title="Blocks Shorts"
-              description="Hide the endless scroll of YouTube Shorts so you stay focused on your learning path."
-            />
-            <FeatureCard
               icon={Sparkles}
-              title="AI Filtering"
-              description="Smart content filtering that understands your goals and filters out distractions automatically."
-            />
-            <FeatureCard
-              icon={Clock}
-              title="Time Nudges"
-              description="Gentle reminders when you've been browsing too long, not harsh lockouts that frustrate you."
-            />
-            <FeatureCard
-              icon={BarChart3}
-              title="Personal Insights"
-              description="See your focus trends, watch patterns, and progress toward your learning goals."
-            />
-            <FeatureCard
-              icon={Shield}
-              title="Privacy First"
-              description="All processing happens locally. Your viewing history never leaves your device."
+              title="Distraction Detection"
+              description="Analyzes video titles, channels, and tags to flag likely distractions. Helps you spot the trap — before you're in it."
             />
             <FeatureCard
               icon={Zap}
-              title="Zero Friction"
-              description="Works seamlessly with YouTube. No clunky overlays or broken features."
+              title="Spiral Detection"
+              description="Watches for binge patterns or repeat views. Nudges you gently when you're drifting into a loop."
+            />
+            <FeatureCard
+              icon={Ban}
+              title="Blocks Shorts"
+              description="Wipe out the infinite scroll by default, keep full control if you want it."
+            />
+            <FeatureCard
+              icon={Clock}
+              title="Time Boundaries"
+              description="Set daily limits and focus windows. Use YouTube with intention — not on impulse."
+            />
+            <FeatureCard
+              icon={Check}
+              title="Smart Nudges"
+              description="Contextual popups that ask the right questions at the right time. Never shaming — always helpful."
+            />
+            <FeatureCard
+              icon={BarChart3}
+              title="Personal Dashboard"
+              description="Track how you're using YouTube. Spot your weak moments. Celebrate when you stay focused."
+            />
+            <FeatureCard
+              icon={Shield}
+              title="Channel Blocking"
+              description="Pick channels that derail you and block them permanently. One click. No second guessing."
+            />
+            <FeatureCard
+              icon={Sparkles}
+              title="Focus Goals"
+              description="Tell FocusTube what matters to you. Used to train the AI, personalize nudges, and give more relevant insights."
             />
           </div>
+        </div>
+      </section>
+
+      {/* Who's It For */}
+      <section className="py-20 px-4">
+        <div className="container mx-auto max-w-4xl text-center">
+          <h2 className="text-3xl md:text-4xl font-bold mb-6">
+            Made for people who know better - but still spiral
+          </h2>
+          <p className="text-xl text-muted-foreground">
+            FocusTube isn't for dopamine detox monks or zero-inbox purists. It's for people trying to get things done- who want to learn, build, improve but get derailed by YouTube just a little too easily. If you've ever gone in to watch one video... and resurfaced 2 hours later, this is for you.
+          </p>
         </div>
       </section>
 
@@ -187,11 +192,11 @@ const Home = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-5 w-5 text-green-500" />
-                  <span>Daily time limit</span>
+                  <span>Daily search limit</span>
                 </div>
               </div>
               <Button variant="outline" className="w-full" asChild>
-                <Link to="/download">Get Started</Link>
+                <Link to="/download">Use for free</Link>
               </Button>
             </div>
             
@@ -203,27 +208,35 @@ const Home = () => {
               <div className="space-y-3 mb-6">
                 <div className="flex items-center gap-2">
                   <Check className="h-5 w-5 text-green-500" />
-                  <span>Everything in Free</span>
+                  <span>Distraction nudges & spiral detection</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-5 w-5 text-green-500" />
-                  <span>AI content filtering</span>
+                  <span>AI-powered video filtering</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-5 w-5 text-green-500" />
-                  <span>Advanced dashboard & insights</span>
+                  <span>Targetted channel blocking</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-5 w-5 text-green-500" />
-                  <span>Custom focus goals</span>
+                  <span>Full dahsboard & insights</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-5 w-5 text-green-500" />
-                  <span>Priority support</span>
+                  <span>Custom goals & focus-time settings</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-5 w-5 text-green-500" />
+                  <span>Focus journal prompts</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-5 w-5 text-green-500" />
+                  <span>Priority support and access to new features</span>
                 </div>
               </div>
               <Button className="w-full" asChild data-evt="buy_pro">
-                <Link to="/pricing">View Pricing</Link>
+                <Link to="/signup">Start 14-Day Free Trial (No card needed)</Link>
               </Button>
             </div>
           </div>
@@ -240,37 +253,31 @@ const Home = () => {
             <AccordionItem value="item-1">
               <AccordionTrigger>How long is the free trial?</AccordionTrigger>
               <AccordionContent>
-                14 days, no credit card required. You get full access to Pro features during the trial period.
+                14 days. No card needed. You get full access to Pro features during the trial period.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-2">
               <AccordionTrigger>Is my data private?</AccordionTrigger>
               <AccordionContent>
-                Yes. All processing happens locally in your browser. We never see or store your YouTube viewing history.
+                We don't sell your data. Ever. Some features process locally, some use secure APIs. Nothing is sold or tracked externally.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-3">
               <AccordionTrigger>How much does Pro cost?</AccordionTrigger>
               <AccordionContent>
-                $7/month or $60/year (save 30%). See full pricing details on our pricing page.
+                $4.99/month or $49.99/year. Cancel Anytime
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-4">
-              <AccordionTrigger>Can I uninstall anytime?</AccordionTrigger>
+              <AccordionTrigger>Does it only work on Chrome?</AccordionTrigger>
               <AccordionContent>
-                Absolutely. Uninstall from Chrome like any extension. No lock-in, cancel your subscription anytime.
+                Currently yes, Chrome and Edge (Chromium-based). Safari and Firefox support coming soon.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-5">
-              <AccordionTrigger>Does it only work on Chrome?</AccordionTrigger>
+              <AccordionTrigger>What does the AI actually do?</AccordionTrigger>
               <AccordionContent>
-                Currently yes, Chrome and Edge (Chromium-based). Firefox and Safari support coming soon.
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="item-6">
-              <AccordionTrigger>How does AI filtering work?</AccordionTrigger>
-              <AccordionContent>
-                Our AI analyzes video titles, thumbnails, and descriptions to match against your goals and filter out distractions, all processed locally.
+                FocusTube looks at video titles, tags, and channels to detect likely distractions. It's simple, effective, and fast. Over time, it learns from your habits to filter based on *your* goals.
               </AccordionContent>
             </AccordionItem>
           </Accordion>
@@ -284,7 +291,7 @@ const Home = () => {
             Ready to reclaim your focus?
           </h2>
           <p className="text-xl text-muted-foreground mb-8">
-            FocusTube isn't about blocking everything. It's about helping you use YouTube the way you meant to.
+            YouTube's not the problem. Losing control is. FocusTube helps you stay intentional, without blocking everything.
           </p>
           <Button size="lg" asChild data-evt="final_cta">
             <Link to="/signup">Start 14-Day Free Trial</Link>

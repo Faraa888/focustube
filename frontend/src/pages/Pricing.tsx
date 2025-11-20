@@ -18,8 +18,8 @@ const Pricing = () => {
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("yearly");
   
   const pricing = {
-    monthly: { price: 7, total: 7 },
-    yearly: { price: 5, total: 60 },
+    monthly: { price: 4.99, total: 4.99 },
+    yearly: { price: 4.20, total: 50 },
   };
 
   return (
@@ -51,7 +51,7 @@ const Pricing = () => {
               <TabsTrigger value="monthly">Monthly</TabsTrigger>
               <TabsTrigger value="yearly">
                 Yearly
-                <Badge variant="secondary" className="ml-2">Save 30%</Badge>
+                <Badge variant="secondary" className="ml-2">Save 17%</Badge>
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -64,7 +64,7 @@ const Pricing = () => {
             <CardHeader>
               <CardTitle className="text-2xl">Free</CardTitle>
               <CardDescription>
-                Essential tools to get started
+                Core tools to help you stay focused
               </CardDescription>
               <div className="pt-4">
                 <span className="text-5xl font-bold">$0</span>
@@ -85,10 +85,6 @@ const Pricing = () => {
                   <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
                   <span>Daily time limit (up to 60min)</span>
                 </li>
-                <li className="flex items-start gap-3">
-                  <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
-                  <span>Basic usage statistics</span>
-                </li>
               </ul>
               <Button variant="outline" className="w-full" size="lg" asChild>
                 <Link to="/download" data-evt="pricing_free">Get Started Free</Link>
@@ -104,7 +100,7 @@ const Pricing = () => {
             <CardHeader>
               <CardTitle className="text-2xl">Pro</CardTitle>
               <CardDescription>
-                Advanced features for serious learners
+                Built for deep work and distraction recovery
               </CardDescription>
               <div className="pt-4">
                 <span className="text-5xl font-bold">
@@ -113,7 +109,7 @@ const Pricing = () => {
                 <span className="text-muted-foreground text-lg">/month</span>
                 {billingPeriod === "yearly" && (
                   <div className="text-sm text-muted-foreground mt-1">
-                    Billed ${pricing.yearly.total}/year
+                    Billed $50/year
                   </div>
                 )}
               </div>
@@ -126,27 +122,31 @@ const Pricing = () => {
                 </li>
                 <li className="flex items-start gap-3">
                   <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
-                  <span>AI-powered content filtering</span>
+                  <span>AI-powered video filtering</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
-                  <span>Unlimited daily time limits</span>
+                  <span>Block specific distracting channels</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
-                  <span>Advanced dashboard & insights</span>
+                  <span>Spiral detection & distraction nudges</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
-                  <span>Custom focus goals & tracking</span>
+                  <span>Custom focus goals & session limits</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
-                  <span>Distraction heatmaps</span>
+                  <span>Full dashboard & analytics to stay ontop of your consumption</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
-                  <span>Priority email support</span>
+                  <span>Focus journal prompts</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                  <span>Priority support & early access</span>
                 </li>
               </ul>
               <Button className="w-full" size="lg" asChild data-evt="pricing_pro">
@@ -184,7 +184,7 @@ const Pricing = () => {
             <AccordionItem value="item-1">
               <AccordionTrigger>What happens after the free trial?</AccordionTrigger>
               <AccordionContent>
-                After 14 days, you'll automatically move to the Free plan. You can upgrade to Pro anytime. We never charge without your explicit consent.
+                After 14 days, you'll automatically move to the Free plan. You can upgrade to Pro anytime to keep using FocusTube features. We won't charge you automatically.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-2">
@@ -196,19 +196,19 @@ const Pricing = () => {
             <AccordionItem value="item-3">
               <AccordionTrigger>Do you offer refunds?</AccordionTrigger>
               <AccordionContent>
-                Yes, we offer a 30-day money-back guarantee. If you're not satisfied, email us for a full refund.
+                Yes, we offer a 30-day money-back guarantee on annual plans.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-4">
               <AccordionTrigger>Is there a student discount?</AccordionTrigger>
               <AccordionContent>
-                Yes! Students get 50% off Pro. Email us from your .edu address to verify and get your discount code.
+                Yes! Students get 25% off Lifetime Access. Email us from your .edu address to verify and get your discount code.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-5">
               <AccordionTrigger>What payment methods do you accept?</AccordionTrigger>
               <AccordionContent>
-                We accept all major credit cards (Visa, Mastercard, Amex) via Stripe. All payments are secure and encrypted.
+                Stripe handles our payments — Visa, Mastercard, Amex. All payments are secure and encrypted.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-6">
@@ -229,7 +229,7 @@ const Pricing = () => {
             We're here to help. Reach out anytime.
           </p>
           <Button variant="outline" size="lg" asChild>
-            <a href="mailto:support@focustube.com">Contact Support</a>
+            <a href="mailto:support@focustube.co.uk">Contact Support</a>
           </Button>
         </div>
       </main>

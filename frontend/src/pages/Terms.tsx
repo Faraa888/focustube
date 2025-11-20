@@ -14,16 +14,14 @@ const Terms = () => {
             <div>
               <h2 className="text-2xl font-bold mb-4">Acceptance of Terms</h2>
               <p className="text-muted-foreground">
-                By using FocusTube, you agree to these terms of service. If you do not agree with any part of these terms, 
-                please do not use our service.
+                By using FocusTube, you agree to the terms outlined below. If anything feels off, don't use the service until you're clear on your rights.
               </p>
             </div>
 
             <div>
               <h2 className="text-2xl font-bold mb-4">Service Description</h2>
               <p className="text-muted-foreground">
-                FocusTube is a Chrome extension designed to help users maintain focus while using YouTube. We provide tools 
-                to block distracting content, track usage, and classify videos using AI technology.
+                FocusTube is a browser extension for YouTube. It filters distractions, tracks focus, and gives nudges based on your behavior. Some features rely on AI classification.
               </p>
             </div>
 
@@ -31,33 +29,30 @@ const Terms = () => {
               <h2 className="text-2xl font-bold mb-4">User Responsibilities</h2>
               <ul className="list-disc list-inside space-y-2 text-muted-foreground">
                 <li>You must be at least 13 years old to use FocusTube</li>
-                <li>You are responsible for maintaining the security of your account</li>
-                <li>You agree not to misuse or abuse the service</li>
-                <li>You will not attempt to reverse engineer or hack the extension</li>
+                <li>Keep your account details safe and secure</li>
+                <li>Don't tamper with or reverse engineer the app</li>
+                <li>Use the product ethically, without abuse</li>
               </ul>
             </div>
 
             <div>
               <h2 className="text-2xl font-bold mb-4">Subscription and Payments</h2>
               <p className="text-muted-foreground">
-                Pro plan subscriptions are billed monthly or yearly. You can cancel at any time. Refunds are provided on a 
-                case-by-case basis within 14 days of purchase.
+                Pro plans are billed monthly or annually through Stripe. Cancel anytime. Refunds are available within 30 days on annual subscription if you're unsatisfied.
               </p>
             </div>
 
             <div>
               <h2 className="text-2xl font-bold mb-4">Limitation of Liability</h2>
               <p className="text-muted-foreground">
-                FocusTube is provided "as is" without warranties of any kind. We are not liable for any damages arising from 
-                the use or inability to use the service.
+                FocusTube is provided as-is. We're not liable for indirect losses, missed productivity, or side effects of blocking content.
               </p>
             </div>
 
             <div>
               <h2 className="text-2xl font-bold mb-4">Changes to Terms</h2>
               <p className="text-muted-foreground">
-                We reserve the right to modify these terms at any time. Continued use of the service after changes constitutes 
-                acceptance of the new terms.
+                We may update these terms. Continued use means you accept the updates.
               </p>
             </div>
 
@@ -65,8 +60,8 @@ const Terms = () => {
               <h2 className="text-2xl font-bold mb-4">Contact</h2>
               <p className="text-muted-foreground">
                 For questions about these terms, contact us at 
-                <a href="mailto:legal@focustube.app" className="text-primary hover:underline ml-1">
-                  legal@focustube.app
+                <a href="mailto:support@focustube.co.uk" className="text-primary hover:underline ml-1">
+                  support@focustube.co.uk
                 </a>
               </p>
             </div>

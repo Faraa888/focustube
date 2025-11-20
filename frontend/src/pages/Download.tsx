@@ -89,7 +89,7 @@ const Download = () => {
                   <div className="flex-1">
                     <CardTitle className="text-lg mb-1">Set your goals</CardTitle>
                     <CardDescription>
-                      The extension will ask what you want to learn and what distracts you (takes 30 seconds)
+                      The extension will ask what you want to get out of YouTube and what commonly distracts you (takes 30 seconds)
                     </CardDescription>
                   </div>
                 </div>
@@ -129,13 +129,13 @@ const Download = () => {
             <div className="flex items-start gap-3">
               <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
               <p className="text-sm">
-                <strong>Create an account:</strong> Sign up to sync your settings and access the dashboard
+                <strong>Create an account & start your trial:</strong> Sign up to sync your settings and access the dashboard + all Pro features
               </p>
             </div>
             <div className="flex items-start gap-3">
               <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
               <p className="text-sm">
-                <strong>Customize:</strong> Adjust settings anytime by clicking the extension icon
+                <strong>Customise:</strong> Adjust settings anytime by clicking the extension icon
               </p>
             </div>
           </CardContent>
@@ -162,7 +162,7 @@ const Download = () => {
             Need help installing?
           </p>
           <Button variant="link" asChild>
-            <a href="mailto:support@focustube.com">Contact Support</a>
+            <a href="mailto:support@focustube.co.uk">Contact Support</a>
           </Button>
         </div>
       </main>

@@ -78,7 +78,7 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 - **Instructions box:**
   - Header: `Click the FocusTube extension icon` (top right of your browser) to:
   - Bullet points:
-    - `Start your 14-day free Pro trial)`
+    - `Start your 14-day free Pro trial`
     - `Sign in to an existing account`
     - `Continue with Free plan`
 - **Buttons:**
@@ -399,7 +399,7 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 
 **Your Goals Card:**
 - **Title:** `Your Goals`
-- **Description:** `What do you want to learn or accomplish? FocusTube will help you stay on track.`
+- **Description:** `What do you want to learn or accomplish whilst using YouTube? FocusTube will help you stay on track.`
 - **Input placeholder:** `e.g., Learn React`
 - **Add button:** `Add`
 - **Empty state:** `No goals added yet. Add your first goal above.`
@@ -408,7 +408,7 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 
 **Common Distractions Card:**
 - **Title:** `Common Distractions`
-- **Description:** `Topics that tend to pull you off-track`
+- **Description:** `What are the topics that tend to pull you off-track`
 - **Input placeholder:** `e.g., Gaming streams`
 - **Add button:** `Add`
 - **Empty state:** `No distractions added yet. Add your first distraction above.`
@@ -424,15 +424,15 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 
 **Blocked Channels Card:**
 - **Title:** `Blocked Channels`
-- **Description:** `Channels you've blocked to stay focused. All names will be normalized when you save.`
-- **Input placeholder:** `Enter channel name (e.g., Eddie Hall)`
+- **Description:** `Channels you have blocked to stay focused. All names will be normalised when you save.`
+- **Input placeholder:** `Enter channel name (e.g., MrBeast)`
 - **Add button:** `Add`
 - **Loading state:** `Loading blocked channels...`
 - **Empty state:** `No channels blocked yet`
-- **Save button:** `Save & Normalize Channels` (loading: `Normalizing & Saving...`)
-- **Helper text:** `Channel names will be normalized to match YouTube metadata. The page will refresh after saving.`
+- **Save button:** `Save & Normalise Channels` (loading: `Normalising & Saving...`)
+- **Helper text:** `Channel names will be normalised to match YouTube metadata. The page will refresh after saving.`
 
-**Success toast:** `Channels Saved` / `${changedCount} channel name(s) normalized and saved` OR `Channels saved (no normalization needed)`
+**Success toast:** `Channels Saved` / `${changedCount} channel name(s) normalised and saved` OR `Channels saved (no normalisation needed)`
 **Error toasts:**
 - `You must be logged in to block channels`
 - `Add at least one channel to block.`
@@ -475,7 +475,7 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 - **Options:**
   - `Gentle — "Still learning?"`
   - `Direct — "Check your goals"`
-  - `Firm — "Time's up"`
+  - `Firm — "Time's up, no more watching"`
 
 **Save button:** `Save All Controls` (loading: `Saving...`)
 
@@ -531,7 +531,7 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 #### Distraction Channels Section
 - **Label:** `Channels that usually derail you (optional)`
 - **Helper text:** `Enter channel names you waste time on. We'll monitor these closely. (Max 5)`
-- **Input placeholder:** `e.g., Ali Abdaal`
+- **Input placeholder:** `e.g., MrBeast`
 - **Button:** `Add Channel`
 - **Auto-block toggle (if channels added):**
   - Label: `Block these channels immediately`
@@ -562,34 +562,34 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 
 #### Billing Toggle
 - **Monthly:** `Monthly`
-- **Yearly:** `Yearly` + `Save 30%` badge
+- **Yearly:** `Yearly` + `Save 17%` badge
 
 #### Free Plan Card
 - **Title:** `Free`
-- **Description:** `Essential tools to get started`
+- **Description:** `Core tools to help you stay focused`
 - **Price:** `$0` / `forever`
 - **Features:**
   - `Block YouTube Shorts`
   - `Basic search filtering`
   - `Daily time limit (up to 60min)`
-  - `Basic usage statistics`
 - **Button:** `Get Started Free`
 
 #### Pro Plan Card
 - **Badge:** `Most Popular`
 - **Title:** `Pro`
-- **Description:** `Advanced features for serious learners`
+- **Description:** `Built for deep work and distraction recovery`
 - **Price:** `${pricing[billingPeriod].price}/month`
-  - Monthly: `$7`
-  - Yearly: `$5` + `Billed $60/year`
+  - Monthly: `$4.99`
+  - Yearly: `$4.20` + `Billed $50/year`
 - **Features:**
   - `Everything in Free, plus:`
-  - `AI-powered content filtering`
-  - `Unlimited daily time limits`
-  - `Advanced dashboard & insights`
-  - `Custom focus goals & tracking`
-  - `Distraction heatmaps`
-  - `Priority email support`
+  - `AI-powered video filtering`
+  - `Block specific distracting channels`
+  - `Spiral detection & distraction nudges`
+  - `Custom focus goals & session limits`
+  - `Full dashboard & analytics to stay ontop of your consumption`
+  - `Focus journal prompts`
+  - `Priority support & early access`
 - **Button:** `Start 14-Day Free Trial`
 - **Footnote:** `No credit card required`
 
@@ -601,22 +601,22 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 #### FAQ Section
 - **Title:** `Pricing FAQ`
 - **Q1:** `What happens after the free trial?`
-  - **A1:** `After 14 days, you'll automatically move to the Free plan. You can upgrade to Pro anytime. We never charge without your explicit consent.`
+  - **A1:** `After 14 days, you'll automatically move to the Free plan. You can upgrade to Pro anytime to keep using FocusTube features. We won't charge you automatically.`
 - **Q2:** `Can I switch between plans?`
   - **A2:** `Yes! Upgrade or downgrade anytime. If you downgrade, you'll keep Pro features until the end of your billing period.`
 - **Q3:** `Do you offer refunds?`
-  - **A3:** `Yes, we offer a 30-day money-back guarantee. If you're not satisfied, email us for a full refund.`
+  - **A3:** `Yes, we offer a 30-day money-back guarantee on annual plans.`
 - **Q4:** `Is there a student discount?`
-  - **A4:** `Yes! Students get 50% off Pro. Email us from your .edu address to verify and get your discount code.`
+  - **A4:** `Yes! Students get 25% off Lifetime Access. Email us from your .edu address to verify and get your discount code.`
 - **Q5:** `What payment methods do you accept?`
-  - **A5:** `We accept all major credit cards (Visa, Mastercard, Amex) via Stripe. All payments are secure and encrypted.`
+  - **A5:** `Stripe handles our payments — Visa, Mastercard, Amex. All payments are secure and encrypted.`
 - **Q6:** `Can I use one subscription on multiple devices?`
   - **A6:** `Yes! Your Pro subscription works across all your devices where you're signed in to Chrome.`
 
 #### Closing CTA
 - **Title:** `Still have questions?`
 - **Message:** `We're here to help. Reach out anytime.`
-- **Button:** `Contact Support` (links to `mailto:support@focustube.com`)
+- **Button:** `Contact Support` (links to `mailto:support@focustube.co.uk`)
 
 ---
 
@@ -644,7 +644,7 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 - **Step 2:**
   - Number: `2`
   - Title: `Set your goals`
-  - Description: `The extension will ask what you want to learn and what distracts you (takes 30 seconds)`
+  - Description: `The extension will ask what you want to get out of YouTube and what commonly distracts you (takes 30 seconds)`
 - **Step 3:**
   - Number: `3`
   - Title: `Start browsing YouTube`
@@ -653,8 +653,8 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 #### Post-Install Tips
 - **Title:** `After installing`
 - **Tip 1:** `Pin the extension: Click the puzzle icon in Chrome, find FocusTube, and click the pin icon`
-- **Tip 2:** `Create an account: Sign up to sync your settings and access the dashboard`
-- **Tip 3:** `Customize: Adjust settings anytime by clicking the extension icon`
+- **Tip 2:** `Create an account & start your trial: Sign up to sync your settings and access the dashboard + all Pro features`
+- **Tip 3:** `Customise: Adjust settings anytime by clicking the extension icon`
 
 #### Next Steps
 - **Text:** `Already installed the extension?`
@@ -664,7 +664,7 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 
 #### Support
 - **Text:** `Need help installing?`
-- **Link:** `Contact Support` (links to `mailto:support@focustube.com`)
+- **Link:** `Contact Support` (links to `mailto:support@focustube.co.uk`)
 
 ---
 
@@ -676,23 +676,23 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 
 #### Sections
 - **Data Collection:**
-  - Text: `FocusTube collects minimal data to provide you with the best experience. We track your YouTube usage patterns locally on your device and only send anonymized data to our servers for AI classification when you're on the Pro plan.`
+  - Text: `FocusTube collects only what's necessary to help you stay intentional on YouTube. Most data is processed locally. Anonymized data is sent only for Pro features like AI classification.`
 
 - **What We Collect:**
   - Bullets:
-    - `Video titles and search queries (for AI classification)`
-    - `Time spent watching videos (stored locally)`
-    - `User preferences and settings`
-    - `Email address (for account management)`
+    - `Video titles, channel names and search queries (for AI classification)`
+    - `Time spent watching videos`
+    - `Your usage preferences and settings`
+    - `Email address for login and support`
 
 - **How We Use Your Data:**
-  - Text: `Your data is used solely to improve your focus and productivity. We never sell your data to third parties. AI classification results are cached to reduce API calls and improve performance.`
+  - Text: `Your data powers features like nudges, spiral detection, and distraction tracking. It’s never sold, and never used for ads. Only anonymized usage patterns are shared to improve FocusTube.`
 
 - **Data Security:**
-  - Text: `We use industry-standard encryption and security practices to protect your data. All API communications are encrypted using HTTPS, and sensitive information is never stored in plain text.`
+  - Text: `All communication is encrypted using HTTPS. Sensitive data stays encrypted, and AI classification runs through secure, private channels. We use industry-standard protections across the stack.`
 
 - **Your Rights:**
-  - Text: `You have the right to access, modify, or delete your data at any time. Contact us at privacy@focustube.app for data requests.`
+  - Text: `You have the right to access, modify, or delete your data at any time. Contact us at support@focustube.co.uk for data requests.`
 
 #### Footer
 - **Text:** `Last updated: ${new Date().toLocaleDateString()}`
@@ -707,29 +707,29 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 
 #### Sections
 - **Acceptance of Terms:**
-  - Text: `By using FocusTube, you agree to these terms of service. If you do not agree with any part of these terms, please do not use our service.`
+  - Text: `By using FocusTube, you agree to the terms outlined below. If anything feels off, don't use the service until you're clear on your rights.`
 
 - **Service Description:**
-  - Text: `FocusTube is a Chrome extension designed to help users maintain focus while using YouTube. We provide tools to block distracting content, track usage, and classify videos using AI technology.`
+  - Text: `FocusTube is a browser extension for YouTube. It filters distractions, tracks focus, and gives nudges based on your behavior. Some features rely on AI classification.`
 
 - **User Responsibilities:**
   - Bullets:
     - `You must be at least 13 years old to use FocusTube`
-    - `You are responsible for maintaining the security of your account`
-    - `You agree not to misuse or abuse the service`
-    - `You will not attempt to reverse engineer or hack the extension`
+    - `Keep your account details safe and secure`
+    - `Don't tamper with or reverse engineer the app`
+    - `Use the product ethically, without abuse`
 
 - **Subscription and Payments:**
-  - Text: `Pro plan subscriptions are billed monthly or yearly. You can cancel at any time. Refunds are provided on a case-by-case basis within 14 days of purchase.`
+  - Text: `Pro plans are billed monthly or annually through Stripe. Cancel anytime. Refunds are available within 30 days on annual subscription if you're unsatisfied.`
 
 - **Limitation of Liability:**
-  - Text: `FocusTube is provided "as is" without warranties of any kind. We are not liable for any damages arising from the use or inability to use the service.`
+  - Text: `FocusTube is provided as-is. We’re not liable for indirect losses, missed productivity, or side effects of blocking content.`
 
 - **Changes to Terms:**
-  - Text: `We reserve the right to modify these terms at any time. Continued use of the service after changes constitutes acceptance of the new terms.`
+  - Text: `We may update these terms. Continued use means you accept the updates.`
 
 - **Contact:**
-  - Text: `For questions about these terms, contact us at legal@focustube.app`
+  - Text: `For questions about these terms, contact us at support@focustube.co.uk`
 
 #### Footer
 - **Text:** `Last updated: ${new Date().toLocaleDateString()}`
@@ -796,7 +796,7 @@ Complete copy reference for all frontend pages and extension popups. Edit this d
 
 #### Support Section
 - **Title:** `Support`
-- **Text:** `Questions? Email us at support@focustube.app`
+- **Text:** `Questions? Email us at support@focustube.co.uk`
 
 #### Copyright
 - **Text:** `© ${new Date().getFullYear()} FocusTube. All rights reserved.`

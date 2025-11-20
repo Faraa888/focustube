@@ -100,7 +100,7 @@ function renderTrialBanner(plan, daysLeft) {
   }
 
   if (trialBannerSubtitle) {
-    trialBannerSubtitle.textContent = "Keep AI filtering and insights by upgrading.";
+    trialBannerSubtitle.textContent = "Keep AI filtering, channel blocking and insights by upgrading.";
   }
 
   trialBanner.classList.remove("hidden");

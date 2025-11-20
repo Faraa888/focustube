@@ -276,6 +276,36 @@ app.post("/ai/classify", async (req, res) => {
       });
     }
 
+    // Fetch anti-goals from database for logging
+    let userAntiGoals: string[] = [];
+    if (user_id) {
+      try {
+        const { data: userData } = await supabase
+          .from("users")
+          .select("anti_goals")
+          .or(`id.eq.${user_id},email.eq.${user_id}`)
+          .single();
+        
+        if (userData?.anti_goals) {
+          userAntiGoals = typeof userData.anti_goals === "string"
+            ? JSON.parse(userData.anti_goals)
+            : (Array.isArray(userData.anti_goals) ? userData.anti_goals : []);
+        }
+      } catch (e) {
+        // Silently fail - anti-goals not critical for classification
+      }
+    }
+
+    // Enhanced logging for debugging in Render
+    console.log(`[AI Classify] 📋 INPUT:`, JSON.stringify({
+      title: video_title || text || "N/A",
+      channel: channel_name || "N/A",
+      user_goals: Array.isArray(user_goals) ? user_goals : (user_goals ? [user_goals] : []),
+      user_anti_goals: userAntiGoals.length > 0 ? userAntiGoals : "None set",
+      is_shorts: is_shorts || false,
+      context: context || "watch"
+    }, null, 2));
+
     // Phase 2: Server-side validation - extract video_id from URL and compare
     if (isVideoRequest && video_url && video_id) {
       try {
@@ -616,7 +646,18 @@ No extra commentary.`;
         const displayTitle = isVideoRequest ? video_title : (text || "unknown");
         const displayCategory = result.category_primary || result.category || "unknown";
         const displayDistraction = result.distraction_level || result.category || "neutral";
-        console.log(`[AI Classify] ✅ OpenAI response: ${displayTitle.substring(0, 50)}... → ${displayCategory} (${displayDistraction}, confidence: ${result.confidence_distraction || result.confidence})`);
+        
+        // Enhanced output logging for debugging in Render
+        console.log(`[AI Classify] ✅ OUTPUT:`, JSON.stringify({
+          title: displayTitle.substring(0, 80),
+          channel: channel_name || "N/A",
+          user_goals: Array.isArray(user_goals) ? user_goals : (user_goals ? [user_goals] : []),
+          user_anti_goals: userAntiGoals.length > 0 ? userAntiGoals : "None set",
+          classification: displayDistraction,
+          category: displayCategory,
+          confidence: result.confidence_distraction || result.confidence || 0.5,
+          reasons: Array.isArray(result.reasons) ? result.reasons : [result.reason || "N/A"]
+        }, null, 2));
       } catch (openaiError: any) {
         console.error("[AI Classify] ❌ OpenAI error:", openaiError.message || openaiError);
         // Fallback to failsafe from prompt config (already mapped above)

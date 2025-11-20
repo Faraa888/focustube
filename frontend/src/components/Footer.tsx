@@ -32,8 +32,8 @@ const Footer = () => {
             <h4 className="font-semibold mb-4">Support</h4>
             <p className="text-sm text-muted-foreground">
               Questions? Email us at<br />
-              <a href="mailto:support@focustube.app" className="text-primary hover:underline">
-                support@focustube.app
+              <a href="mailto:support@focustube.co.uk" className="text-primary hover:underline">
+                support@focustube.co.uk
               </a>
             </p>
           </div>

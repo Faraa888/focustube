@@ -1,0 +1,3182 @@
+[
+  {
+    "url": "https://www.youtube.com/watch?v=rfscVS0vtbw",
+    "video_id": "rfscVS0vtbw",
+    "title": "Learn Python - Full Course for Beginners [Tutorial]",
+    "channel": "freeCodeCamp.org",
+    "duration_seconds": 16012,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "productive",
+    "category": "programming",
+    "confidence": 1,
+    "reasons": [
+      "Directly teaches Python, aligning with study and learning goals.",
+      "Comprehensive course format supports focused learning."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=rfscVS0vtbw",
+    "video_id": "rfscVS0vtbw",
+    "title": "Learn Python - Full Course for Beginners [Tutorial]",
+    "channel": "freeCodeCamp.org",
+    "duration_seconds": 16012,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "productive",
+    "category": "programming",
+    "confidence": 0.9,
+    "reasons": [
+      "Directly teaches Python, relevant for backend concepts.",
+      "Full course format supports structured learning."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=rfscVS0vtbw",
+    "video_id": "rfscVS0vtbw",
+    "title": "Learn Python - Full Course for Beginners [Tutorial]",
+    "channel": "freeCodeCamp.org",
+    "duration_seconds": 16012,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "programming",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on Python programming, not user goals.",
+      "No alignment with strength training, nutrition, or mobility."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=rfscVS0vtbw",
+    "video_id": "rfscVS0vtbw",
+    "title": "Learn Python - Full Course for Beginners [Tutorial]",
+    "channel": "freeCodeCamp.org",
+    "duration_seconds": 16012,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "neutral",
+    "category": "programming",
+    "confidence": 0.8,
+    "reasons": [
+      "Content is a Python tutorial, not aligned with marketing or design goals.",
+      "Educational but not directly useful for user's stated objectives."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=rfscVS0vtbw",
+    "video_id": "rfscVS0vtbw",
+    "title": "Learn Python - Full Course for Beginners [Tutorial]",
+    "channel": "freeCodeCamp.org",
+    "duration_seconds": 16012,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "programming",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on Python programming, not user goals.",
+      "User goals are infant care and organization, not coding."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=rfscVS0vtbw",
+    "video_id": "rfscVS0vtbw",
+    "title": "Learn Python - Full Course for Beginners [Tutorial]",
+    "channel": "freeCodeCamp.org",
+    "duration_seconds": 16012,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "productive",
+    "category": "programming",
+    "confidence": 0.9,
+    "reasons": [
+      "Python course aligns with remote work improvement goals.",
+      "Not directly related to visa logistics or language learning."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=M4K0s792wAU",
+    "video_id": "M4K0s792wAU",
+    "title": "How To Build Muscle And Lose Fat At The Same Time: Step By Step Explained (Body Recomposition)",
+    "channel": "Jeff Nippard",
+    "duration_seconds": 649,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "productive",
+    "category": "fitness",
+    "confidence": 0.9,
+    "reasons": [
+      "Directly addresses body recomposition goals.",
+      "Educational content on nutrition and fitness."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=M4K0s792wAU",
+    "video_id": "M4K0s792wAU",
+    "title": "How To Build Muscle And Lose Fat At The Same Time: Step By Step Explained (Body Recomposition)",
+    "channel": "Jeff Nippard",
+    "duration_seconds": 649,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "fitness",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on fitness, not backend or music production.",
+      "Channel has no global tag, but video is off-user goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=M4K0s792wAU",
+    "video_id": "M4K0s792wAU",
+    "title": "How To Build Muscle And Lose Fat At The Same Time: Step By Step Explained (Body Recomposition)",
+    "channel": "Jeff Nippard",
+    "duration_seconds": 649,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "productive",
+    "category": "fitness",
+    "confidence": 0.9,
+    "reasons": [
+      "Directly addresses muscle building and fat loss goals.",
+      "Provides practical guidance on nutrition for strength training."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=M4K0s792wAU",
+    "video_id": "M4K0s792wAU",
+    "title": "How To Build Muscle And Lose Fat At The Same Time: Step By Step Explained (Body Recomposition)",
+    "channel": "Jeff Nippard",
+    "duration_seconds": 649,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "distracting",
+    "category": "fitness",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on fitness, not user goals.",
+      "No alignment with marketing, design, or video editing."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=M4K0s792wAU",
+    "video_id": "M4K0s792wAU",
+    "title": "How To Build Muscle And Lose Fat At The Same Time: Step By Step Explained (Body Recomposition)",
+    "channel": "Jeff Nippard",
+    "duration_seconds": 649,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "fitness",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on bodybuilding, not infant care or organization.",
+      "Video does not provide calming entertainment."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=M4K0s792wAU",
+    "video_id": "M4K0s792wAU",
+    "title": "How To Build Muscle And Lose Fat At The Same Time: Step By Step Explained (Body Recomposition)",
+    "channel": "Jeff Nippard",
+    "duration_seconds": 649,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "distracting",
+    "category": "fitness",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on fitness, not user goals.",
+      "No alignment with visa logistics or language learning."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=xsVTqzratPs",
+    "video_id": "xsVTqzratPs",
+    "title": "Complete SEO Course for Beginners: Learn to Rank #1 in Google",
+    "channel": "Ahrefs",
+    "duration_seconds": 7023,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "productive",
+    "category": "seo",
+    "confidence": 0.9,
+    "reasons": [
+      "Directly teaches SEO, aligning with user's goal to learn course material.",
+      "Content is educational and practical for studying."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=xsVTqzratPs",
+    "video_id": "xsVTqzratPs",
+    "title": "Complete SEO Course for Beginners: Learn to Rank #1 in Google",
+    "channel": "Ahrefs",
+    "duration_seconds": 7023,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "neutral",
+    "category": "seo",
+    "confidence": 0.8,
+    "reasons": [
+      "SEO training is practical but not directly related to backend concepts.",
+      "Content is educational but doesn't align with music production goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=xsVTqzratPs",
+    "video_id": "xsVTqzratPs",
+    "title": "Complete SEO Course for Beginners: Learn to Rank #1 in Google",
+    "channel": "Ahrefs",
+    "duration_seconds": 7023,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "neutral",
+    "category": "seo",
+    "confidence": 0.8,
+    "reasons": [
+      "SEO training is practical but not related to user goals.",
+      "Content is educational, but user goals focus on fitness and nutrition."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=xsVTqzratPs",
+    "video_id": "xsVTqzratPs",
+    "title": "Complete SEO Course for Beginners: Learn to Rank #1 in Google",
+    "channel": "Ahrefs",
+    "duration_seconds": 7023,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "productive",
+    "category": "seo",
+    "confidence": 0.9,
+    "reasons": [
+      "SEO training directly supports learning marketing.",
+      "Content is educational and goal-oriented."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=xsVTqzratPs",
+    "video_id": "xsVTqzratPs",
+    "title": "Complete SEO Course for Beginners: Learn to Rank #1 in Google",
+    "channel": "Ahrefs",
+    "duration_seconds": 7023,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "seo",
+    "confidence": 0.9,
+    "reasons": [
+      "SEO training does not align with infant care or household organization.",
+      "Content is educational but irrelevant to user's stated goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=xsVTqzratPs",
+    "video_id": "xsVTqzratPs",
+    "title": "Complete SEO Course for Beginners: Learn to Rank #1 in Google",
+    "channel": "Ahrefs",
+    "duration_seconds": 7023,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "neutral",
+    "category": "seo",
+    "confidence": 0.8,
+    "reasons": [
+      "SEO knowledge can aid remote work but isn't a direct goal.",
+      "Content is educational but not focused on user goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=bhQnooudZcs",
+    "video_id": "bhQnooudZcs",
+    "title": "1 Hour of Real Spanish Conversation (Native Speakers)",
+    "channel": "My Daily Spanish",
+    "duration_seconds": 4109,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "productive",
+    "category": "language learning",
+    "confidence": 0.9,
+    "reasons": [
+      "Focuses on real Spanish conversation for language practice.",
+      "Supports user goal of studying and learning course material."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=bhQnooudZcs",
+    "video_id": "bhQnooudZcs",
+    "title": "1 Hour of Real Spanish Conversation (Native Speakers)",
+    "channel": "My Daily Spanish",
+    "duration_seconds": 4109,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "language learning",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on Spanish conversation, not backend or music production.",
+      "Does not align with user's stated goals of learning backend concepts."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=bhQnooudZcs",
+    "video_id": "bhQnooudZcs",
+    "title": "1 Hour of Real Spanish Conversation (Native Speakers)",
+    "channel": "My Daily Spanish",
+    "duration_seconds": 4109,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "language learning",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on Spanish conversation, not user goals.",
+      "No relevance to strength training or nutrition."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=bhQnooudZcs",
+    "video_id": "bhQnooudZcs",
+    "title": "1 Hour of Real Spanish Conversation (Native Speakers)",
+    "channel": "My Daily Spanish",
+    "duration_seconds": 4109,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "distracting",
+    "category": "language learning",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on Spanish conversation, not user goals.",
+      "User aims to learn marketing and design, not languages."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=bhQnooudZcs",
+    "video_id": "bhQnooudZcs",
+    "title": "1 Hour of Real Spanish Conversation (Native Speakers)",
+    "channel": "My Daily Spanish",
+    "duration_seconds": 4109,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "neutral",
+    "category": "language learning",
+    "confidence": 0.8,
+    "reasons": [
+      "Spanish conversation practice is educational but not directly related to user goals.",
+      "Content is practical but does not assist with infant care or household organization."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=bhQnooudZcs",
+    "video_id": "bhQnooudZcs",
+    "title": "1 Hour of Real Spanish Conversation (Native Speakers)",
+    "channel": "My Daily Spanish",
+    "duration_seconds": 4109,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "productive",
+    "category": "language learning",
+    "confidence": 0.9,
+    "reasons": [
+      "Focuses on real Spanish conversation for language practice.",
+      "Supports user's goal of improving language skills."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=Jwu8f42rLuI",
+    "video_id": "Jwu8f42rLuI",
+    "title": "How to Start Improving Bad Knees Right Now",
+    "channel": "The Kneesovertoesguy",
+    "duration_seconds": 751,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "productive",
+    "category": "fitness",
+    "confidence": 0.9,
+    "reasons": [
+      "Video provides guidance on improving knee health.",
+      "Directly supports user goal of learning and studying."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=Jwu8f42rLuI",
+    "video_id": "Jwu8f42rLuI",
+    "title": "How to Start Improving Bad Knees Right Now",
+    "channel": "The Kneesovertoesguy",
+    "duration_seconds": 751,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "fitness",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on knee improvement, not user goals.",
+      "No educational value related to backend or music production."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=Jwu8f42rLuI",
+    "video_id": "Jwu8f42rLuI",
+    "title": "How to Start Improving Bad Knees Right Now",
+    "channel": "The Kneesovertoesguy",
+    "duration_seconds": 751,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "productive",
+    "category": "fitness",
+    "confidence": 0.9,
+    "reasons": [
+      "Focuses on improving knee health, relevant to injury prevention.",
+      "Content supports mobility work, aligning with user goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=Jwu8f42rLuI",
+    "video_id": "Jwu8f42rLuI",
+    "title": "How to Start Improving Bad Knees Right Now",
+    "channel": "The Kneesovertoesguy",
+    "duration_seconds": 751,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "distracting",
+    "category": "fitness",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on knee improvement, not user goals.",
+      "No marketing, design, or video editing relevance."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=Jwu8f42rLuI",
+    "video_id": "Jwu8f42rLuI",
+    "title": "How to Start Improving Bad Knees Right Now",
+    "channel": "The Kneesovertoesguy",
+    "duration_seconds": 751,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "neutral",
+    "category": "fitness",
+    "confidence": 0.8,
+    "reasons": [
+      "Content is about improving knee health, which is practical.",
+      "Does not directly relate to infant care or household organization."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=Jwu8f42rLuI",
+    "video_id": "Jwu8f42rLuI",
+    "title": "How to Start Improving Bad Knees Right Now",
+    "channel": "The Kneesovertoesguy",
+    "duration_seconds": 751,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "neutral",
+    "category": "fitness",
+    "confidence": 0.8,
+    "reasons": [
+      "Content is practical for knee improvement, not user goals.",
+      "No clear link to visa logistics, language, or remote work."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=eBq5QcCfXYQ",
+    "video_id": "eBq5QcCfXYQ",
+    "title": "Virat Kohli intentionally bumps into 19-year-old Sam Konstas during his debut, a breakdown",
+    "channel": "Jomboy Media",
+    "duration_seconds": 580,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "distracting",
+    "category": "sports",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on sports entertainment, not user goals.",
+      "Video does not provide educational or practical value."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=eBq5QcCfXYQ",
+    "video_id": "eBq5QcCfXYQ",
+    "title": "Virat Kohli intentionally bumps into 19-year-old Sam Konstas during his debut, a breakdown",
+    "channel": "Jomboy Media",
+    "duration_seconds": 580,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "sports",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on sports entertainment, not user goals.",
+      "No educational or practical value for backend or music production."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=eBq5QcCfXYQ",
+    "video_id": "eBq5QcCfXYQ",
+    "title": "Virat Kohli intentionally bumps into 19-year-old Sam Konstas during his debut, a breakdown",
+    "channel": "Jomboy Media",
+    "duration_seconds": 580,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "sports",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on sports entertainment, not user goals.",
+      "Video does not provide practical information for fitness or nutrition."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=eBq5QcCfXYQ",
+    "video_id": "eBq5QcCfXYQ",
+    "title": "Virat Kohli intentionally bumps into 19-year-old Sam Konstas during his debut, a breakdown",
+    "channel": "Jomboy Media",
+    "duration_seconds": 580,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "distracting",
+    "category": "sports",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on sports entertainment, not user goals.",
+      "No educational or practical value related to marketing or design."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=eBq5QcCfXYQ",
+    "video_id": "eBq5QcCfXYQ",
+    "title": "Virat Kohli intentionally bumps into 19-year-old Sam Konstas during his debut, a breakdown",
+    "channel": "Jomboy Media",
+    "duration_seconds": 580,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "sports",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on sports entertainment and analysis.",
+      "User goals are related to infant care and organization."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=eBq5QcCfXYQ",
+    "video_id": "eBq5QcCfXYQ",
+    "title": "Virat Kohli intentionally bumps into 19-year-old Sam Konstas during his debut, a breakdown",
+    "channel": "Jomboy Media",
+    "duration_seconds": 580,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "distracting",
+    "category": "sports",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on sports entertainment, not user goals.",
+      "No educational or practical value for visa or work improvement."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=n4JcdCKmKL0",
+    "video_id": "n4JcdCKmKL0",
+    "title": "Hikaru facing CHEATERS for 25 minutes",
+    "channel": "JarredChess",
+    "duration_seconds": 1481,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "distracting",
+    "category": "chess",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on chess entertainment, not user goals.",
+      "No educational or practical value for studying or cooking."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=n4JcdCKmKL0",
+    "video_id": "n4JcdCKmKL0",
+    "title": "Hikaru facing CHEATERS for 25 minutes",
+    "channel": "JarredChess",
+    "duration_seconds": 1481,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "chess",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on chess, not user goals.",
+      "Video is likely entertainment rather than educational."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=n4JcdCKmKL0",
+    "video_id": "n4JcdCKmKL0",
+    "title": "Hikaru facing CHEATERS for 25 minutes",
+    "channel": "JarredChess",
+    "duration_seconds": 1481,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "chess",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on chess, not user goals.",
+      "Video is likely entertainment about cheaters."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=n4JcdCKmKL0",
+    "video_id": "n4JcdCKmKL0",
+    "title": "Hikaru facing CHEATERS for 25 minutes",
+    "channel": "JarredChess",
+    "duration_seconds": 1481,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "distracting",
+    "category": "chess",
+    "confidence": 0.9,
+    "reasons": [
+      "Content is focused on chess entertainment, not user goals.",
+      "Video features cheaters, which is off-topic for marketing/design."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=n4JcdCKmKL0",
+    "video_id": "n4JcdCKmKL0",
+    "title": "Hikaru facing CHEATERS for 25 minutes",
+    "channel": "JarredChess",
+    "duration_seconds": 1481,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "chess",
+    "confidence": 0.9,
+    "reasons": [
+      "Content is focused on chess entertainment, not user goals.",
+      "Title suggests a lengthy engagement with cheaters, likely distracting."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=n4JcdCKmKL0",
+    "video_id": "n4JcdCKmKL0",
+    "title": "Hikaru facing CHEATERS for 25 minutes",
+    "channel": "JarredChess",
+    "duration_seconds": 1481,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "distracting",
+    "category": "chess",
+    "confidence": 0.9,
+    "reasons": [
+      "Content is focused on chess entertainment, not user goals.",
+      "No educational or practical value for visa or work improvement."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=YEGGNAk7QZM",
+    "video_id": "YEGGNAk7QZM",
+    "title": "FOOTBALL CHALLENGE vs THE SIDEMEN!",
+    "channel": "Miniminter",
+    "duration_seconds": 1187,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "distracting",
+    "category": "sports",
+    "confidence": 0.9,
+    "reasons": [
+      "Content is entertainment-focused and not educational.",
+      "Does not support studying or learning goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=YEGGNAk7QZM",
+    "video_id": "YEGGNAk7QZM",
+    "title": "FOOTBALL CHALLENGE vs THE SIDEMEN!",
+    "channel": "Miniminter",
+    "duration_seconds": 1187,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "sports",
+    "confidence": 0.9,
+    "reasons": [
+      "Content is focused on a football challenge, not user goals.",
+      "Channel is likely entertainment-focused, aligning with distractions."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=YEGGNAk7QZM",
+    "video_id": "YEGGNAk7QZM",
+    "title": "FOOTBALL CHALLENGE vs THE SIDEMEN!",
+    "channel": "Miniminter",
+    "duration_seconds": 1187,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "sports",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on entertainment and challenges.",
+      "Does not support strength training or nutrition goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=YEGGNAk7QZM",
+    "video_id": "YEGGNAk7QZM",
+    "title": "FOOTBALL CHALLENGE vs THE SIDEMEN!",
+    "channel": "Miniminter",
+    "duration_seconds": 1187,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "distracting",
+    "category": "sports",
+    "confidence": 0.9,
+    "reasons": [
+      "Content is focused on entertainment and challenges.",
+      "Does not relate to learning marketing or design skills."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=YEGGNAk7QZM",
+    "video_id": "YEGGNAk7QZM",
+    "title": "FOOTBALL CHALLENGE vs THE SIDEMEN!",
+    "channel": "Miniminter",
+    "duration_seconds": 1187,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "sports",
+    "confidence": 0.9,
+    "reasons": [
+      "Content is focused on a football challenge, not user goals.",
+      "Channel typically produces entertainment, not practical advice."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=YEGGNAk7QZM",
+    "video_id": "YEGGNAk7QZM",
+    "title": "FOOTBALL CHALLENGE vs THE SIDEMEN!",
+    "channel": "Miniminter",
+    "duration_seconds": 1187,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "distracting",
+    "category": "sports",
+    "confidence": 0.9,
+    "reasons": [
+      "Content is focused on a football challenge, not user goals.",
+      "Channel is likely entertainment-focused with no educational value."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=xWHOsHQ0BnQ",
+    "video_id": "xWHOsHQ0BnQ",
+    "title": "I Tried Youtubers Favourite Restaurants!",
+    "channel": "Calfreezy",
+    "duration_seconds": 1400,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "distracting",
+    "category": "entertainment",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on food challenges, not study or cooking skills.",
+      "Channel is primarily entertainment, not educational."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=xWHOsHQ0BnQ",
+    "video_id": "xWHOsHQ0BnQ",
+    "title": "I Tried Youtubers Favourite Restaurants!",
+    "channel": "Calfreezy",
+    "duration_seconds": 1400,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "entertainment",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on trying restaurants, not user goals.",
+      "Channel is primarily entertainment-based."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=xWHOsHQ0BnQ",
+    "video_id": "xWHOsHQ0BnQ",
+    "title": "I Tried Youtubers Favourite Restaurants!",
+    "channel": "Calfreezy",
+    "duration_seconds": 1400,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "entertainment",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on restaurant challenges, not user goals.",
+      "Channel is primarily entertainment-based with no educational value."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=xWHOsHQ0BnQ",
+    "video_id": "xWHOsHQ0BnQ",
+    "title": "I Tried Youtubers Favourite Restaurants!",
+    "channel": "Calfreezy",
+    "duration_seconds": 1400,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "distracting",
+    "category": "entertainment",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on trying restaurants, not user goals.",
+      "Channel is primarily entertainment-based."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=xWHOsHQ0BnQ",
+    "video_id": "xWHOsHQ0BnQ",
+    "title": "I Tried Youtubers Favourite Restaurants!",
+    "channel": "Calfreezy",
+    "duration_seconds": 1400,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "entertainment",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on restaurant challenges, not user goals.",
+      "Channel's theme is entertainment, not productivity."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=xWHOsHQ0BnQ",
+    "video_id": "xWHOsHQ0BnQ",
+    "title": "I Tried Youtubers Favourite Restaurants!",
+    "channel": "Calfreezy",
+    "duration_seconds": 1400,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "distracting",
+    "category": "entertainment",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on restaurant challenges, not user goals.",
+      "Channel is primarily entertainment-based with no educational value."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=vGjgAUqmqws",
+    "video_id": "vGjgAUqmqws",
+    "title": "Pranking Streamers As A DIAMOND (I'm actually SSL)",
+    "channel": "Flitz RL",
+    "duration_seconds": 1208,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "distracting",
+    "category": "gaming",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on pranking streamers, not educational.",
+      "Does not align with goals of studying or cooking."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=vGjgAUqmqws",
+    "video_id": "vGjgAUqmqws",
+    "title": "Pranking Streamers As A DIAMOND (I'm actually SSL)",
+    "channel": "Flitz RL",
+    "duration_seconds": 1208,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "gaming",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on pranks and gaming, not user goals.",
+      "Entertainment-based video does not support learning or practice."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=vGjgAUqmqws",
+    "video_id": "vGjgAUqmqws",
+    "title": "Pranking Streamers As A DIAMOND (I'm actually SSL)",
+    "channel": "Flitz RL",
+    "duration_seconds": 1208,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "gaming",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focused on gaming pranks, not user goals.",
+      "Entertainment-based video, likely a time-sink."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=vGjgAUqmqws",
+    "video_id": "vGjgAUqmqws",
+    "title": "Pranking Streamers As A DIAMOND (I'm actually SSL)",
+    "channel": "Flitz RL",
+    "duration_seconds": 1208,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "distracting",
+    "category": "gaming",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on pranks and entertainment.",
+      "Does not align with learning marketing or design skills."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=vGjgAUqmqws",
+    "video_id": "vGjgAUqmqws",
+    "title": "Pranking Streamers As A DIAMOND (I'm actually SSL)",
+    "channel": "Flitz RL",
+    "duration_seconds": 1208,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "gaming",
+    "confidence": 0.9,
+    "reasons": [
+      "Content is focused on gaming pranks, not user goals.",
+      "Entertainment value does not align with infant care or organization."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=vGjgAUqmqws",
+    "video_id": "vGjgAUqmqws",
+    "title": "Pranking Streamers As A DIAMOND (I'm actually SSL)",
+    "channel": "Flitz RL",
+    "duration_seconds": 1208,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "distracting",
+    "category": "gaming",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on gaming pranks, not user goals.",
+      "Entertainment-based video, likely a time-sink."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=MAZRqzcZRKo",
+    "video_id": "MAZRqzcZRKo",
+    "title": "Planned Obsolescence and the Death of Great Products",
+    "channel": "CaseyNeistat",
+    "duration_seconds": 717,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "neutral",
+    "category": "news",
+    "confidence": 0.7,
+    "reasons": [
+      "Discusses product obsolescence, which is informative.",
+      "Not directly related to studying or cooking goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=MAZRqzcZRKo",
+    "video_id": "MAZRqzcZRKo",
+    "title": "Planned Obsolescence and the Death of Great Products",
+    "channel": "CaseyNeistat",
+    "duration_seconds": 717,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "entertainment",
+    "confidence": 0.8,
+    "reasons": [
+      "Topic on planned obsolescence doesn't match user goals.",
+      "Channel is known for entertainment content."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=MAZRqzcZRKo",
+    "video_id": "MAZRqzcZRKo",
+    "title": "Planned Obsolescence and the Death of Great Products",
+    "channel": "CaseyNeistat",
+    "duration_seconds": 717,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "entertainment",
+    "confidence": 0.9,
+    "reasons": [
+      "Topic on planned obsolescence doesn't align with fitness goals.",
+      "Channel known for entertainment content, not educational."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=MAZRqzcZRKo",
+    "video_id": "MAZRqzcZRKo",
+    "title": "Planned Obsolescence and the Death of Great Products",
+    "channel": "CaseyNeistat",
+    "duration_seconds": 717,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "neutral",
+    "category": "marketing",
+    "confidence": 0.8,
+    "reasons": [
+      "Discusses product design and marketing concepts.",
+      "Not directly focused on user goals like editing videos."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=MAZRqzcZRKo",
+    "video_id": "MAZRqzcZRKo",
+    "title": "Planned Obsolescence and the Death of Great Products",
+    "channel": "CaseyNeistat",
+    "duration_seconds": 717,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "entertainment",
+    "confidence": 0.8,
+    "reasons": [
+      "Content focuses on product obsolescence, not infant care or organization.",
+      "Channel is known for entertainment, not practical advice."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=MAZRqzcZRKo",
+    "video_id": "MAZRqzcZRKo",
+    "title": "Planned Obsolescence and the Death of Great Products",
+    "channel": "CaseyNeistat",
+    "duration_seconds": 717,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "neutral",
+    "category": "news",
+    "confidence": 0.7,
+    "reasons": [
+      "Discusses product lifecycle, not directly related to user goals.",
+      "Content is practical but doesn't aid in logistics or work improvement."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=OsN_MJopMxc",
+    "video_id": "OsN_MJopMxc",
+    "title": "How I Built A $1.4 Million/Month AI App At Age 18",
+    "channel": "CNBC Make It",
+    "duration_seconds": 556,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "neutral",
+    "category": "entrepreneurship",
+    "confidence": 0.8,
+    "reasons": [
+      "Content about building a successful app is informative.",
+      "Doesn't directly support studying or cooking goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=OsN_MJopMxc",
+    "video_id": "OsN_MJopMxc",
+    "title": "How I Built A $1.4 Million/Month AI App At Age 18",
+    "channel": "CNBC Make It",
+    "duration_seconds": 556,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "neutral",
+    "category": "entrepreneurship",
+    "confidence": 0.8,
+    "reasons": [
+      "Content about building a successful app is educational.",
+      "Does not directly address backend, tooling, or music production."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=OsN_MJopMxc",
+    "video_id": "OsN_MJopMxc",
+    "title": "How I Built A $1.4 Million/Month AI App At Age 18",
+    "channel": "CNBC Make It",
+    "duration_seconds": 556,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "entrepreneurship",
+    "confidence": 0.8,
+    "reasons": [
+      "Focuses on business success, not fitness or nutrition.",
+      "Content is more about personal achievement than user goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=OsN_MJopMxc",
+    "video_id": "OsN_MJopMxc",
+    "title": "How I Built A $1.4 Million/Month AI App At Age 18",
+    "channel": "CNBC Make It",
+    "duration_seconds": 556,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "neutral",
+    "category": "entrepreneurship",
+    "confidence": 0.8,
+    "reasons": [
+      "Insights on building a business may help with marketing.",
+      "Content is more about personal success than user goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=OsN_MJopMxc",
+    "video_id": "OsN_MJopMxc",
+    "title": "How I Built A $1.4 Million/Month AI App At Age 18",
+    "channel": "CNBC Make It",
+    "duration_seconds": 556,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "entrepreneurship",
+    "confidence": 0.8,
+    "reasons": [
+      "Content focuses on business success, not user goals.",
+      "No practical application for infant care or organization."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=OsN_MJopMxc",
+    "video_id": "OsN_MJopMxc",
+    "title": "How I Built A $1.4 Million/Month AI App At Age 18",
+    "channel": "CNBC Make It",
+    "duration_seconds": 556,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "neutral",
+    "category": "entrepreneurship",
+    "confidence": 0.8,
+    "reasons": [
+      "Focuses on business success, not user goals.",
+      "Offers insights but not directly useful for visa or language learning."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=y8cE5skIvok",
+    "video_id": "y8cE5skIvok",
+    "title": "I did Duolingo for 2000 days. Can I speak Spanish?",
+    "channel": "Evan Edinger",
+    "duration_seconds": 1452,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "neutral",
+    "category": "language learning",
+    "confidence": 0.8,
+    "reasons": [
+      "Content is educational about learning Spanish.",
+      "Not directly focused on user's specific study goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=y8cE5skIvok",
+    "video_id": "y8cE5skIvok",
+    "title": "I did Duolingo for 2000 days. Can I speak Spanish?",
+    "channel": "Evan Edinger",
+    "duration_seconds": 1452,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "language learning",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on language learning, not backend or music production.",
+      "Vlog style suggests entertainment rather than practical learning."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=y8cE5skIvok",
+    "video_id": "y8cE5skIvok",
+    "title": "I did Duolingo for 2000 days. Can I speak Spanish?",
+    "channel": "Evan Edinger",
+    "duration_seconds": 1452,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "language learning",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on language learning, not user goals.",
+      "Vlog format suggests entertainment rather than productivity."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=y8cE5skIvok",
+    "video_id": "y8cE5skIvok",
+    "title": "I did Duolingo for 2000 days. Can I speak Spanish?",
+    "channel": "Evan Edinger",
+    "duration_seconds": 1452,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "distracting",
+    "category": "language learning",
+    "confidence": 0.85,
+    "reasons": [
+      "Content focuses on personal language journey, not user goals.",
+      "Vlog style suggests entertainment rather than productivity."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=y8cE5skIvok",
+    "video_id": "y8cE5skIvok",
+    "title": "I did Duolingo for 2000 days. Can I speak Spanish?",
+    "channel": "Evan Edinger",
+    "duration_seconds": 1452,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "language learning",
+    "confidence": 0.8,
+    "reasons": [
+      "Content focuses on personal experience, not infant care or organization.",
+      "Vlog style does not align with calming entertainment goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=y8cE5skIvok",
+    "video_id": "y8cE5skIvok",
+    "title": "I did Duolingo for 2000 days. Can I speak Spanish?",
+    "channel": "Evan Edinger",
+    "duration_seconds": 1452,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "productive",
+    "category": "language learning",
+    "confidence": 0.9,
+    "reasons": [
+      "Focuses on learning Spanish, matching user language goals.",
+      "Provides insights on Duolingo, useful for language improvement."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=YHhAsSoP04c",
+    "video_id": "YHhAsSoP04c",
+    "title": "How to Replace and Install a Toilet",
+    "channel": "Lowe's Home Improvement",
+    "duration_seconds": 298,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "productive",
+    "category": "diy",
+    "confidence": 0.9,
+    "reasons": [
+      "Video provides practical instructions for a home improvement task.",
+      "Aligns with user goal of learning and practical skills."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=YHhAsSoP04c",
+    "video_id": "YHhAsSoP04c",
+    "title": "How to Replace and Install a Toilet",
+    "channel": "Lowe's Home Improvement",
+    "duration_seconds": 298,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "diy",
+    "confidence": 0.9,
+    "reasons": [
+      "Content is focused on toilet installation, not backend concepts or music production.",
+      "User goals do not align with DIY home improvement topics."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=YHhAsSoP04c",
+    "video_id": "YHhAsSoP04c",
+    "title": "How to Replace and Install a Toilet",
+    "channel": "Lowe's Home Improvement",
+    "duration_seconds": 298,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "neutral",
+    "category": "diy",
+    "confidence": 0.8,
+    "reasons": [
+      "Video provides practical DIY knowledge for toilet installation.",
+      "Content does not align with fitness or nutrition goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=YHhAsSoP04c",
+    "video_id": "YHhAsSoP04c",
+    "title": "How to Replace and Install a Toilet",
+    "channel": "Lowe's Home Improvement",
+    "duration_seconds": 298,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "neutral",
+    "category": "diy",
+    "confidence": 0.8,
+    "reasons": [
+      "Video is about toilet installation, not user goals.",
+      "Content is practical but does not align with marketing or design."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=YHhAsSoP04c",
+    "video_id": "YHhAsSoP04c",
+    "title": "How to Replace and Install a Toilet",
+    "channel": "Lowe's Home Improvement",
+    "duration_seconds": 298,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "neutral",
+    "category": "diy",
+    "confidence": 0.8,
+    "reasons": [
+      "Video provides practical DIY knowledge for household tasks.",
+      "Not directly related to infant care or calming entertainment."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=YHhAsSoP04c",
+    "video_id": "YHhAsSoP04c",
+    "title": "How to Replace and Install a Toilet",
+    "channel": "Lowe's Home Improvement",
+    "duration_seconds": 298,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "neutral",
+    "category": "diy",
+    "confidence": 0.8,
+    "reasons": [
+      "Video provides practical DIY instructions.",
+      "Content does not align with user's goals of visa logistics or language learning."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=8nci43AtZBI",
+    "video_id": "8nci43AtZBI",
+    "title": "iPhone 17 Pro Max 2 Months Later - If only you Knew...",
+    "channel": "ASBYT",
+    "duration_seconds": 1525,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "distracting",
+    "category": "technology",
+    "confidence": 0.85,
+    "reasons": [
+      "Review content doesn't support studying or cooking goals.",
+      "FocusTube user goals are not met by tech reviews."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=8nci43AtZBI",
+    "video_id": "8nci43AtZBI",
+    "title": "iPhone 17 Pro Max 2 Months Later - If only you Knew...",
+    "channel": "ASBYT",
+    "duration_seconds": 1525,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "technology",
+    "confidence": 0.9,
+    "reasons": [
+      "Focus is on iPhone review, not backend or music production.",
+      "Content is primarily entertainment, not educational."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=8nci43AtZBI",
+    "video_id": "8nci43AtZBI",
+    "title": "iPhone 17 Pro Max 2 Months Later - If only you Knew...",
+    "channel": "ASBYT",
+    "duration_seconds": 1525,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "technology",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on iPhone review, not user goals.",
+      "Tech reviews typically do not aid in fitness or nutrition."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=8nci43AtZBI",
+    "video_id": "8nci43AtZBI",
+    "title": "iPhone 17 Pro Max 2 Months Later - If only you Knew...",
+    "channel": "ASBYT",
+    "duration_seconds": 1525,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "neutral",
+    "category": "technology",
+    "confidence": 0.7,
+    "reasons": [
+      "Tech review content is practical but not directly aligned with user goals.",
+      "Focus is on product features, not on marketing or design skills."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=8nci43AtZBI",
+    "video_id": "8nci43AtZBI",
+    "title": "iPhone 17 Pro Max 2 Months Later - If only you Knew...",
+    "channel": "ASBYT",
+    "duration_seconds": 1525,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "technology",
+    "confidence": 0.9,
+    "reasons": [
+      "Video focuses on iPhone review, not on user goals.",
+      "Content is entertainment rather than practical for infant care."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=8nci43AtZBI",
+    "video_id": "8nci43AtZBI",
+    "title": "iPhone 17 Pro Max 2 Months Later - If only you Knew...",
+    "channel": "ASBYT",
+    "duration_seconds": 1525,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "distracting",
+    "category": "technology",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on iPhone review, not user goals.",
+      "Tech reviews typically serve entertainment, not productivity."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=i_36dg1t0e4",
+    "video_id": "i_36dg1t0e4",
+    "title": "These 3 AI Businesses Will Make You $373/Day (With Zero Employees)",
+    "channel": "Iman Gadzhi",
+    "duration_seconds": 1414,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "productive",
+    "category": "business",
+    "confidence": 0.8,
+    "reasons": [
+      "Video discusses making money online, which may interest user.",
+      "Content is practical but not directly related to studying or cooking."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=i_36dg1t0e4",
+    "video_id": "i_36dg1t0e4",
+    "title": "These 3 AI Businesses Will Make You $373/Day (With Zero Employees)",
+    "channel": "Iman Gadzhi",
+    "duration_seconds": 1414,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "business",
+    "confidence": 0.8,
+    "reasons": [
+      "Content focuses on making money online, not backend or music production.",
+      "Channel's theme is more about business tips than user goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=i_36dg1t0e4",
+    "video_id": "i_36dg1t0e4",
+    "title": "These 3 AI Businesses Will Make You $373/Day (With Zero Employees)",
+    "channel": "Iman Gadzhi",
+    "duration_seconds": 1414,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "business",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on making money online, not fitness or nutrition.",
+      "User goals are unrelated to business or financial advice."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=i_36dg1t0e4",
+    "video_id": "i_36dg1t0e4",
+    "title": "These 3 AI Businesses Will Make You $373/Day (With Zero Employees)",
+    "channel": "Iman Gadzhi",
+    "duration_seconds": 1414,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "productive",
+    "category": "business",
+    "confidence": 0.9,
+    "reasons": [
+      "Focuses on making money online, relevant to user goals.",
+      "Offers business tips, aligning with marketing learning."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=i_36dg1t0e4",
+    "video_id": "i_36dg1t0e4",
+    "title": "These 3 AI Businesses Will Make You $373/Day (With Zero Employees)",
+    "channel": "Iman Gadzhi",
+    "duration_seconds": 1414,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "business",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on making money, not infant care or organization.",
+      "Channel is not aligned with calming entertainment goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=i_36dg1t0e4",
+    "video_id": "i_36dg1t0e4",
+    "title": "These 3 AI Businesses Will Make You $373/Day (With Zero Employees)",
+    "channel": "Iman Gadzhi",
+    "duration_seconds": 1414,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "productive",
+    "category": "business",
+    "confidence": 0.8,
+    "reasons": [
+      "Focuses on making money online, which can aid remote work.",
+      "Not directly related to visa logistics or language learning."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=ifFF2-0EPxM",
+    "video_id": "ifFF2-0EPxM",
+    "title": "Training W/ Real Life Vampire (Anti-aging)",
+    "channel": "Jesse James West",
+    "duration_seconds": 918,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "distracting",
+    "category": "fitness",
+    "confidence": 0.8,
+    "reasons": [
+      "Content focuses on anti-aging, not user study or cooking goals.",
+      "Promotional elements suggest a focus on products, not education."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=ifFF2-0EPxM",
+    "video_id": "ifFF2-0EPxM",
+    "title": "Training W/ Real Life Vampire (Anti-aging)",
+    "channel": "Jesse James West",
+    "duration_seconds": 918,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "fitness",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on anti-aging and fitness, not user goals.",
+      "Promotional elements suggest a focus on products rather than education."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=ifFF2-0EPxM",
+    "video_id": "ifFF2-0EPxM",
+    "title": "Training W/ Real Life Vampire (Anti-aging)",
+    "channel": "Jesse James West",
+    "duration_seconds": 918,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "neutral",
+    "category": "fitness",
+    "confidence": 0.7,
+    "reasons": [
+      "Content is related to health and anti-aging, but not directly about strength training.",
+      "Focus on supplements may not align with user goals of nutrition basics."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=ifFF2-0EPxM",
+    "video_id": "ifFF2-0EPxM",
+    "title": "Training W/ Real Life Vampire (Anti-aging)",
+    "channel": "Jesse James West",
+    "duration_seconds": 918,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "distracting",
+    "category": "fitness",
+    "confidence": 0.8,
+    "reasons": [
+      "Content focuses on anti-aging, not user goals.",
+      "Includes promotional material, not educational."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=ifFF2-0EPxM",
+    "video_id": "ifFF2-0EPxM",
+    "title": "Training W/ Real Life Vampire (Anti-aging)",
+    "channel": "Jesse James West",
+    "duration_seconds": 918,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "fitness",
+    "confidence": 0.8,
+    "reasons": [
+      "Content focuses on anti-aging fitness, not infant care or organization.",
+      "Promotional elements detract from practical value for user goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=ifFF2-0EPxM",
+    "video_id": "ifFF2-0EPxM",
+    "title": "Training W/ Real Life Vampire (Anti-aging)",
+    "channel": "Jesse James West",
+    "duration_seconds": 918,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "distracting",
+    "category": "fitness",
+    "confidence": 0.8,
+    "reasons": [
+      "Content focuses on anti-aging, not user goals.",
+      "No practical application for visa, language, or work."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=Gqi5VZxS7CE",
+    "video_id": "Gqi5VZxS7CE",
+    "title": "4 Visa Categories which can get you UK PR | New Immigration Changes in UK",
+    "channel": "Student Help UK",
+    "duration_seconds": 638,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "productive",
+    "category": "immigration",
+    "confidence": 0.9,
+    "reasons": [
+      "Covers UK visa options relevant for studying abroad.",
+      "Directly supports user's goal of staying informed on immigration."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=Gqi5VZxS7CE",
+    "video_id": "Gqi5VZxS7CE",
+    "title": "4 Visa Categories which can get you UK PR | New Immigration Changes in UK",
+    "channel": "Student Help UK",
+    "duration_seconds": 638,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "neutral",
+    "category": "immigration",
+    "confidence": 0.8,
+    "reasons": [
+      "Content is practical but not related to user goals.",
+      "Focus is on UK immigration, not backend or music production."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=Gqi5VZxS7CE",
+    "video_id": "Gqi5VZxS7CE",
+    "title": "4 Visa Categories which can get you UK PR | New Immigration Changes in UK",
+    "channel": "Student Help UK",
+    "duration_seconds": 638,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "immigration",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on UK immigration, not fitness or nutrition.",
+      "Does not support user goals of strength training or injury prevention."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=Gqi5VZxS7CE",
+    "video_id": "Gqi5VZxS7CE",
+    "title": "4 Visa Categories which can get you UK PR | New Immigration Changes in UK",
+    "channel": "Student Help UK",
+    "duration_seconds": 638,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "neutral",
+    "category": "immigration",
+    "confidence": 0.8,
+    "reasons": [
+      "Content is practical and informative about UK visas.",
+      "Not directly related to marketing or design skills."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=Gqi5VZxS7CE",
+    "video_id": "Gqi5VZxS7CE",
+    "title": "4 Visa Categories which can get you UK PR | New Immigration Changes in UK",
+    "channel": "Student Help UK",
+    "duration_seconds": 638,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "distracting",
+    "category": "immigration",
+    "confidence": 0.9,
+    "reasons": [
+      "Content is focused on UK immigration, not infant care or household organization.",
+      "Does not provide calming entertainment or practical help for user goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=Gqi5VZxS7CE",
+    "video_id": "Gqi5VZxS7CE",
+    "title": "4 Visa Categories which can get you UK PR | New Immigration Changes in UK",
+    "channel": "Student Help UK",
+    "duration_seconds": 638,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "productive",
+    "category": "visa logistics",
+    "confidence": 0.9,
+    "reasons": [
+      "Directly addresses visa logistics for UK PR.",
+      "Content is relevant to user goals of visa processes."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=M2khW5YZdH8",
+    "video_id": "M2khW5YZdH8",
+    "title": "This simple mindset shift made me a 10X better designer.",
+    "channel": "Rachel How",
+    "duration_seconds": 101,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "productive",
+    "category": "design",
+    "confidence": 0.8,
+    "reasons": [
+      "Mindset shift can help with creative block, relevant to learning.",
+      "Content is practical but not directly tied to user goals."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=M2khW5YZdH8",
+    "video_id": "M2khW5YZdH8",
+    "title": "This simple mindset shift made me a 10X better designer.",
+    "channel": "Rachel How",
+    "duration_seconds": 101,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "design",
+    "confidence": 0.8,
+    "reasons": [
+      "Content focuses on design mindset, not backend or music production.",
+      "User goals do not align with design-related topics."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=M2khW5YZdH8",
+    "video_id": "M2khW5YZdH8",
+    "title": "This simple mindset shift made me a 10X better designer.",
+    "channel": "Rachel How",
+    "duration_seconds": 101,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "design",
+    "confidence": 0.8,
+    "reasons": [
+      "Content focuses on design mindset, not user goals.",
+      "No practical application for strength training or nutrition."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=M2khW5YZdH8",
+    "video_id": "M2khW5YZdH8",
+    "title": "This simple mindset shift made me a 10X better designer.",
+    "channel": "Rachel How",
+    "duration_seconds": 101,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "productive",
+    "category": "design",
+    "confidence": 0.8,
+    "reasons": [
+      "Focuses on improving design skills through mindset shift.",
+      "Directly addresses overcoming creative block in design."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=M2khW5YZdH8",
+    "video_id": "M2khW5YZdH8",
+    "title": "This simple mindset shift made me a 10X better designer.",
+    "channel": "Rachel How",
+    "duration_seconds": 101,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "neutral",
+    "category": "design",
+    "confidence": 0.7,
+    "reasons": [
+      "Content focuses on design mindset, not user goals.",
+      "No practical application for infant care or organization."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=M2khW5YZdH8",
+    "video_id": "M2khW5YZdH8",
+    "title": "This simple mindset shift made me a 10X better designer.",
+    "channel": "Rachel How",
+    "duration_seconds": 101,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "neutral",
+    "category": "design",
+    "confidence": 0.7,
+    "reasons": [
+      "Focuses on mindset for design, not user goals.",
+      "Content is practical but not directly useful for logistics or language."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=nq9Vij_S10c",
+    "video_id": "nq9Vij_S10c",
+    "title": "Make a Baby STOP CRYING | Baby Sensory | Calming Music",
+    "channel": "Little Peach - Sensory",
+    "duration_seconds": 605,
+    "user_profile": "Disciplined Student",
+    "user_email": "test-student1@example.com",
+    "goals": [
+      "study with focus",
+      "learn course material",
+      "cook basic meals",
+      "stay informed"
+    ],
+    "pitfalls": [
+      "vlogs",
+      "gaming content",
+      "endless study-with-me loops"
+    ],
+    "classification": "distracting",
+    "category": "music",
+    "confidence": 0.8,
+    "reasons": [
+      "Content focuses on calming babies, not user study goals.",
+      "Does not provide educational or practical value for user."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=nq9Vij_S10c",
+    "video_id": "nq9Vij_S10c",
+    "title": "Make a Baby STOP CRYING | Baby Sensory | Calming Music",
+    "channel": "Little Peach - Sensory",
+    "duration_seconds": 605,
+    "user_profile": "Upskilling Engineer",
+    "user_email": "test-engineer@example.com",
+    "goals": [
+      "learn backend concepts",
+      "follow tooling updates",
+      "practice music production"
+    ],
+    "pitfalls": [
+      "tech drama",
+      "clickbait comparisons",
+      "gear review spirals"
+    ],
+    "classification": "distracting",
+    "category": "music",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on calming music for babies, not user goals.",
+      "No educational or practical value for backend or music production."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=nq9Vij_S10c",
+    "video_id": "nq9Vij_S10c",
+    "title": "Make a Baby STOP CRYING | Baby Sensory | Calming Music",
+    "channel": "Little Peach - Sensory",
+    "duration_seconds": 605,
+    "user_profile": "Focused Gym-Goer",
+    "user_email": "test-fitness2@example.com",
+    "goals": [
+      "strength training",
+      "nutrition basics",
+      "injury prevention",
+      "mobility work"
+    ],
+    "pitfalls": [
+      "bro-science",
+      "supplement hype",
+      "prank content"
+    ],
+    "classification": "distracting",
+    "category": "music",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on calming babies, not user goals.",
+      "No educational or practical value for strength training or nutrition."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=nq9Vij_S10c",
+    "video_id": "nq9Vij_S10c",
+    "title": "Make a Baby STOP CRYING | Baby Sensory | Calming Music",
+    "channel": "Little Peach - Sensory",
+    "duration_seconds": 605,
+    "user_profile": "Pragmatic Business Owner",
+    "user_email": "test-business2@example.com",
+    "goals": [
+      "learn marketing",
+      "improve design skills",
+      "edit videos",
+      "track industry trends"
+    ],
+    "pitfalls": [
+      "motivation gurus",
+      "passive income hacks",
+      "productivity-porn"
+    ],
+    "classification": "distracting",
+    "category": "music",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on calming babies, not user goals.",
+      "No educational or practical value for marketing or design."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=nq9Vij_S10c",
+    "video_id": "nq9Vij_S10c",
+    "title": "Make a Baby STOP CRYING | Baby Sensory | Calming Music",
+    "channel": "Little Peach - Sensory",
+    "duration_seconds": 605,
+    "user_profile": "Overloaded New Parent",
+    "user_email": "test-parent@example.com",
+    "goals": [
+      "infant care",
+      "household organization",
+      "calming entertainment"
+    ],
+    "pitfalls": [
+      "dramatic parenting advice",
+      "sensationalized news",
+      "reaction binges"
+    ],
+    "classification": "productive",
+    "category": "infant care",
+    "confidence": 0.9,
+    "reasons": [
+      "Video provides calming music for infants, aiding in care.",
+      "Directly supports user goal of calming entertainment."
+    ]
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=nq9Vij_S10c",
+    "video_id": "nq9Vij_S10c",
+    "title": "Make a Baby STOP CRYING | Baby Sensory | Calming Music",
+    "channel": "Little Peach - Sensory",
+    "duration_seconds": 605,
+    "user_profile": "Digital Nomad Planner",
+    "user_email": "test-nomad@example.com",
+    "goals": [
+      "visa logistics",
+      "language learning",
+      "remote work improvement"
+    ],
+    "pitfalls": [
+      "escapist travel vlogs",
+      "gear-review loops",
+      "country drama channels"
+    ],
+    "classification": "distracting",
+    "category": "music",
+    "confidence": 0.9,
+    "reasons": [
+      "Content focuses on calming babies, not user goals.",
+      "No educational or practical value for visa or work."
+    ]
+  }
+]

@@ -201,8 +201,7 @@ function showShortsBlockedOverlay() {
     <div class="ft-box">
       <h1>FocusTube Active</h1>
       <p id="ft-overlay-message">
-        Shorts are blocked on the Free plan to help you stay focused.
-        Upgrade to Pro to watch Shorts with smart tracking and controls.
+        Shorts are blocked on the Free plan to help you stay focused. Upgrade to Pro to watch Shorts with smart tracking and controls.
       </p>
       <div class="ft-button-container">
         <button id="ft-back-home" class="ft-button ft-button-secondary">Back to Home Screen</button>
@@ -249,8 +248,8 @@ function showOnboardingOverlay() {
           <strong>Click the FocusTube extension icon</strong> (top right of your browser) to:
         </p>
         <ul style="margin-top:12px;padding-left:20px;font-size:14px;line-height:1.8;color:#ffffff;">
-          <li>Sign up for Pro/Trial (14-day free trial)</li>
-          <li>Sign in if you already have an account</li>
+          <li>Start your 14-day free Pro trial</li>
+          <li>Sign in to an existing account</li>
           <li>Continue with Free plan</li>
         </ul>
       </div>
@@ -321,8 +320,7 @@ function showProManualBlockOverlay() {
     <div class="ft-box">
       <h1>🎯 Shorts Blocked!</h1>
       <p id="ft-overlay-message">
-        You have chosen to block Shorts for today and have chosen discipline.
-        This decision will help you stay focused and productive.
+        You have chosen to block Shorts for today and have chosen discipline. This decision will help you stay focused and productive.
       </p>
       <div class="ft-button-container">
         <button id="ft-continue" class="ft-button ft-button-primary">Continue</button>
@@ -1369,7 +1367,7 @@ async function showGlobalLimitOverlay(plan, counters) {
         <h1>FocusTube Limit Reached</h1>
       </div>
       <div class="ft-global-limit-body">
-        <p class="ft-global-limit-intro">You've reached your daily limit for YouTube use.</p>
+        <p class="ft-global-limit-intro">You've hit your YouTube limit for the day. Time to reset your focus.</p>
         <div class="ft-global-limit-stats">
           <div class="ft-global-limit-stat">
             <strong>Time watched today:</strong> ${timeText}
@@ -1767,7 +1765,7 @@ function showBlockChannelConfirmation(channelName, onConfirm, onCancel) {
   confirmation.innerHTML = `
     <div class="ft-milestone-box">
       <h2>Block Channel?</h2>
-      <p class="ft-milestone-intro">Well done! Eliminating distractions helps you stay focused.</p>
+      <p class="ft-milestone-intro">Removing distractions is real progress.</p>
       <p style="margin-top: 12px; font-weight: 500;">Block "${channelName}"?</p>
       <div class="ft-milestone-buttons">
         <button id="ft-block-cancel" class="ft-button ft-button-secondary">Cancel</button>
@@ -1942,7 +1940,7 @@ async function showSpiralNudge(spiralInfo) {
     <div class="ft-milestone-box">
       <h2>⚠️ ${styleMessage}</h2>
       <p class="ft-milestone-intro">
-        You've watched ${count} ${count === 1 ? 'video' : 'videos'} from <strong>${channel}</strong> ${timePeriod}.
+        You've watched ${count} ${count === 1 ? 'video' : 'videos'} from ${channel} ${timePeriod}.
       </p>
       
       <div class="ft-spiral-timer">
@@ -1953,8 +1951,8 @@ async function showSpiralNudge(spiralInfo) {
       
       <div class="ft-milestone-buttons">
         <button id="ft-spiral-continue" class="ft-button ft-button-secondary">Continue</button>
-        <button id="ft-spiral-block-today" class="ft-button ft-button-warning">Block for Today</button>
-        <button id="ft-spiral-block-permanent" class="ft-button ft-button-danger">Block Permanently</button>
+        <button id="ft-spiral-block-today" class="ft-button ft-button-warning">Block YouTube for Today</button>
+        <button id="ft-spiral-block-permanent" class="ft-button ft-button-danger">Block Channel Permanently</button>
       </div>
     </div>
   `;
@@ -3145,19 +3143,19 @@ function getNudgeMessage(style, type, context = {}) {
       spiral: "Still learning?",
       timeLimit: "Take a break?",
       focusWindow: "Maybe step away?",
-      journal: "What made you click on this? What were you feeling?"
+      journal: "What made you click on this? What were you hoping to feel?"
     },
     direct: {
       spiral: "Check your goals",
       timeLimit: "You're over your limit",
       focusWindow: "Time to focus",
-      journal: "What made you click on this? What were you feeling?"
+      journal: "What were you trying to avoid?"
     },
     firm: {
       spiral: "Time's up",
       timeLimit: "Blocked for today",
       focusWindow: "Focus now",
-      journal: "What made you click on this? What were you feeling?"
+      journal: "Write down what triggered you"
     }
   };
   

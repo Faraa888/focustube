@@ -351,8 +351,8 @@ const Settings = () => {
       // Show warning toast if normalization had issues (but still save)
       if (normalizationWarning) {
         toast({
-          title: "Normalization Warning",
-          description: `Some channel names may not have been normalized: ${normalizationWarning}`,
+          title: "Normalisation Warning",
+          description: `Some channel names may not have been normalised: ${normalizationWarning}`,
           variant: "default",
         });
       }
@@ -378,8 +378,8 @@ const Settings = () => {
         toast({
           title: "Channels Saved",
           description: changedCount > 0 
-            ? `${changedCount} channel name(s) normalized and saved`
-            : "Channels saved (no normalization needed)",
+            ? `${changedCount} channel name(s) normalised and saved`
+            : "Channels saved (no normalisation needed)",
           variant: "default",
         });
         
@@ -546,7 +546,7 @@ const Settings = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Your FocusTube</h1>
           <p className="text-muted-foreground">
-            Customize FocusTube to match your goals
+            Customise FocusTube to match your goals
           </p>
         </div>
 
@@ -564,7 +564,7 @@ const Settings = () => {
               <CardHeader>
                 <CardTitle>Your Goals</CardTitle>
                 <CardDescription>
-                  What do you want to learn or accomplish? FocusTube will help you stay on track.
+                  What do you want to learn or accomplish whilst using YouTube? FocusTube will help you stay on track.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -622,7 +622,7 @@ const Settings = () => {
               <CardHeader>
                 <CardTitle>Common Distractions</CardTitle>
                 <CardDescription>
-                  Topics that tend to pull you off-track
+                  What are the topics that tend to pull you off-track
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -687,7 +687,7 @@ const Settings = () => {
               <CardHeader>
                 <CardTitle>Blocked Channels</CardTitle>
                 <CardDescription>
-                  Channels you've blocked to stay focused. All names will be normalized when you save.
+                  Channels you have blocked to stay focused. All names will be normalised when you save.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -742,10 +742,10 @@ const Settings = () => {
                   disabled={savingChannel || blockedChannels.length === 0}
                   className="w-full"
                 >
-                  {savingChannel ? "Normalizing & Saving..." : "Save & Normalize Channels"}
+                  {savingChannel ? "Normalising & Saving..." : "Save & Normalise Channels"}
                 </Button>
                 <p className="text-xs text-muted-foreground text-center">
-                  Channel names will be normalized to match YouTube metadata. The page will refresh after saving.
+                  Channel names will be normalised to match YouTube metadata. The page will refresh after saving.
                 </p>
               </CardContent>
             </Card>
@@ -896,7 +896,7 @@ const Settings = () => {
                     className="justify-start"
                     onClick={() => setNudgeStyle("firm")}
                   >
-                    <span className="flex-1 text-left">Firm — "Time's up"</span>
+                    <span className="flex-1 text-left">Firm — "Time's up, no more watching"</span>
                   </Button>
                 </div>
               </CardContent>

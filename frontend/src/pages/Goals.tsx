@@ -416,7 +416,7 @@ const Goals = () => {
               <div className="flex gap-2">
                 <Input
                   id="channels"
-                  placeholder="e.g., Ali Abdaal"
+                  placeholder="e.g., MrBeast"
                   value={channelInput}
                   onChange={(e) => setChannelInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -483,7 +483,7 @@ const Goals = () => {
               disabled={loading || goals.length === 0 || normalizingChannels}
             >
               {normalizingChannels 
-                ? "Normalizing channel names..." 
+                ? "Normalising channel names..." 
                 : loading 
                 ? "Saving..." 
                 : "Continue to Download"}
