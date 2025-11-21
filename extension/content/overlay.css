@@ -8,18 +8,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(10, 10, 10, 0.94);
+  background: rgba(0, 0, 0, 0.98); /* Darker */
   color: #fff;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 #ft-overlay .ft-box {
-  max-width: 600px;
-  background: #121212;
-  padding: 24px;
+  max-width: 800px; /* Bigger */
+  background: #0a0a0a; /* Darker */
+  padding: 40px; /* Bigger padding */
   border-radius: 12px;
   text-align: center;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8); /* Darker shadow */
 }
 
 #ft-overlay h1 {

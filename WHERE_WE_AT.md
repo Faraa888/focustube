@@ -263,3 +263,12 @@ Website speed is one to consider
 
 
 At some point (v2, v3) need to maybe run an LLM so it adaptively learns - needs more thought tho
+
+
+
+
+
+
+
+Need to change the weclome to now have skip for now anymore
+

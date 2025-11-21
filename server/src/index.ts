@@ -797,7 +797,10 @@ app.get("/license/verify", async (req, res) => {
     if (cachedPlanInfo !== null) {
       // For cached plan, return it with exists: true (cached plans are only for existing users)
       const { plan, trial_expires_at } = cachedPlanInfo;
-      console.log(`[License Verify] Cache hit for ${email}: ${plan}`);
+      // Only log cache hits in development mode to reduce log noise
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[License Verify] Cache hit for ${email}: ${plan}`);
+      }
       
       // Calculate days_left for trial users
       let days_left: number | undefined = undefined;

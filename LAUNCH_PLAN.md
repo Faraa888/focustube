@@ -36,6 +36,31 @@
 
 ---
 
+## Phase 1.4: Spiral Detection & Nudging (30 min)
+
+### Spiral Detection Tests
+- [ ] Watch 3 videos from same channel today → expect spiral nudge on 3rd video
+- [ ] Watch 5 videos from same channel this week → expect spiral nudge on 5th video
+- [ ] Watch 2 consecutive distracting videos (within 1 hour) → expect weighted count (1.5x)
+- [ ] Watch 3+ consecutive distracting videos → expect weighted count (2.0x)
+- [ ] Wait 24+ hours → verify decay reduces week count by 1
+- [ ] Spiral nudge shows correct channel name and count
+- [ ] Spiral nudge has 10-second countdown timer
+- [ ] "Continue" button dismisses nudge
+- [ ] "Block YouTube for Today" button works
+- [ ] "Block Channel Permanently" button works and redirects
+
+**Success:** Spiral detection triggers correctly, nudges show, actions work
+
+### Journal Nudge Tests
+- [ ] Watch distracting video for 60+ seconds → expect journal nudge
+- [ ] Journal nudge shows correct video title and channel
+- [ ] "Save" button saves journal entry
+- [ ] "Dismiss" button closes nudge
+- [ ] Journal nudge doesn't show twice for same video
+
+**Success:** Journal nudges trigger at 60s, save correctly
+
 ## Phase 2: AI & Classification (1.5 hours)
 
 ### 2.1 AI Classifier (45 min)

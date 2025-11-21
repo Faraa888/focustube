@@ -372,7 +372,7 @@ function showChannelBlockedOverlay(channelName) {
   setTimeout(() => {
     removeOverlay();
     window.location.href = "https://www.youtube.com/";
-  }, 3000);
+  }, 2000);
 }
 
 /** Removes the overlay if it exists */
@@ -2250,8 +2250,9 @@ async function checkBlockingAndInjectButton(channelName, channelElement) {
       
       if (isBlocked) {
         console.log("[FT] 🚫 Channel blocked (button injection check):", channelName);
-        window.location.href = "https://www.youtube.com/";
-        return; // Redirect, don't inject button
+        pauseAndMuteVideo(); // Immediate pause
+        showChannelBlockedOverlay(channelName); // Show overlay instead of immediate redirect
+        return; // Don't inject button
       }
     }
     
@@ -3222,7 +3223,8 @@ chrome.runtime.onMessage.addListener((msg) => {
             
             if (isBlocked) {
               console.log("[FT] 🚫 Channel blocked (after login re-check):", channel);
-              window.location.href = "https://www.youtube.com/";
+              pauseAndMuteVideo(); // Immediate pause
+              showChannelBlockedOverlay(channel); // Show overlay instead of immediate redirect
             }
           }
         }).catch((e) => {
@@ -4572,8 +4574,8 @@ async function handleNavigation() {
           
           if (isBlocked) {
             console.log("[FT] 🚫 Channel blocked (fast check):", channel);
-            // Redirect immediately - don't wait for anything
-            window.location.href = "https://www.youtube.com/";
+            pauseAndMuteVideo(); // Immediate pause
+            showChannelBlockedOverlay(channel); // Show overlay instead of immediate redirect
             return; // Stop here, don't continue
           }
         } else if (!channel) {
