@@ -90,10 +90,31 @@ export function evaluateBlock(ctx) {
     const channelLower = channel.toLowerCase().trim();
     const isBlocked = blockedChannels.some(blocked => {
       const blockedLower = blocked.toLowerCase().trim();
-      // Exact match or substring match
-      return blockedLower === channelLower || 
-             channelLower.includes(blockedLower) || 
-             blockedLower.includes(channelLower);
+      
+      // Exact match first
+      if (blockedLower === channelLower) {
+        return true;
+      }
+      
+      // Word-boundary matching for single words (prevents "TED" matching "TED-Ed" or "manchester united" matching "ted")
+      const blockedWords = blockedLower.split(/\s+/);
+      if (blockedWords.length === 1) {
+        // Use word boundary regex to prevent false positives
+        const wordBoundaryRegex = new RegExp(`\\b${blockedWords[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        return wordBoundaryRegex.test(channelLower);
+      }
+      
+      // Multi-word matching: all words must appear consecutively (handles "Eddie Hall" vs "Eddie Hall The Beast")
+      const channelWords = channelLower.split(/\s+/);
+      let foundIndex = -1;
+      for (let i = 0; i < blockedWords.length; i++) {
+        const wordIndex = channelWords.indexOf(blockedWords[i], foundIndex + 1);
+        if (wordIndex === -1) return false;
+        if (i === 0) foundIndex = wordIndex;
+        else if (wordIndex !== foundIndex + 1) return false; // Words must be consecutive
+        foundIndex = wordIndex;
+      }
+      return true;
     });
     if (isBlocked) {
       return { blocked: true, scope: "watch", reason: REASONS.CHANNEL_BLOCKED };

@@ -336,6 +336,45 @@ function showProManualBlockOverlay() {
   document.body.appendChild(overlay);
 }
 
+/**
+ * Shows channel blocked confirmation overlay (2 seconds, auto-dismiss, then redirect)
+ * @param {string} channelName - Name of the blocked channel
+ */
+function showChannelBlockedOverlay(channelName) {
+  removeOverlay(); // ensure no duplicates
+  
+  // Pause and mute video before showing overlay
+  pauseAndMuteVideo();
+
+  // DOM safety check
+  if (!document.body) {
+    // Fallback: immediate redirect if DOM not ready
+    window.location.href = "https://www.youtube.com/";
+    return;
+  }
+
+  const overlay = document.createElement("div");
+  overlay.id = "ft-overlay";
+  overlay.className = "ft-channel-blocked-overlay";
+
+  overlay.innerHTML = `
+    <div class="ft-box">
+      <h1>✅ Channel Blocked</h1>
+      <p id="ft-overlay-message">
+        ${channelName} has been blocked to help you stay focused. Redirecting to YouTube home...
+      </p>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // Auto-dismiss and redirect after 3 seconds
+  setTimeout(() => {
+    removeOverlay();
+    window.location.href = "https://www.youtube.com/";
+  }, 3000);
+}
+
 /** Removes the overlay if it exists */
 function removeOverlay() {
   const el = document.getElementById("ft-overlay");
@@ -3680,6 +3719,22 @@ function startBehaviorLoopTracking(videoId, classification) {
  * Finalizes watch time and updates counters
  */
 async function stopBehaviorLoopTracking() {
+  // Check if extension context is still valid before doing anything
+  if (!isChromeContextValid()) {
+    // Context invalidated - just reset state, don't try to save
+    behaviorLoopStartTime = null;
+    behaviorLoopCurrentClassification = null;
+    behaviorLoopPausedTime = 0;
+    behaviorLoopLastPauseTime = null;
+    behaviorLoopLastUpdateTime = null;
+    behaviorLoopAccumulatedTime = 0;
+    if (behaviorLoopTimer) {
+      clearInterval(behaviorLoopTimer);
+      behaviorLoopTimer = null;
+    }
+    return;
+  }
+  
   if (behaviorLoopTimer) {
     clearInterval(behaviorLoopTimer);
     behaviorLoopTimer = null;
@@ -4197,6 +4252,150 @@ async function saveJournalEntry(distractionLevel, context) {
     console.log("[FT] Journal entry saved:", { channel, distractionLevel, textLength: journalText.length });
   } catch (error) {
     console.warn("[FT] Error saving journal entry:", error.message);
+  }
+}
+
+/**
+ * Checks if trial expiring banner should be shown
+ * Rules: Once per day, optionally again after 6 hours
+ * @returns {Promise<boolean>}
+ */
+async function shouldShowTrialExpiringBanner() {
+  try {
+    if (!isChromeContextValid()) return false;
+    
+    const { ft_trial_banner_last_shown, ft_trial_banner_dismissed_today } = 
+      await chrome.storage.local.get([
+        "ft_trial_banner_last_shown",
+        "ft_trial_banner_dismissed_today"
+      ]);
+    
+    const now = Date.now();
+    const lastShown = ft_trial_banner_last_shown || 0;
+    const dismissedToday = ft_trial_banner_dismissed_today || false;
+    
+    // If dismissed today, don't show again today
+    if (dismissedToday) {
+      // Check if 6 hours have passed since dismissal
+      const sixHoursMs = 6 * 60 * 60 * 1000;
+      if (now - lastShown < sixHoursMs) {
+        return false;
+      }
+    }
+    
+    // Check if we've shown it today (within last 24 hours)
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    if (now - lastShown < oneDayMs) {
+      // Already shown today - check if 6 hours passed
+      const sixHoursMs = 6 * 60 * 60 * 1000;
+      if (now - lastShown < sixHoursMs) {
+        return false; // Too soon, don't show again
+      }
+    }
+    
+    return true; // Can show
+  } catch (e) {
+    console.warn("[FT] Error checking banner timing:", e.message);
+    return false; // Fail safe - don't show if error
+  }
+}
+
+/**
+ * Shows trial expiring banner (small, non-intrusive, auto-dismisses after 10s)
+ * @param {number} daysLeft - Days remaining in trial (0 or 1)
+ */
+function showTrialExpiringBanner(daysLeft) {
+  // Remove any existing banner
+  const existing = document.getElementById("ft-trial-expiring-banner");
+  if (existing) existing.remove();
+  
+  const banner = document.createElement("div");
+  banner.id = "ft-trial-expiring-banner";
+  banner.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #ff4444;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 10000;
+    font-size: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    max-width: 300px;
+    animation: slideIn 0.3s ease-out;
+  `;
+  
+  const message = daysLeft === 0 
+    ? "Your trial expires today! Don't lose Pro features — upgrade now."
+    : "Your trial expires tomorrow! Upgrade to keep Pro features.";
+  
+  banner.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+      <span>${message}</span>
+      <button id="ft-trial-banner-close" style="
+        background: transparent;
+        border: none;
+        color: white;
+        cursor: pointer;
+        font-size: 18px;
+        padding: 0;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      ">×</button>
+    </div>
+  `;
+  
+  // Close button handler
+  const closeBtn = banner.querySelector("#ft-trial-banner-close");
+  closeBtn.addEventListener("click", () => {
+    saveBannerDismissal();
+    banner.remove();
+  });
+  
+  // Click banner to go to upgrade page
+  banner.style.cursor = "pointer";
+  banner.addEventListener("click", (e) => {
+    if (e.target !== closeBtn) {
+      window.open("https://focustube-beta.vercel.app/app/pricing", "_blank");
+      saveBannerDismissal();
+      banner.remove();
+    }
+  });
+  
+  document.body.appendChild(banner);
+  
+  // Auto-dismiss after 10 seconds
+  setTimeout(() => {
+    if (banner.parentNode) {
+      saveBannerDismissal();
+      banner.remove();
+    }
+  }, 10000);
+  
+  // Save that we showed it
+  chrome.storage.local.set({ 
+    ft_trial_banner_last_shown: Date.now(),
+    ft_trial_banner_dismissed_today: false 
+  });
+}
+
+/**
+ * Saves banner dismissal timestamp
+ */
+async function saveBannerDismissal() {
+  try {
+    if (!isChromeContextValid()) return;
+    await chrome.storage.local.set({ 
+      ft_trial_banner_last_shown: Date.now(),
+      ft_trial_banner_dismissed_today: true 
+    });
+  } catch (e) {
+    console.warn("[FT] Error saving banner dismissal:", e.message);
   }
 }
 
@@ -4954,26 +5153,21 @@ async function handleNavigation() {
     // Don't return - continue to check for blocking
   }
 
-  // Handle channel blocked for today
-  if (resp.blocked && resp.reason === "channel_blocked_today") {
-    pauseVideos();
+  // Handle channel blocking (both permanent and temporary) - after focus window check
+  if (resp.blocked && (resp.reason === "channel_blocked" || resp.reason === "channel_blocked_today")) {
     await stopShortsTimeTracking();
-    console.log("[FT] 🚫 Channel blocked for today - redirecting to YouTube home");
-    window.location.href = "https://www.youtube.com/";
-    return;
+    pauseAndMuteVideo(); // Immediate pause
+    
+    const channelName = videoMetadata?.channel || extractChannelFast() || "This channel";
+    console.log(`[FT] 🚫 Channel blocked (${resp.reason}) - showing overlay then redirecting`);
+    
+    showChannelBlockedOverlay(channelName);
+    return; // Don't continue with other blocking logic
   }
 
   if (resp.blocked) {
     pauseVideos();
     await stopShortsTimeTracking(); // Stop tracking if blocked
-
-    // Channel blocking: hard redirect immediately (no overlay)
-    if (resp.scope === "watch" && resp.reason === "channel_blocked") {
-      console.log("[FT] 🚫 Channel blocked - redirecting immediately to YouTube home");
-      // Redirect immediately, don't wait for anything
-      window.location.href = "https://www.youtube.com/";
-      return;
-    }
 
     // Shorts-specific: set redirect flag, then redirect to home if blocked
     if (resp.scope === "shorts") {
@@ -5462,7 +5656,18 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
           
           if (isBlocked) {
             console.log("[FT] 🚫 Channel blocked (cross-tab sync):", channel);
-            window.location.href = "https://www.youtube.com/";
+            
+            // Pause video immediately
+            pauseAndMuteVideo();
+            
+            // Show overlay then redirect (same behavior as main handler)
+            // If DOM not ready, fallback to immediate redirect
+            if (document.body) {
+              showChannelBlockedOverlay(channel);
+            } else {
+              window.location.href = "https://www.youtube.com/";
+            }
+            
             return; // Stop here, don't continue with other listeners
           }
         }
