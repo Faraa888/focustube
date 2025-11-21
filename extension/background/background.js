@@ -45,7 +45,9 @@ import {
   SPIRAL_MIN_WATCH_SECONDS,
   SPIRAL_THRESHOLD_DAY,
   SPIRAL_THRESHOLD_WEEK,
-  SPIRAL_HISTORY_DAYS
+  SPIRAL_THRESHOLD_WEEK_TIME,
+  SPIRAL_HISTORY_DAYS,
+  SPIRAL_DISMISSAL_COOLDOWN_MS
 } from "../lib/constants.js";
 
 // ─────────────────────────────────────────────────────────────
@@ -868,7 +870,7 @@ async function handleMessage(msg) {
 
   if (msg?.type === "FT_SAVE_JOURNAL") {
     try {
-      const { note, context } = msg;
+      const { note, context, channel, distraction_level } = msg;
       if (!note || typeof note !== "string" || note.trim() === "") {
         return { ok: false, error: "Note is required" };
       }
@@ -877,6 +879,14 @@ async function handleMessage(msg) {
       if (!userId || !SERVER_URL) {
         return { ok: false, error: "User ID or server URL not set" };
       }
+
+      // Build context with channel and distraction_level
+      const journalContext = {
+        ...(context || {}),
+        channel: channel || null,
+        distraction_level: distraction_level || null,
+        timestamp: new Date().toISOString()
+      };
 
       // Send to server
       const response = await fetch(`${SERVER_URL}/journal`, {
@@ -887,7 +897,7 @@ async function handleMessage(msg) {
         body: JSON.stringify({
           user_id: userId,
           note: note.trim(),
-          context: context || {},
+          context: journalContext,
         }),
       });
 
@@ -1293,24 +1303,35 @@ async function finalizeVideoWatch(videoId, startTime, distractionLevel, category
         return itemTime > thirtyDaysAgo;
       });
 
-      // 4. Calculate counts (today + last 30 days)
+      // 4. Calculate counts and time (today + last 7 days for spiral)
       const today = new Date().toDateString(); // "Mon Jan 15 2025"
       const todayHistory = recentHistory.filter(item => {
         return new Date(item.watched_at).toDateString() === today;
       });
+      
+      // Filter to last 7 days for spiral detection (not 30 days)
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      const weekHistory = recentHistory.filter(item => {
+        const itemTime = new Date(item.watched_at).getTime();
+        return itemTime > sevenDaysAgo;
+      });
 
-      // Count videos from same channel
+      // Count videos and time from same channel
       const todayCounts = {};
+      const todayTime = {};
       const weekCounts = {};
+      const weekTime = {};
 
       todayHistory.forEach(item => {
         const ch = (item.channel_name || "Unknown").trim();
         todayCounts[ch] = (todayCounts[ch] || 0) + 1;
+        todayTime[ch] = (todayTime[ch] || 0) + (item.watch_seconds || 0);
       });
 
-      recentHistory.forEach(item => {
+      weekHistory.forEach(item => {
         const ch = (item.channel_name || "Unknown").trim();
         weekCounts[ch] = (weekCounts[ch] || 0) + 1;
+        weekTime[ch] = (weekTime[ch] || 0) + (item.watch_seconds || 0);
       });
 
       // 5. Update channel spiral counts
@@ -1383,6 +1404,11 @@ async function finalizeVideoWatch(videoId, startTime, distractionLevel, category
       // So we need to count excluding current video, then add it back with weight
       const baseTodayCount = todayCounts[channelKey] || 0;
       const baseWeekCount = weekCounts[channelKey] || 0;
+      const baseWeekTime = weekTime[channelKey] || 0;
+      
+      // Count neutral videos the same as distracting for spiral detection
+      // Check if current video is neutral or distracting
+      const isNeutralOrDistracting = (distractionLevel === "neutral" || distractionLevel === "distracting");
       
       // If weighting applies, the current video contributes (weight - 1) extra
       // So: baseCount already has +1 for current video, we add (weight - 1) more
@@ -1392,36 +1418,44 @@ async function finalizeVideoWatch(videoId, startTime, distractionLevel, category
       const weightedToday = baseTodayCount + todayExtra;
       const weightedWeek = baseWeekCount + weekExtra;
       
+      // Update time tracking (add current video's watch time)
+      const updatedWeekTime = baseWeekTime + durationSeconds;
+      
       spiralCounts[channelKey] = {
         today: Math.round(weightedToday * 10) / 10, // Round to 1 decimal
         this_week: Math.round(weightedWeek * 10) / 10,
+        time_this_week: updatedWeekTime, // Total seconds watched this week
         last_watched: new Date().toISOString()
       };
 
-      // 6. Check thresholds and set spiral flag
+      // 6. Check thresholds and set spiral flag (whichever hits first: count OR time)
       const currentChannelCount = spiralCounts[channelKey];
       let spiralDetected = null;
+      
+      // Check dismissal cooldown (7 days)
+      const { ft_spiral_dismissed_channels = {} } = await getLocal(["ft_spiral_dismissed_channels"]);
+      const dismissedData = ft_spiral_dismissed_channels[channelKey];
+      const isOnCooldown = dismissedData && 
+        (Date.now() - dismissedData.last_shown) < SPIRAL_DISMISSAL_COOLDOWN_MS;
 
-      if (currentChannelCount.today >= SPIRAL_THRESHOLD_DAY) {
-        // 3+ videos today - urgent nudge
+      // New thresholds: 6 videos this week OR 90 minutes this week (neutral counts same as distracting)
+      const weekCount = currentChannelCount.this_week || 0;
+      const weekTimeSeconds = currentChannelCount.time_this_week || 0;
+      const weekTimeMinutes = weekTimeSeconds / 60;
+      
+      if (!isOnCooldown && (weekCount >= SPIRAL_THRESHOLD_WEEK || weekTimeSeconds >= SPIRAL_THRESHOLD_WEEK_TIME)) {
+        // 6+ videos OR 90+ minutes this week - awareness nudge
         spiralDetected = {
           channel: channelKey,
-          count: currentChannelCount.today,
-          type: "today",
-          message: "Are you sure you aren't spiralling?",
-          detected_at: Date.now()
-        };
-        LOG("🚨 Spiral detected (today):", spiralDetected);
-      } else if (currentChannelCount.this_week >= SPIRAL_THRESHOLD_WEEK) {
-        // 5+ videos this week - warning nudge
-        spiralDetected = {
-          channel: channelKey,
-          count: currentChannelCount.this_week,
+          count: weekCount,
+          time_minutes: Math.round(weekTimeMinutes * 10) / 10,
           type: "week",
-          message: "You've watched this channel a lot recently",
+          message: "You've watched a lot of this channel this week. Are you still able to progress towards your goals?",
           detected_at: Date.now()
         };
         LOG("⚠️ Spiral detected (week):", spiralDetected);
+      } else if (isOnCooldown) {
+        LOG(`[Spiral] Channel ${channelKey} is on cooldown (dismissed ${Math.floor((Date.now() - dismissedData.last_shown) / (24 * 60 * 60 * 1000))} days ago)`);
       }
 
       // 7. Update lifetime stats

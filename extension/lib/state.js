@@ -82,15 +82,29 @@ const DEFAULTS = {
   ft_extension_settings: {},         // Other extension settings
   
   // Focus Window (time-based blocking)
-  ft_focus_window_enabled: false,    // true = focus window is active
+  ft_focus_window_enabled: true,     // true = focus window is active
   ft_focus_window_start: "13:00",    // Start time in 24h format (1:00 PM)
-  ft_focus_window_end: "18:00",      // End time in 24h format (6:00 PM)
+  ft_focus_window_end: "21:00",      // End time in 24h format (9:00 PM)
   
   // Spiral detection
   ft_blocked_channels_today: [],     // Temporary blocks (reset at midnight)
   ft_channel_lifetime_stats: {},     // Lifetime stats per channel for dashboard
   ft_spiral_detected: null,          // Current spiral flag {channel, count, type, message, detected_at}
-  ft_spiral_events: []               // Array of spiral detection events (last 30 days)
+  ft_spiral_events: [],              // Array of spiral detection events (last 30 days)
+  
+  // Behavior loop awareness - global counters (reset daily)
+  ft_distracting_count_global: 0,    // Total distracting videos today
+  ft_distracting_time_global: 0,     // Total distracting watch time today (seconds)
+  ft_productive_count_global: 0,     // Total productive videos today
+  ft_productive_time_global: 0,      // Total productive watch time today (seconds)
+  ft_neutral_count_global: 0,        // Total neutral videos today
+  ft_neutral_time_global: 0,         // Total neutral watch time today (seconds)
+  
+  // Break lockout
+  ft_break_lockout_until: 0,         // Timestamp when break lockout expires (0 = no lockout)
+  
+  // Spiral dismissal cooldown
+  ft_spiral_dismissed_channels: {}   // {channel: {last_shown: timestamp}} - 7 day cooldown
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -163,7 +177,15 @@ function resetShape() {
     ft_unlock_until_epoch: 0,
     ft_allowance_videos_left: 1,      // Reset to default: 1 video
     ft_allowance_seconds_left: 600,   // Reset to default: 10 minutes (600 seconds)
-    ft_current_video_classification: null  // Clear current video tracking
+    ft_current_video_classification: null,  // Clear current video tracking
+    // Behavior loop awareness - reset daily
+    ft_distracting_count_global: 0,
+    ft_distracting_time_global: 0,
+    ft_productive_count_global: 0,
+    ft_productive_time_global: 0,
+    ft_neutral_count_global: 0,
+    ft_neutral_time_global: 0,
+    ft_break_lockout_until: 0  // Clear break lockout on daily reset
   };
 }
 
@@ -705,7 +727,7 @@ export async function loadExtensionDataFromServer() {
     if (settings !== undefined && settings !== null) {
       storageUpdate.ft_extension_settings = settings || {};
       
-      // Load focus window settings and spiral events from settings object if present
+      // Load focus window settings, spiral events, and behavior loop data from settings object if present
       if (settings && typeof settings === 'object') {
         if (settings.focus_window_enabled !== undefined) {
           storageUpdate.ft_focus_window_enabled = settings.focus_window_enabled;
@@ -718,6 +740,31 @@ export async function loadExtensionDataFromServer() {
         }
         if (settings.spiral_events !== undefined) {
           storageUpdate.ft_spiral_events = Array.isArray(settings.spiral_events) ? settings.spiral_events : [];
+        }
+        // Behavior loop awareness counters
+        if (settings.distracting_count_global !== undefined) {
+          storageUpdate.ft_distracting_count_global = Number(settings.distracting_count_global) || 0;
+        }
+        if (settings.distracting_time_global !== undefined) {
+          storageUpdate.ft_distracting_time_global = Number(settings.distracting_time_global) || 0;
+        }
+        if (settings.productive_count_global !== undefined) {
+          storageUpdate.ft_productive_count_global = Number(settings.productive_count_global) || 0;
+        }
+        if (settings.productive_time_global !== undefined) {
+          storageUpdate.ft_productive_time_global = Number(settings.productive_time_global) || 0;
+        }
+        if (settings.neutral_count_global !== undefined) {
+          storageUpdate.ft_neutral_count_global = Number(settings.neutral_count_global) || 0;
+        }
+        if (settings.neutral_time_global !== undefined) {
+          storageUpdate.ft_neutral_time_global = Number(settings.neutral_time_global) || 0;
+        }
+        if (settings.break_lockout_until !== undefined) {
+          storageUpdate.ft_break_lockout_until = Number(settings.break_lockout_until) || 0;
+        }
+        if (settings.spiral_dismissed_channels !== undefined) {
+          storageUpdate.ft_spiral_dismissed_channels = settings.spiral_dismissed_channels || {};
         }
       }
     } else {
@@ -816,6 +863,14 @@ export async function saveExtensionDataToServer(data = null) {
       ft_focus_window_start = "13:00",
       ft_focus_window_end = "18:00",
       ft_spiral_events = [],
+      ft_distracting_count_global = 0,
+      ft_distracting_time_global = 0,
+      ft_productive_count_global = 0,
+      ft_productive_time_global = 0,
+      ft_neutral_count_global = 0,
+      ft_neutral_time_global = 0,
+      ft_break_lockout_until = 0,
+      ft_spiral_dismissed_channels = {},
     } = await getLocal([
       "ft_blocked_channels",
       "ft_watch_history",
@@ -828,15 +883,32 @@ export async function saveExtensionDataToServer(data = null) {
       "ft_focus_window_start",
       "ft_focus_window_end",
       "ft_spiral_events",
+      "ft_distracting_count_global",
+      "ft_distracting_time_global",
+      "ft_productive_count_global",
+      "ft_productive_time_global",
+      "ft_neutral_count_global",
+      "ft_neutral_time_global",
+      "ft_break_lockout_until",
+      "ft_spiral_dismissed_channels",
     ]);
 
-    // Merge focus window settings and spiral events into settings object
+    // Merge focus window settings, spiral events, and behavior loop data into settings object
     const settingsToSave = {
       ...ft_extension_settings,
       focus_window_enabled: ft_focus_window_enabled,
       focus_window_start: ft_focus_window_start,
       focus_window_end: ft_focus_window_end,
       spiral_events: ft_spiral_events, // Store in settings JSONB for now
+      // Behavior loop awareness counters
+      distracting_count_global: ft_distracting_count_global,
+      distracting_time_global: ft_distracting_time_global,
+      productive_count_global: ft_productive_count_global,
+      productive_time_global: ft_productive_time_global,
+      neutral_count_global: ft_neutral_count_global,
+      neutral_time_global: ft_neutral_time_global,
+      break_lockout_until: ft_break_lockout_until,
+      spiral_dismissed_channels: ft_spiral_dismissed_channels,
     };
 
     // If data is provided: send ONLY those keys (no merging from local)
@@ -951,17 +1023,17 @@ export function getEffectiveSettings(plan, rawSettings = {}) {
     // Other settings can use defaults or be undefined
   } else if (plan === "trial" || plan === "pro") {
     // Pro/Trial: Use stored settings with sensible defaults
-    effective.shorts_mode = effective.shorts_mode || "timed";
-    effective.hide_recommendations = rawSettings.hide_recommendations ?? false;
+    effective.shorts_mode = effective.shorts_mode || "hard";
+    effective.hide_recommendations = rawSettings.hide_recommendations ?? true;
     // Support both daily_limit and daily_limit_minutes for backward compatibility
-    const dailyLimit = effective.daily_limit_minutes || rawSettings.daily_limit || 90;
+    const dailyLimit = effective.daily_limit_minutes || rawSettings.daily_limit || 60;
     effective.daily_limit_minutes = dailyLimit;
     effective.daily_limit = dailyLimit; // Legacy field name
     // Apply all other settings from rawSettings
     effective.nudge_style = rawSettings.nudge_style || "firm";
-    effective.focus_window_enabled = rawSettings.focus_window_enabled ?? false;
+    effective.focus_window_enabled = rawSettings.focus_window_enabled ?? true;
     effective.focus_window_start = rawSettings.focus_window_start || "13:00";
-    effective.focus_window_end = rawSettings.focus_window_end || "18:00";
+    effective.focus_window_end = rawSettings.focus_window_end || "21:00";
     effective.spiral_events = rawSettings.spiral_events || [];
   } else {
     // Test plan or unknown: use raw settings as-is (with conversions applied)

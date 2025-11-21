@@ -386,8 +386,8 @@ function computeEffectiveSettings(plan = "free", rawSettings = {}) {
     effective.hide_recommendations = true;
     effective.daily_limit_minutes = 60;
   } else if (normalizedPlan === "trial" || normalizedPlan === "pro") {
-    effective.hide_recommendations = effective.hide_recommendations ?? false;
-    const dailyLimit = effective.daily_limit_minutes ?? 90;
+    effective.hide_recommendations = effective.hide_recommendations ?? true;
+    const dailyLimit = effective.daily_limit_minutes ?? 60;
     effective.daily_limit_minutes = dailyLimit;
   } else {
     // Test/unknown plans - use stored values with safe defaults
@@ -478,6 +478,17 @@ let journalNudgeTimer = null; // Timer for 1-minute journal nudge trigger
 let journalNudgeShown = false; // Whether journal nudge has been shown for current video
 let currentVideoAIClassification = null; // Store AI classification for journal nudge check
 
+// Behavior loop awareness tracking
+let behaviorLoopTimer = null; // 60-second interval timer for watch time tracking
+let behaviorLoopStartTime = null; // When current video watch started (for behavior tracking)
+let behaviorLoopPausedTime = 0; // Accumulated paused time (to subtract from total)
+let behaviorLoopLastPauseTime = null; // When video was last paused (null if playing)
+let behaviorLoopTabHidden = false; // Whether tab is currently hidden
+let behaviorLoopCurrentClassification = null; // Current video classification (distracting/productive/neutral)
+let behaviorLoopNudgeShown = false; // Whether a nudge has been shown for current video
+let behaviorLoopLastUpdateTime = null; // Last time we updated counters (to track incremental time)
+let behaviorLoopAccumulatedTime = 0; // Total time accumulated for current video (to avoid double-counting)
+
 /**
  * Extracts video ID from YouTube Shorts URL
  * @param {string} pathname - Location pathname (e.g., "/shorts/ABC123")
@@ -517,6 +528,19 @@ function extractVideoIdFromUrl(url = location.href) {
 function extractChannelFast() {
   const currentVideoId = extractVideoIdFromUrl();
   
+  // Helper: Extract first channel from text (handles "Channel A & Channel B" or "A, B, C")
+  function extractFirstChannel(channelText) {
+    if (!channelText) return null;
+    
+    // Split by common separators: &, comma
+    const separators = /[&,]/;
+    if (separators.test(channelText)) {
+      const parts = channelText.split(separators).map(s => s.trim()).filter(s => s.length > 0);
+      return parts[0] || channelText.trim(); // Return first part, or original if split failed
+    }
+    return channelText.trim();
+  }
+  
   // Method 1: Meta tags FIRST (fastest, most reliable)
   const metaChannel = document.querySelector('meta[property="og:video:channel_name"]');
   const metaUrl = document.querySelector('meta[property="og:url"]');
@@ -527,55 +551,55 @@ function extractChannelFast() {
     
     // Verify meta tag is for CURRENT video (not stale from previous navigation)
     if (metaVideoId === currentVideoId && channelName) {
-      return channelName; // ✅ Fresh meta tag for current video!
+      return extractFirstChannel(channelName); // ✅ Extract first channel
     }
     // If video IDs don't match, meta tag is stale → skip it
   } else if (metaChannel) {
     // Meta channel exists but no URL meta tag - trust it (meta tags are usually fresh)
     const channelName = metaChannel.getAttribute("content")?.trim();
     if (channelName) {
-      return channelName;
+      return extractFirstChannel(channelName);
     }
   }
   
-  // Method 2: DOM fallback (if meta tags are stale or missing)
+  // Method 2: DOM fallback - try querySelectorAll to find first valid channel
   const mainVideoContainer = document.querySelector(
     "#primary-inner, ytd-watch-metadata, ytd-video-owner-renderer"
   );
   
   if (mainVideoContainer) {
-    const channelElement = mainVideoContainer.querySelector(
+    // Try querySelectorAll to get all channel elements, then pick first with text
+    const channelElements = mainVideoContainer.querySelectorAll(
       "ytd-channel-name a, #channel-name a, #owner-sub-count a"
     );
     
-    if (channelElement) {
-      // Verify element is visible and in main video container
-      const isVisible = channelElement.offsetParent !== null;
-      const isInMainVideo = mainVideoContainer.contains(channelElement);
+    for (const channelEl of channelElements) {
+      const isVisible = channelEl.offsetParent !== null;
+      const isInMainVideo = mainVideoContainer.contains(channelEl);
       
       if (isVisible && isInMainVideo) {
-        const channelText = channelElement.textContent?.trim();
-        if (channelText) {
-          return channelText; // ✅ DOM is always current after navigation
+        const channelText = channelEl.textContent?.trim();
+        if (channelText && channelText.length > 0) {
+          return extractFirstChannel(channelText); // ✅ Extract first channel
         }
       }
     }
   }
   
-  // Method 3: Last resort - try more specific DOM selectors
-  const candidate = document.querySelector(
+  // Method 3: Last resort - try more specific DOM selectors with querySelectorAll
+  const candidates = document.querySelectorAll(
     "ytd-watch-metadata ytd-channel-name a, " +
     "ytd-video-owner-renderer #channel-name a"
   );
   
-  if (candidate) {
+  for (const candidate of candidates) {
     const isVisible = candidate.offsetParent !== null;
     const isInMainVideo = candidate.closest("#primary, ytd-watch-metadata, ytd-video-owner-renderer");
     
     if (isVisible && isInMainVideo) {
       const channelText = candidate.textContent?.trim();
-      if (channelText) {
-        return channelText;
+      if (channelText && channelText.length > 0) {
+        return extractFirstChannel(channelText); // ✅ Extract first channel
       }
     }
   }
@@ -814,25 +838,53 @@ function extractVideoMetadata() {
         if (metaUrl) {
           const metaVideoId = extractVideoIdFromUrl(metaUrl.getAttribute("content"));
           if (metaVideoId === currentVideoId && channelName) {
-            metadata.channel = channelName;
+            // Extract first channel if multiple channels (e.g., "MrBeast & Dude Perfect" → "MrBeast")
+            const separators = /[&,]/;
+            if (separators.test(channelName)) {
+              const parts = channelName.split(separators).map(s => s.trim()).filter(s => s.length > 0);
+              metadata.channel = parts[0] || channelName.trim();
+            } else {
+              metadata.channel = channelName;
+            }
           }
         } else if (channelName) {
           // If no URL meta tag, trust the channel name (meta tags are usually fresh)
-          metadata.channel = channelName;
+          // Extract first channel if multiple channels
+          const separators = /[&,]/;
+          if (separators.test(channelName)) {
+            const parts = channelName.split(separators).map(s => s.trim()).filter(s => s.length > 0);
+            metadata.channel = parts[0] || channelName.trim();
+          } else {
+            metadata.channel = channelName;
+          }
         }
       }
     } else {
       // Verify channel element is actually for current video
       const channelText = channelElement.textContent?.trim();
       if (channelText) {
-        metadata.channel = channelText;
+        // Extract first channel if multiple channels (e.g., "MrBeast & Dude Perfect" → "MrBeast")
+        const separators = /[&,]/;
+        if (separators.test(channelText)) {
+          const parts = channelText.split(separators).map(s => s.trim()).filter(s => s.length > 0);
+          metadata.channel = parts[0] || channelText.trim();
+        } else {
+          metadata.channel = channelText;
+        }
       } else {
         // Channel element found but no text - might be stale, try meta tags
         const metaChannel = document.querySelector('meta[property="og:video:channel_name"]');
         if (metaChannel) {
           const channelName = metaChannel.getAttribute("content")?.trim();
           if (channelName) {
-            metadata.channel = channelName;
+            // Extract first channel if multiple channels
+            const separators = /[&,]/;
+            if (separators.test(channelName)) {
+              const parts = channelName.split(separators).map(s => s.trim()).filter(s => s.length > 0);
+              metadata.channel = parts[0] || channelName.trim();
+            } else {
+              metadata.channel = channelName;
+            }
           }
         }
       }
@@ -1935,12 +1987,16 @@ async function showSpiralNudge(spiralInfo) {
   overlay.id = "ft-spiral-nudge";
   
   const timePeriod = type === "today" ? "today" : "this week";
+  const timeText = spiralInfo.time_minutes ? ` (${spiralInfo.time_minutes} minutes)` : "";
   
   overlay.innerHTML = `
     <div class="ft-milestone-box">
       <h2>⚠️ ${styleMessage}</h2>
       <p class="ft-milestone-intro">
-        You've watched ${count} ${count === 1 ? 'video' : 'videos'} from ${channel} ${timePeriod}.
+        You've watched ${count} ${count === 1 ? 'video' : 'videos'}${timeText} from ${channel} ${timePeriod}.
+      </p>
+      <p class="ft-milestone-intro" style="margin-top: 8px;">
+        ${spiralInfo.message || "You've watched a lot of this channel this week. Are you still able to progress towards your goals?"}
       </p>
       
       <div class="ft-spiral-timer">
@@ -1984,10 +2040,18 @@ async function showSpiralNudge(spiralInfo) {
   const blockPermanentBtn = overlay.querySelector("#ft-spiral-block-permanent");
   
   if (continueBtn) {
-    continueBtn.addEventListener("click", () => {
+    continueBtn.addEventListener("click", async () => {
       clearInterval(timerInterval);
       overlay.remove();
       restoreVideoState();
+      
+      // Save dismissal cooldown (7 days)
+      const { ft_spiral_dismissed_channels = {} } = await chrome.storage.local.get(["ft_spiral_dismissed_channels"]);
+      ft_spiral_dismissed_channels[channel] = {
+        last_shown: Date.now()
+      };
+      await chrome.storage.local.set({ ft_spiral_dismissed_channels });
+      
       chrome.runtime.sendMessage({
         type: "FT_CLEAR_SPIRAL_FLAG"
       }).catch((err) => {
@@ -3015,22 +3079,60 @@ async function saveAccumulatedGlobalTime() {
   const elapsed = Math.floor((Date.now() - globalTimeStart) / 1000);
   if (elapsed > 0) {
     try {
-      const { ft_watch_seconds_today } = await chrome.storage.local.get(["ft_watch_seconds_today"]);
+      // Get current watch time and settings
+      const { 
+        ft_watch_seconds_today,
+        ft_plan,
+        ft_extension_settings = {}
+      } = await chrome.storage.local.get([
+        "ft_watch_seconds_today",
+        "ft_plan",
+        "ft_extension_settings"
+      ]);
+      
       if (chrome.runtime.lastError) {
         console.warn("[FT] Failed to get global time for save:", chrome.runtime.lastError.message);
         return 0;
       }
+      
       const currentSeconds = Number(ft_watch_seconds_today || 0);
+      
+      // Get daily limit from settings
+      const plan = ft_plan || "free";
+      const effectiveSettings = computeEffectiveSettings(plan, ft_extension_settings);
+      const dailyLimitMin = effectiveSettings.daily_limit_minutes || (plan === "free" ? 60 : 90);
+      const limitSeconds = dailyLimitMin * 60;
+      
+      // If already over limit, preserve historical time (don't reduce, don't add)
+      // This handles case where user reduced limit mid-day but already exceeded new limit
+      if (currentSeconds >= limitSeconds) {
+        // Don't add more time if already over limit (preserves historical accuracy)
+        // Reset start time to prevent further accumulation
+        globalTimeStart = Date.now();
+        lastGlobalSaveTime = Date.now();
+        return currentSeconds; // Return existing value (preserves 70 if limit reduced to 60)
+      }
+      
+      // If under limit, add elapsed time but cap at limit to prevent ballooning
       const newTotal = currentSeconds + elapsed;
-      await chrome.storage.local.set({ ft_watch_seconds_today: newTotal });
+      const cappedTotal = Math.min(newTotal, limitSeconds);
+      
+      await chrome.storage.local.set({ ft_watch_seconds_today: cappedTotal });
       if (chrome.runtime.lastError) {
         console.warn("[FT] Failed to save accumulated global time:", chrome.runtime.lastError.message);
         return currentSeconds; // Return old value if save failed
       }
+      
       // Reset start time after successful save
       globalTimeStart = Date.now();
       lastGlobalSaveTime = Date.now();
-      return newTotal;
+      
+      // Log if we capped the value (for debugging)
+      if (cappedTotal < newTotal) {
+        console.log(`[FT] Watch time capped at daily limit: ${cappedTotal}s (would have been ${newTotal}s)`);
+      }
+      
+      return cappedTotal;
     } catch (e) {
       console.warn("[FT] Error saving accumulated global time:", e.message);
       return 0;
@@ -3257,12 +3359,878 @@ function setupRecommendationsObserver() {
 let lastExtractedUrl = null;
 let lastExtractedVideoId = null;
 
+// ─────────────────────────────────────────────────────────────
+// BEHAVIOR LOOP AWARENESS TRACKING
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Checks if video is currently paused
+ * @returns {boolean} True if video is paused
+ */
+function isVideoPaused() {
+  const videos = document.querySelectorAll("video");
+  if (videos.length === 0) return true;
+  
+  // Check if any video is playing
+  for (const video of videos) {
+    if (!video.paused) return false;
+  }
+  return true;
+}
+
+/**
+ * Checks if tab is hidden (but audio might still be playing)
+ * @returns {boolean} True if tab is hidden
+ */
+function isTabHidden() {
+  return document.hidden || document.visibilityState === "hidden";
+}
+
+/**
+ * Checks if audio is playing even when tab is hidden
+ * @returns {boolean} True if audio is playing
+ */
+function isAudioPlaying() {
+  const videos = document.querySelectorAll("video");
+  for (const video of videos) {
+    if (!video.paused && !video.muted) return true;
+  }
+  return false;
+}
+
+/**
+ * Calculates effective distracting count/time including neutral excess
+ * @param {Object} counters - Current global counters
+ * @returns {Object} {effectiveCount, effectiveTime}
+ */
+function calculateEffectiveDistracting(counters) {
+  const {
+    ft_distracting_count_global = 0,
+    ft_distracting_time_global = 0,
+    ft_neutral_count_global = 0,
+    ft_neutral_time_global = 0
+  } = counters;
+  
+  // Neutral free allowance: first 2 videos OR first 20 minutes
+  const neutralExcessCount = Math.max(0, ft_neutral_count_global - 2);
+  const neutralExcessTime = Math.max(0, ft_neutral_time_global - 1200); // 20 min = 1200s
+  
+  const effectiveCount = ft_distracting_count_global + neutralExcessCount;
+  const effectiveTime = ft_distracting_time_global + neutralExcessTime;
+  
+  return { effectiveCount, effectiveTime };
+}
+
+/**
+ * Checks thresholds and triggers nudges for distracting content
+ * @param {number} effectiveCount - Effective distracting count (including neutral excess)
+ * @param {number} effectiveTime - Effective distracting time in seconds
+ * @param {boolean} isVideoEnd - Whether this check is at video end (for productive nudges)
+ * @returns {string|null} Nudge type to show: "nudge1", "nudge2", "break", or null
+ */
+function checkDistractingThresholds(effectiveCount, effectiveTime, isVideoEnd = false) {
+  // Distracting nudges show during video (not at end)
+  if (isVideoEnd) return null;
+  
+  // Break: 4 videos OR 60 minutes
+  if (effectiveCount >= 4 || effectiveTime >= 3600) {
+    return "break";
+  }
+  
+  // Nudge 2: 3 videos OR 40 minutes
+  if (effectiveCount >= 3 || effectiveTime >= 2400) {
+    return "nudge2";
+  }
+  
+  // Nudge 1: 2 videos OR 20 minutes
+  if (effectiveCount >= 2 || effectiveTime >= 1200) {
+    return "nudge1";
+  }
+  
+  return null;
+}
+
+/**
+ * Checks thresholds and triggers nudges for productive content
+ * @param {number} count - Productive count
+ * @param {number} time - Productive time in seconds
+ * @param {boolean} isVideoEnd - Whether this check is at video end
+ * @returns {string|null} Nudge type to show: "nudge1", "nudge2", "break", or null
+ */
+function checkProductiveThresholds(count, time, isVideoEnd = false) {
+  // Productive nudges show at video end (not during video)
+  if (!isVideoEnd) return null;
+  
+  // Break: 7 videos OR 90 minutes
+  if (count >= 7 || time >= 5400) {
+    return "break";
+  }
+  
+  // Nudge 2: 5 videos OR 60 minutes
+  if (count >= 5 || time >= 3600) {
+    return "nudge2";
+  }
+  
+  // Nudge 1: 3 videos OR 40 minutes
+  if (count >= 3 || time >= 2400) {
+    return "nudge1";
+  }
+  
+  return null;
+}
+
+/**
+ * Updates global counters and checks thresholds
+ * Called every 60 seconds during video watch
+ */
+async function updateBehaviorLoopCounters() {
+  if (!isChromeContextValid()) {
+    stopBehaviorLoopTracking();
+    return;
+  }
+  
+  try {
+    // Check if video is paused
+    const videoPaused = isVideoPaused();
+    const tabHidden = isTabHidden();
+    const audioPlaying = isAudioPlaying();
+    
+    // Don't count time if video is paused (unless audio is playing in background)
+    if (videoPaused && !audioPlaying) {
+      // Video is paused - track pause start time
+      if (behaviorLoopLastPauseTime === null) {
+        behaviorLoopLastPauseTime = Date.now();
+      }
+      return; // Don't update counters while paused
+    }
+    
+    // Video is playing - handle resume from pause
+    if (behaviorLoopLastPauseTime !== null) {
+      // We were paused, now playing - add paused time to accumulator
+      const pausedDuration = Date.now() - behaviorLoopLastPauseTime;
+      behaviorLoopPausedTime += pausedDuration;
+      behaviorLoopLastPauseTime = null;
+    }
+    
+    // Don't count time if tab is hidden (unless audio is playing)
+    if (tabHidden && !audioPlaying) {
+      behaviorLoopTabHidden = true;
+      return; // Don't update counters while tab hidden
+    }
+    
+    behaviorLoopTabHidden = false;
+    
+    // Calculate incremental watch time since last update
+    if (!behaviorLoopStartTime) return;
+    
+    const now = Date.now();
+    const elapsed = now - behaviorLoopStartTime;
+    const actualWatchTime = Math.floor((elapsed - behaviorLoopPausedTime) / 1000);
+    
+    if (actualWatchTime <= 0) return;
+    
+    // Calculate incremental time (time since last update, or since start if first update)
+    const lastUpdate = behaviorLoopLastUpdateTime || behaviorLoopStartTime;
+    const incrementalSeconds = Math.floor((now - lastUpdate - (behaviorLoopPausedTime - (behaviorLoopLastPauseTime ? (now - behaviorLoopLastPauseTime) : 0))) / 1000);
+    
+    if (incrementalSeconds <= 0) return;
+    
+    // Update last update time
+    behaviorLoopLastUpdateTime = now;
+    
+    // Get current classification
+    if (!behaviorLoopCurrentClassification) return;
+    
+    const classification = behaviorLoopCurrentClassification.distraction_level || 
+                          behaviorLoopCurrentClassification.category || "neutral";
+    
+    // Get current counters
+    const counters = await chrome.storage.local.get([
+      "ft_distracting_count_global",
+      "ft_distracting_time_global",
+      "ft_productive_count_global",
+      "ft_productive_time_global",
+      "ft_neutral_count_global",
+      "ft_neutral_time_global",
+      "ft_break_lockout_until"
+    ]);
+    
+    if (chrome.runtime.lastError) {
+      console.warn("[FT] Error getting counters:", chrome.runtime.lastError.message);
+      return;
+    }
+    
+    // Check if break lockout is active
+    const breakLockoutUntil = counters.ft_break_lockout_until || 0;
+    if (Date.now() < breakLockoutUntil) {
+      // Break is active - don't update counters
+      return;
+    }
+    
+    // Update counters based on classification (incremental - add time since last update)
+    const updates = {};
+    
+    if (classification === "distracting") {
+      // Increment distracting counters
+      const currentDistractingTime = (counters.ft_distracting_time_global || 0) + incrementalSeconds;
+      const currentDistractingCount = counters.ft_distracting_count_global || 0;
+      
+      updates.ft_distracting_time_global = currentDistractingTime;
+      
+      const effective = calculateEffectiveDistracting({
+        ft_distracting_count_global: currentDistractingCount,
+        ft_distracting_time_global: currentDistractingTime,
+        ft_neutral_count_global: counters.ft_neutral_count_global || 0,
+        ft_neutral_time_global: counters.ft_neutral_time_global || 0
+      });
+      
+      const nudgeType = checkDistractingThresholds(effective.effectiveCount, effective.effectiveTime, false);
+      
+      if (nudgeType && !behaviorLoopNudgeShown) {
+        behaviorLoopNudgeShown = true;
+        // Trigger nudge
+        showDistractingNudge(nudgeType, {
+          effectiveCount: effective.effectiveCount,
+          effectiveTime: effective.effectiveTime
+        }).catch(err => {
+          console.warn("[FT] Error showing distracting nudge:", err.message);
+        });
+      }
+    } else if (classification === "productive") {
+      // Productive nudges show at video end, not during video
+      // Just track time incrementally
+      const currentProductiveTime = (counters.ft_productive_time_global || 0) + incrementalSeconds;
+      updates.ft_productive_time_global = currentProductiveTime;
+      
+      // Check thresholds (but don't show nudge yet - will show at video end)
+      const currentProductiveCount = counters.ft_productive_count_global || 0;
+      const nudgeType = checkProductiveThresholds(currentProductiveCount, currentProductiveTime, false);
+      if (nudgeType) {
+        console.log("[FT] Productive threshold would trigger at video end:", nudgeType);
+      }
+    } else if (classification === "neutral") {
+      // Neutral videos are tracked but nudges only trigger if excess counts toward distracting
+      const currentNeutralTime = (counters.ft_neutral_time_global || 0) + incrementalSeconds;
+      updates.ft_neutral_time_global = currentNeutralTime;
+      
+      const currentNeutralCount = counters.ft_neutral_count_global || 0;
+      
+      // Check if neutral excess would trigger distracting nudge
+      const effective = calculateEffectiveDistracting({
+        ft_distracting_count_global: counters.ft_distracting_count_global || 0,
+        ft_distracting_time_global: counters.ft_distracting_time_global || 0,
+        ft_neutral_count_global: currentNeutralCount,
+        ft_neutral_time_global: currentNeutralTime
+      });
+      
+      const nudgeType = checkDistractingThresholds(effective.effectiveCount, effective.effectiveTime, false);
+      
+      if (nudgeType && !behaviorLoopNudgeShown) {
+        behaviorLoopNudgeShown = true;
+        // Trigger nudge (neutral excess counts as distracting)
+        showDistractingNudge(nudgeType, {
+          effectiveCount: effective.effectiveCount,
+          effectiveTime: effective.effectiveTime
+        }).catch(err => {
+          console.warn("[FT] Error showing neutral excess nudge:", err.message);
+        });
+      }
+    }
+    
+    // Save incremental updates
+    if (Object.keys(updates).length > 0) {
+      await chrome.storage.local.set(updates);
+      behaviorLoopAccumulatedTime += incrementalSeconds; // Track accumulated time
+    }
+    
+  } catch (error) {
+    console.warn("[FT] Error updating behavior loop counters:", error.message);
+  }
+}
+
+/**
+ * Starts behavior loop awareness tracking for current video
+ * @param {string} videoId - Current video ID
+ * @param {Object} classification - Video classification (distracting/productive/neutral)
+ */
+function startBehaviorLoopTracking(videoId, classification) {
+  // Stop any existing tracking
+  stopBehaviorLoopTracking();
+  
+  behaviorLoopStartTime = Date.now();
+  behaviorLoopPausedTime = 0;
+  behaviorLoopLastPauseTime = null;
+  behaviorLoopTabHidden = false;
+  behaviorLoopCurrentClassification = classification;
+  behaviorLoopNudgeShown = false;
+  behaviorLoopLastUpdateTime = Date.now();
+  behaviorLoopAccumulatedTime = 0;
+  
+  // Start 60-second interval timer
+  behaviorLoopTimer = setInterval(() => {
+    updateBehaviorLoopCounters();
+  }, 60000); // Every 60 seconds
+  
+  // Also check immediately (for cases where threshold is already met)
+  updateBehaviorLoopCounters();
+}
+
+/**
+ * Stops behavior loop awareness tracking
+ * Finalizes watch time and updates counters
+ */
+async function stopBehaviorLoopTracking() {
+  if (behaviorLoopTimer) {
+    clearInterval(behaviorLoopTimer);
+    behaviorLoopTimer = null;
+  }
+  
+  if (!behaviorLoopStartTime || !behaviorLoopCurrentClassification) {
+    return; // Nothing to finalize
+  }
+  
+  try {
+    // Calculate final watch time (exact time, not incremental)
+    const elapsed = Date.now() - behaviorLoopStartTime;
+    const actualWatchTime = Math.floor((elapsed - behaviorLoopPausedTime) / 1000);
+    
+    if (actualWatchTime <= 0) {
+      // Reset state
+      behaviorLoopStartTime = null;
+      behaviorLoopCurrentClassification = null;
+      behaviorLoopPausedTime = 0;
+      behaviorLoopLastPauseTime = null;
+      behaviorLoopLastUpdateTime = null;
+      behaviorLoopAccumulatedTime = 0;
+      return;
+    }
+    
+    // Calculate remaining time (actual - already accumulated)
+    const remainingTime = Math.max(0, actualWatchTime - behaviorLoopAccumulatedTime);
+    
+    const classification = behaviorLoopCurrentClassification.distraction_level || 
+                          behaviorLoopCurrentClassification.category || "neutral";
+    
+    // Get current counters
+    const counters = await chrome.storage.local.get([
+      "ft_distracting_count_global",
+      "ft_distracting_time_global",
+      "ft_productive_count_global",
+      "ft_productive_time_global",
+      "ft_neutral_count_global",
+      "ft_neutral_time_global",
+      "ft_break_lockout_until"
+    ]);
+    
+    if (chrome.runtime.lastError) {
+      console.warn("[FT] Error getting counters for finalization:", chrome.runtime.lastError.message);
+      return;
+    }
+    
+    // Check if break lockout is active
+    const breakLockoutUntil = counters.ft_break_lockout_until || 0;
+    if (Date.now() < breakLockoutUntil) {
+      // Break is active - don't update counters
+      behaviorLoopStartTime = null;
+      behaviorLoopCurrentClassification = null;
+      behaviorLoopPausedTime = 0;
+      behaviorLoopLastPauseTime = null;
+      behaviorLoopLastUpdateTime = null;
+      behaviorLoopAccumulatedTime = 0;
+      return;
+    }
+    
+    // Update counters with final watch time (add remaining time that wasn't counted in 60s updates)
+    const updates = {};
+    
+    if (classification === "distracting") {
+      updates.ft_distracting_count_global = (counters.ft_distracting_count_global || 0) + 1;
+      updates.ft_distracting_time_global = (counters.ft_distracting_time_global || 0) + remainingTime;
+    } else if (classification === "productive") {
+      updates.ft_productive_count_global = (counters.ft_productive_count_global || 0) + 1;
+      updates.ft_productive_time_global = (counters.ft_productive_time_global || 0) + remainingTime;
+      
+      // Check productive thresholds at video end
+      const newCount = updates.ft_productive_count_global;
+      const newTime = updates.ft_productive_time_global;
+      const nudgeType = checkProductiveThresholds(newCount, newTime, true);
+      
+      if (nudgeType) {
+        // Show productive nudge at video end
+        showProductiveNudge(nudgeType, {
+          count: newCount,
+          time: newTime
+        }).catch(err => {
+          console.warn("[FT] Error showing productive nudge:", err.message);
+        });
+      }
+    } else if (classification === "neutral") {
+      updates.ft_neutral_count_global = (counters.ft_neutral_count_global || 0) + 1;
+      updates.ft_neutral_time_global = (counters.ft_neutral_time_global || 0) + remainingTime;
+      
+      // Check if neutral excess triggers distracting nudge
+      const effective = calculateEffectiveDistracting({
+        ft_distracting_count_global: counters.ft_distracting_count_global || 0,
+        ft_distracting_time_global: counters.ft_distracting_time_global || 0,
+        ft_neutral_count_global: updates.ft_neutral_count_global,
+        ft_neutral_time_global: updates.ft_neutral_time_global
+      });
+      
+      const nudgeType = checkDistractingThresholds(effective.effectiveCount, effective.effectiveTime, false);
+      
+      if (nudgeType) {
+        // Show nudge (neutral excess counts as distracting)
+        showDistractingNudge(nudgeType, {
+          effectiveCount: effective.effectiveCount,
+          effectiveTime: effective.effectiveTime
+        }).catch(err => {
+          console.warn("[FT] Error showing neutral excess nudge at video end:", err.message);
+        });
+      }
+    }
+    
+    // Save updated counters
+    if (Object.keys(updates).length > 0) {
+      await chrome.storage.local.set(updates);
+    }
+    
+    // Reset state
+    behaviorLoopStartTime = null;
+    behaviorLoopCurrentClassification = null;
+    behaviorLoopPausedTime = 0;
+    behaviorLoopLastPauseTime = null;
+    behaviorLoopLastUpdateTime = null;
+    behaviorLoopAccumulatedTime = 0;
+    
+  } catch (error) {
+    console.warn("[FT] Error finalizing behavior loop tracking:", error.message);
+    // Reset state even on error
+    behaviorLoopStartTime = null;
+    behaviorLoopCurrentClassification = null;
+    behaviorLoopPausedTime = 0;
+    behaviorLoopLastPauseTime = null;
+  }
+}
+
+// Set up tab visibility listener
+document.addEventListener("visibilitychange", () => {
+  behaviorLoopTabHidden = isTabHidden();
+});
+
+/**
+ * Shows distracting content nudge (10s, 30s, or break)
+ * @param {string} nudgeType - "nudge1" (10s), "nudge2" (30s), or "break" (10 min)
+ * @param {Object} counters - Current counters {effectiveCount, effectiveTime}
+ */
+async function showDistractingNudge(nudgeType, counters) {
+  const { effectiveCount, effectiveTime } = counters;
+  
+  // Remove any existing nudge
+  const existing = document.getElementById("ft-behavior-nudge");
+  if (existing) existing.remove();
+  
+  // Pause video before showing nudge
+  pauseAndMuteVideo();
+  
+  const overlay = document.createElement("div");
+  overlay.id = "ft-behavior-nudge";
+  
+  let message = "";
+  let duration = 10; // seconds
+  let showJournal = false;
+  
+  if (nudgeType === "nudge1") {
+    message = "Still aligned with your goals?";
+    duration = 10;
+  } else if (nudgeType === "nudge2") {
+    message = "Still aligned with your goals?";
+    duration = 30;
+    showJournal = true;
+  } else if (nudgeType === "break") {
+    message = "You've been watching distracting content. Take a 10-minute break to reset your focus.";
+    duration = 0; // Break doesn't auto-dismiss
+    showJournal = true;
+  }
+  
+  const countText = effectiveCount >= 2 ? `${effectiveCount} videos` : "";
+  const timeText = effectiveTime >= 1200 ? `${Math.floor(effectiveTime / 60)} minutes` : "";
+  const thresholdText = [countText, timeText].filter(Boolean).join(" or ");
+  
+  overlay.innerHTML = `
+    <div class="ft-milestone-box">
+      <h2>⚠️ ${message}</h2>
+      <p class="ft-milestone-intro">
+        You've watched ${thresholdText} of distracting content today.
+      </p>
+      ${duration > 0 ? `
+        <div class="ft-spiral-timer">
+          <div class="ft-timer-circle">
+            <span id="ft-timer-count">${duration}</span>
+          </div>
+        </div>
+      ` : ""}
+      ${showJournal ? `
+        <div class="ft-journal-prompt" style="margin: 16px 0;">
+          <textarea 
+            id="ft-journal-input" 
+            placeholder="Optional: What triggered you? (saves to your journal)"
+            style="width: 100%; min-height: 60px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; resize: vertical;"
+          ></textarea>
+        </div>
+      ` : ""}
+      <div class="ft-milestone-buttons">
+        ${nudgeType === "break" ? `
+          <button id="ft-break-accept" class="ft-button ft-button-primary">Take Break</button>
+        ` : `
+          <button id="ft-nudge-continue" class="ft-button ft-button-secondary">Continue</button>
+        `}
+      </div>
+    </div>
+  `;
+  
+  // Countdown timer (if not break)
+  let timerInterval = null;
+  if (duration > 0) {
+    let timeLeft = duration;
+    const timerEl = overlay.querySelector("#ft-timer-count");
+    timerInterval = setInterval(() => {
+      timeLeft--;
+      if (timerEl) {
+        timerEl.textContent = timeLeft;
+      }
+      if (timeLeft <= 0) {
+        clearInterval(timerInterval);
+        dismissDistractingNudge(overlay, showJournal);
+      }
+    }, 1000);
+  }
+  
+  // Button handlers
+  const continueBtn = overlay.querySelector("#ft-nudge-continue");
+  const breakBtn = overlay.querySelector("#ft-break-accept");
+  
+  if (continueBtn) {
+    continueBtn.addEventListener("click", () => {
+      if (timerInterval) clearInterval(timerInterval);
+      dismissDistractingNudge(overlay, showJournal);
+    });
+  }
+  
+  if (breakBtn) {
+    breakBtn.addEventListener("click", async () => {
+      // Save journal if provided
+      if (showJournal) {
+        await saveJournalEntry("distracting", counters);
+      }
+      
+      // Set break lockout (10 minutes)
+      const breakUntil = Date.now() + (10 * 60 * 1000);
+      await chrome.storage.local.set({ ft_break_lockout_until: breakUntil });
+      
+      // Reset counters
+      await chrome.storage.local.set({
+        ft_distracting_count_global: 0,
+        ft_distracting_time_global: 0,
+        ft_neutral_count_global: 0,
+        ft_neutral_time_global: 0
+      });
+      
+      overlay.remove();
+      restoreVideoState();
+      
+      // Redirect to home
+      window.location.href = "https://www.youtube.com/";
+    });
+  }
+  
+  document.body.appendChild(overlay);
+}
+
+/**
+ * Dismisses distracting nudge and saves journal if provided
+ */
+async function dismissDistractingNudge(overlay, showJournal) {
+  if (showJournal) {
+    await saveJournalEntry("distracting", {});
+  }
+  overlay.remove();
+  restoreVideoState();
+}
+
+/**
+ * Shows productive content nudge (10s, 30s, or break)
+ * @param {string} nudgeType - "nudge1" (10s), "nudge2" (30s), or "break" (10 min)
+ * @param {Object} counters - Current counters {count, time}
+ */
+async function showProductiveNudge(nudgeType, counters) {
+  const { count, time } = counters;
+  
+  // Remove any existing nudge
+  const existing = document.getElementById("ft-behavior-nudge");
+  if (existing) existing.remove();
+  
+  // Pause video before showing nudge
+  pauseAndMuteVideo();
+  
+  const overlay = document.createElement("div");
+  overlay.id = "ft-behavior-nudge";
+  
+  let message = "";
+  let duration = 10; // seconds
+  let showJournal = false;
+  
+  if (nudgeType === "nudge1") {
+    message = "You've been learning a lot! Take a break?";
+    duration = 10;
+  } else if (nudgeType === "nudge2") {
+    message = "Learning fatigue is real. Rest your brain.";
+    duration = 30;
+    showJournal = true;
+  } else if (nudgeType === "break") {
+    message = "You've watched 7 educational videos today. Time to rest the brain.";
+    duration = 0; // Break doesn't auto-dismiss
+    showJournal = true;
+  }
+  
+  const countText = count >= 3 ? `${count} videos` : "";
+  const timeText = time >= 2400 ? `${Math.floor(time / 60)} minutes` : "";
+  const thresholdText = [countText, timeText].filter(Boolean).join(" or ");
+  
+  overlay.innerHTML = `
+    <div class="ft-milestone-box">
+      <h2>💡 ${message}</h2>
+      <p class="ft-milestone-intro">
+        You've watched ${thresholdText} of productive content today.
+      </p>
+      ${duration > 0 ? `
+        <div class="ft-spiral-timer">
+          <div class="ft-timer-circle">
+            <span id="ft-timer-count">${duration}</span>
+          </div>
+        </div>
+      ` : ""}
+      ${showJournal ? `
+        <div class="ft-journal-prompt" style="margin: 16px 0;">
+          <textarea 
+            id="ft-journal-input" 
+            placeholder="Optional: What did you learn? (saves to your journal)"
+            style="width: 100%; min-height: 60px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; resize: vertical;"
+          ></textarea>
+        </div>
+      ` : ""}
+      <div class="ft-milestone-buttons">
+        ${nudgeType === "break" ? `
+          <button id="ft-break-accept" class="ft-button ft-button-primary">Take Break</button>
+        ` : `
+          <button id="ft-nudge-continue" class="ft-button ft-button-secondary">Continue</button>
+        `}
+      </div>
+    </div>
+  `;
+  
+  // Countdown timer (if not break)
+  let timerInterval = null;
+  if (duration > 0) {
+    let timeLeft = duration;
+    const timerEl = overlay.querySelector("#ft-timer-count");
+    timerInterval = setInterval(() => {
+      timeLeft--;
+      if (timerEl) {
+        timerEl.textContent = timeLeft;
+      }
+      if (timeLeft <= 0) {
+        clearInterval(timerInterval);
+        dismissProductiveNudge(overlay, showJournal);
+      }
+    }, 1000);
+  }
+  
+  // Button handlers
+  const continueBtn = overlay.querySelector("#ft-nudge-continue");
+  const breakBtn = overlay.querySelector("#ft-break-accept");
+  
+  if (continueBtn) {
+    continueBtn.addEventListener("click", () => {
+      if (timerInterval) clearInterval(timerInterval);
+      dismissProductiveNudge(overlay, showJournal);
+    });
+  }
+  
+  if (breakBtn) {
+    breakBtn.addEventListener("click", async () => {
+      // Save journal if provided
+      if (showJournal) {
+        await saveJournalEntry("productive", counters);
+      }
+      
+      // Set break lockout (10 minutes)
+      const breakUntil = Date.now() + (10 * 60 * 1000);
+      await chrome.storage.local.set({ ft_break_lockout_until: breakUntil });
+      
+      // Reset counters
+      await chrome.storage.local.set({
+        ft_productive_count_global: 0,
+        ft_productive_time_global: 0
+      });
+      
+      overlay.remove();
+      restoreVideoState();
+      
+      // Redirect to home
+      window.location.href = "https://www.youtube.com/";
+    });
+  }
+  
+  document.body.appendChild(overlay);
+}
+
+/**
+ * Dismisses productive nudge and saves journal if provided
+ */
+async function dismissProductiveNudge(overlay, showJournal) {
+  if (showJournal) {
+    await saveJournalEntry("productive", {});
+  }
+  overlay.remove();
+  restoreVideoState();
+}
+
+/**
+ * Shows break lockout overlay with countdown timer
+ * @param {number} remainingSeconds - Seconds remaining in break
+ */
+async function showBreakLockoutOverlay(remainingSeconds) {
+  // Remove any existing overlay
+  const existing = document.getElementById("ft-break-overlay");
+  if (existing) existing.remove();
+  
+  pauseAndMuteVideo();
+  
+  const overlay = document.createElement("div");
+  overlay.id = "ft-break-overlay";
+  
+  overlay.innerHTML = `
+    <div class="ft-milestone-box">
+      <h2>⏸️ Take a Break</h2>
+      <p class="ft-milestone-intro">
+        You've been watching a lot today. Take a 10-minute break to reset your focus.
+      </p>
+      <div class="ft-spiral-timer">
+        <div class="ft-timer-circle">
+          <span id="ft-break-timer-count">${remainingSeconds}</span>
+        </div>
+      </div>
+      <p style="text-align: center; color: #666; font-size: 14px; margin-top: 16px;">
+        Time remaining: <span id="ft-break-time-text">${Math.floor(remainingSeconds / 60)}:${String(remainingSeconds % 60).padStart(2, '0')}</span>
+      </p>
+    </div>
+  `;
+  
+  // Update countdown timer
+  let timeLeft = remainingSeconds;
+  const timerEl = overlay.querySelector("#ft-break-timer-count");
+  const timeTextEl = overlay.querySelector("#ft-break-time-text");
+  
+  const timerInterval = setInterval(() => {
+    timeLeft--;
+    if (timerEl) {
+      timerEl.textContent = timeLeft;
+    }
+    if (timeTextEl) {
+      const minutes = Math.floor(timeLeft / 60);
+      const seconds = timeLeft % 60;
+      timeTextEl.textContent = `${minutes}:${String(seconds).padStart(2, '0')}`;
+    }
+    
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      overlay.remove();
+      restoreVideoState();
+      // Break is over - user can watch again
+    }
+  }, 1000);
+  
+  document.body.appendChild(overlay);
+}
+
+/**
+ * Saves journal entry to Supabase
+ * @param {string} distractionLevel - "distracting", "productive", or "neutral"
+ * @param {Object} context - Additional context (counters, etc.)
+ */
+async function saveJournalEntry(distractionLevel, context) {
+  try {
+    const journalInput = document.getElementById("ft-journal-input");
+    const journalText = journalInput?.value?.trim() || "";
+    
+    if (!journalText) {
+      // No journal text - don't save
+      return;
+    }
+    
+    // Get current video metadata
+    const meta = extractVideoMetadata();
+    const channel = meta?.channel || "Unknown";
+    
+    // Get user email
+    const { ft_user_email } = await chrome.storage.local.get(["ft_user_email"]);
+    
+    if (!ft_user_email) {
+      console.warn("[FT] No user email for journal entry");
+      return;
+    }
+    
+    // Send to background to save to server
+    const response = await chrome.runtime.sendMessage({
+      type: "FT_SAVE_JOURNAL",
+      note: journalText,
+      channel: channel,
+      distraction_level: distractionLevel
+    });
+    
+    if (response?.ok) {
+      console.log("[FT] Journal entry saved successfully");
+    } else {
+      console.warn("[FT] Failed to save journal entry:", response?.error);
+    }
+    
+    console.log("[FT] Journal entry saved:", { channel, distractionLevel, textLength: journalText.length });
+  } catch (error) {
+    console.warn("[FT] Error saving journal entry:", error.message);
+  }
+}
+
 async function handleNavigation() {
   // Guard: make sure Chrome APIs exist before continuing
   if (!chrome?.runtime) {
     console.warn("[FT] chrome.runtime unavailable — skipping navigation check.");
-  return;
-}
+    return;
+  }
+  
+  // Check for break lockout first (before any other logic)
+  try {
+    const { ft_break_lockout_until } = await chrome.storage.local.get(["ft_break_lockout_until"]);
+    const breakLockoutUntil = ft_break_lockout_until || 0;
+    
+    if (Date.now() < breakLockoutUntil) {
+      // Break is active - block all video watching
+      const pageType = detectPageType();
+      if (pageType === "WATCH" || pageType === "SHORTS") {
+        // Show break overlay and redirect
+        const remainingSeconds = Math.ceil((breakLockoutUntil - Date.now()) / 1000);
+        await showBreakLockoutOverlay(remainingSeconds);
+        pauseAndMuteVideo();
+        // Redirect to home after a moment
+        setTimeout(() => {
+          window.location.href = "https://www.youtube.com/";
+        }, 2000);
+        return; // Don't continue with normal navigation logic
+      }
+    }
+  } catch (error) {
+    console.warn("[FT] Error checking break lockout:", error.message);
+    // Continue with normal flow if check fails
+  }
   
   // Debug: Log when handleNavigation is called
   const currentUrl = location.href;
@@ -3280,6 +4248,30 @@ async function handleNavigation() {
     }
   } catch (e) {
     console.warn("[FT] Error checking onboarding status:", e.message);
+    // Continue with normal navigation if check fails
+  }
+  
+  // Check if trial is expiring (0 or 1 days left) - show small banner
+  try {
+    if (isChromeContextValid()) {
+      const { ft_plan, ft_days_left } = await chrome.storage.local.get([
+        "ft_plan",
+        "ft_days_left"
+      ]);
+      
+      // Show trial expiring banner if on trial with 0-1 days left
+      if (ft_plan === "trial" && typeof ft_days_left === "number") {
+        if (ft_days_left === 0 || ft_days_left === 1) {
+          // Check timing rules (once per day, optionally again after 6 hours)
+          const shouldShow = await shouldShowTrialExpiringBanner();
+          if (shouldShow) {
+            showTrialExpiringBanner(ft_days_left);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("[FT] Error checking trial status:", e.message);
     // Continue with normal navigation if check fails
   }
   
@@ -3711,6 +4703,11 @@ async function handleNavigation() {
       if (responseVideoId === currentVideoId && responseVideoId !== "unknown") {
         currentVideoAIClassification = ai;
         
+        // Start behavior loop awareness tracking for this video
+        if (pageType === "WATCH" && currentVideoId) {
+          startBehaviorLoopTracking(currentVideoId, ai);
+        }
+        
         // Check if content is distracting - if not, cancel the journal nudge timer
         chrome.storage.local.get(["ft_plan"]).then(({ ft_plan }) => {
           const isDistracting = (distraction === "distracting" || category === "distracting");
@@ -3875,6 +4872,8 @@ async function handleNavigation() {
       clearTimeout(journalNudgeTimer);
       journalNudgeTimer = null;
     }
+    // Stop behavior loop tracking when leaving WATCH page
+    await stopBehaviorLoopTracking();
     currentWatchVideoId = null;
     videoWatchStartTime = null;
     journalNudgeShown = false;
@@ -3882,6 +4881,13 @@ async function handleNavigation() {
     videoClassified = false;
     // Stop focus window check when leaving WATCH page
     stopFocusWindowCheck();
+  } else {
+    // On WATCH page - check if we need to stop previous video tracking
+    const currentVideoId = videoMetadata?.video_id || extractVideoIdFromUrl();
+    if (currentVideoId && currentVideoId !== currentWatchVideoId) {
+      // New video - stop tracking previous video
+      await stopBehaviorLoopTracking();
+    }
   }
 
   // Handle AI classification popup (show before checking blocked status)

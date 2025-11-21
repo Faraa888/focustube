@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { removeEmailFromExtension } from "@/lib/extensionStorage";
@@ -37,11 +38,12 @@ const Settings = () => {
   
   // Controls state
   const [blockShorts, setBlockShorts] = useState(false);
-  const [hideRecommendations, setHideRecommendations] = useState(false);
-  const [dailyLimit, setDailyLimit] = useState([90]);
-  const [focusWindowEnabled, setFocusWindowEnabled] = useState(false);
+  const [hideRecommendations, setHideRecommendations] = useState(true);
+  const [dailyLimit, setDailyLimit] = useState([60]);
+  const [focusWindowEnabled, setFocusWindowEnabled] = useState(true);
   const [focusWindowStart, setFocusWindowStart] = useState("1:00 PM");
-  const [focusWindowEnd, setFocusWindowEnd] = useState("6:00 PM");
+  const [focusWindowEnd, setFocusWindowEnd] = useState("9:00 PM");
+  const [focusWindowError, setFocusWindowError] = useState<string | null>(null);
   const [nudgeStyle, setNudgeStyle] = useState<"gentle" | "direct" | "firm">("firm");
   const [savingSettings, setSavingSettings] = useState(false);
   
@@ -119,23 +121,31 @@ const Settings = () => {
             const settings = result.data.settings || {};
             if (settings.focus_window_enabled !== undefined) {
               setFocusWindowEnabled(settings.focus_window_enabled);
+            } else {
+              setFocusWindowEnabled(true); // Default to enabled
             }
             if (settings.focus_window_start) {
               setFocusWindowStart(convert24hTo12h(settings.focus_window_start));
+            } else {
+              setFocusWindowStart("1:00 PM"); // Default to 1pm
             }
             if (settings.focus_window_end) {
               setFocusWindowEnd(convert24hTo12h(settings.focus_window_end));
+            } else {
+              setFocusWindowEnd("9:00 PM"); // Default to 9pm
             }
             if (settings.block_shorts !== undefined) {
               setBlockShorts(settings.block_shorts);
             }
             if (settings.hide_recommendations !== undefined) {
               setHideRecommendations(settings.hide_recommendations);
+            } else {
+              setHideRecommendations(true); // Default to enabled
             }
             if (settings.daily_limit) {
               setDailyLimit([settings.daily_limit]);
             } else {
-              setDailyLimit([90]); // Default only if not set
+              setDailyLimit([60]); // Default to 60 minutes
             }
             if (settings.nudge_style) {
               setNudgeStyle(settings.nudge_style);
@@ -175,6 +185,68 @@ const Settings = () => {
     }
     return `${hours24.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   };
+
+  // Helper: Generate time options in 15-minute increments (12h format)
+  const generateTimeOptions = (): string[] => {
+    const options: string[] = [];
+    for (let hour = 0; hour < 24; hour++) {
+      for (let minute = 0; minute < 60; minute += 15) {
+        const period = hour >= 12 ? 'PM' : 'AM';
+        const hour12 = hour % 12 || 12;
+        const timeStr = `${hour12}:${minute.toString().padStart(2, '0')} ${period}`;
+        options.push(timeStr);
+      }
+    }
+    return options;
+  };
+
+  // Helper: Validate focus window is max 8 hours
+  const validateFocusWindow = (start: string, end: string): string | null => {
+    const start24 = convert12hTo24h(start);
+    const end24 = convert12hTo24h(end);
+    const [startHour, startMin] = start24.split(':').map(Number);
+    const [endHour, endMin] = end24.split(':').map(Number);
+    
+    let startMinutes = startHour * 60 + startMin;
+    let endMinutes = endHour * 60 + endMin;
+    
+    // Handle wrap-around (e.g., 11 PM to 2 AM)
+    if (endMinutes < startMinutes) {
+      endMinutes += 24 * 60;
+    }
+    
+    const durationHours = (endMinutes - startMinutes) / 60;
+    
+    if (durationHours > 8) {
+      return "Focus window cannot exceed 8 hours";
+    }
+    
+    return null;
+  };
+
+  // Handler for focus window start change
+  const handleFocusWindowStartChange = (value: string) => {
+    setFocusWindowStart(value);
+    const error = validateFocusWindow(value, focusWindowEnd);
+    setFocusWindowError(error);
+    // Clear error toast if validation passes
+    if (!error && focusWindowError) {
+      setFocusWindowError(null);
+    }
+  };
+
+  // Handler for focus window end change
+  const handleFocusWindowEndChange = (value: string) => {
+    setFocusWindowEnd(value);
+    const error = validateFocusWindow(focusWindowStart, value);
+    setFocusWindowError(error);
+    // Clear error toast if validation passes
+    if (!error && focusWindowError) {
+      setFocusWindowError(null);
+    }
+  };
+
+  const timeOptions = generateTimeOptions();
 
   // Goals helpers
   const addGoal = () => {
@@ -439,6 +511,21 @@ const Settings = () => {
 
   // Save controls settings
   const handleSaveControls = async () => {
+    // Validate focus window if enabled
+    if (focusWindowEnabled) {
+      const error = validateFocusWindow(focusWindowStart, focusWindowEnd);
+      if (error) {
+        setFocusWindowError(error);
+        toast({
+          title: "Invalid Focus Window",
+          description: error,
+          variant: "destructive",
+        });
+        setSavingSettings(false);
+        return;
+      }
+    }
+
     setSavingSettings(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -808,7 +895,7 @@ const Settings = () => {
                     value={dailyLimit}
                     onValueChange={setDailyLimit}
                     min={15}
-                    max={150}
+                    max={120}
                     step={15}
                   />
                   <p className="text-xs text-muted-foreground">
@@ -835,7 +922,12 @@ const Settings = () => {
                   </div>
                   <Switch
                     checked={focusWindowEnabled}
-                    onCheckedChange={setFocusWindowEnabled}
+                    onCheckedChange={(checked) => {
+                      setFocusWindowEnabled(checked);
+                      if (!checked) {
+                        setFocusWindowError(null); // Clear error when disabled
+                      }
+                    }}
                   />
                 </div>
 
@@ -844,25 +936,41 @@ const Settings = () => {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="focus-window-start">From</Label>
-                        <Input
-                          id="focus-window-start"
-                          type="text"
-                          value={focusWindowStart}
-                          onChange={(e) => setFocusWindowStart(e.target.value)}
-                          placeholder="1:00 PM"
-                        />
+                        <Select value={focusWindowStart} onValueChange={handleFocusWindowStartChange}>
+                          <SelectTrigger id="focus-window-start">
+                            <SelectValue placeholder="Select start time" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {timeOptions.map((time) => (
+                              <SelectItem key={time} value={time}>
+                                {time}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="focus-window-end">Until</Label>
-                        <Input
-                          id="focus-window-end"
-                          type="text"
-                          value={focusWindowEnd}
-                          onChange={(e) => setFocusWindowEnd(e.target.value)}
-                          placeholder="6:00 PM"
-                        />
+                        <Select value={focusWindowEnd} onValueChange={handleFocusWindowEndChange}>
+                          <SelectTrigger id="focus-window-end">
+                            <SelectValue placeholder="Select end time" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {timeOptions.map((time) => (
+                              <SelectItem key={time} value={time}>
+                                {time}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
+                    {focusWindowError && (
+                      <p className="text-sm text-destructive">{focusWindowError}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Maximum window width is 8 hours
+                    </p>
                   </div>
                 )}
               </CardContent>
