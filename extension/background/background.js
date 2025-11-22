@@ -675,14 +675,12 @@ async function handleMessage(msg) {
     const { ft_blocked_channels = [] } = await getLocal(["ft_blocked_channels"]);
     const currentList = Array.isArray(ft_blocked_channels) ? [...ft_blocked_channels] : [];
     
-    // Check if already blocked (case-insensitive)
+    // Check if already blocked (exact case-insensitive match)
     const channelLower = channel.toLowerCase().trim();
     const normalizedChannel = channel.trim();
     const isAlreadyBlocked = currentList.some(blocked => {
       const blockedLower = blocked.toLowerCase().trim();
-      return blockedLower === channelLower || 
-             channelLower.includes(blockedLower) || 
-             blockedLower.includes(channelLower);
+      return blockedLower === channelLower; // Exact match only
     });
     
     if (!isAlreadyBlocked) {
@@ -1437,6 +1435,11 @@ async function finalizeVideoWatch(videoId, startTime, distractionLevel, category
       const dismissedData = ft_spiral_dismissed_channels[channelKey];
       const isOnCooldown = dismissedData && 
         (Date.now() - dismissedData.last_shown) < SPIRAL_DISMISSAL_COOLDOWN_MS;
+      
+      if (isOnCooldown) {
+        const cooldownRemaining = Math.ceil((SPIRAL_DISMISSAL_COOLDOWN_MS - (Date.now() - dismissedData.last_shown)) / (24 * 60 * 60 * 1000));
+        console.log("[FT] 🚨 SPIRAL COOLDOWN: Active", { channel: channelKey, daysRemaining: cooldownRemaining });
+      }
 
       // New thresholds: 6 videos this week OR 90 minutes this week (neutral counts same as distracting)
       const weekCount = currentChannelCount.this_week || 0;
@@ -1445,6 +1448,12 @@ async function finalizeVideoWatch(videoId, startTime, distractionLevel, category
       
       if (!isOnCooldown && (weekCount >= SPIRAL_THRESHOLD_WEEK || weekTimeSeconds >= SPIRAL_THRESHOLD_WEEK_TIME)) {
         // 6+ videos OR 90+ minutes this week - awareness nudge
+        console.log("[FT] 🚨 SPIRAL DETECTED:", { 
+          channel: channelKey, 
+          count: weekCount, 
+          timeMinutes: Math.round(weekTimeMinutes * 10) / 10,
+          threshold: weekCount >= SPIRAL_THRESHOLD_WEEK ? "count" : "time"
+        });
         spiralDetected = {
           channel: channelKey,
           count: weekCount,
@@ -1732,35 +1741,11 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   if (pageType === "WATCH" && channelToCheck) {
     const blockedChannels = state.ft_blocked_channels || [];
     if (Array.isArray(blockedChannels) && blockedChannels.length > 0) {
-      const channelLower = channelToCheck.toLowerCase();
-      // More robust matching: check if blocked channel name is contained in current channel or vice versa
+      const channelLower = channelToCheck.toLowerCase().trim();
+      // Exact case-insensitive matching (normalization ensures saved names match YouTube format)
       const isBlocked = blockedChannels.some(blocked => {
         const blockedLower = blocked.toLowerCase().trim();
-        
-        // Exact match first
-        if (blockedLower === channelLower) {
-          return true;
-        }
-        
-        // Word-boundary matching for single words (prevents "TED" matching "TED-Ed" or "manchester united" matching "ted")
-        const blockedWords = blockedLower.split(/\s+/);
-        if (blockedWords.length === 1) {
-          // Use word boundary regex to prevent false positives
-          const wordBoundaryRegex = new RegExp(`\\b${blockedWords[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-          return wordBoundaryRegex.test(channelLower);
-        }
-        
-        // Multi-word matching: all words must appear consecutively (handles "Eddie Hall" vs "Eddie Hall The Beast")
-        const channelWords = channelLower.split(/\s+/);
-        let foundIndex = -1;
-        for (let i = 0; i < blockedWords.length; i++) {
-          const wordIndex = channelWords.indexOf(blockedWords[i], foundIndex + 1);
-          if (wordIndex === -1) return false;
-          if (i === 0) foundIndex = wordIndex;
-          else if (wordIndex !== foundIndex + 1) return false; // Words must be consecutive
-          foundIndex = wordIndex;
-        }
-        return true;
+        return blockedLower === channelLower; // Exact match only
       });
       if (isBlocked) {
         // Channel is blocked - return early, skip AI classification
@@ -1791,12 +1776,10 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     // 6.6. Check temporary blocks (blocked for today)
     const blockedChannelsToday = state.ft_blocked_channels_today || [];
     if (Array.isArray(blockedChannelsToday) && blockedChannelsToday.length > 0) {
-      const channelLower = channelToCheck.toLowerCase();
+      const channelLower = channelToCheck.toLowerCase().trim();
       const isBlockedToday = blockedChannelsToday.some(blocked => {
         const blockedLower = blocked.toLowerCase().trim();
-        return blockedLower === channelLower || 
-               channelLower.includes(blockedLower) || 
-               blockedLower.includes(channelLower);
+        return blockedLower === channelLower; // Exact match only
       });
       if (isBlockedToday) {
         LOG("Channel blocked for today:", { channel, blockedChannelsToday, matched: true });

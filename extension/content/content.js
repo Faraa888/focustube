@@ -2090,6 +2090,7 @@ async function showSpiralNudge(spiralInfo) {
         last_shown: Date.now()
       };
       await chrome.storage.local.set({ ft_spiral_dismissed_channels });
+      console.log("[FT] 🚨 SPIRAL DISMISSED:", { channel, cooldownDays: 7 });
       
       chrome.runtime.sendMessage({
         type: "FT_CLEAR_SPIRAL_FLAG"
@@ -2243,9 +2244,7 @@ async function checkBlockingAndInjectButton(channelName, channelElement) {
       const channelLower = channelName.toLowerCase().trim();
       const isBlocked = blockedChannels.some(blocked => {
         const blockedLower = blocked.toLowerCase().trim();
-        return blockedLower === channelLower || 
-               channelLower.includes(blockedLower) || 
-               blockedLower.includes(channelLower);
+        return blockedLower === channelLower; // Exact match only
       });
       
       if (isBlocked) {
@@ -3216,9 +3215,7 @@ chrome.runtime.onMessage.addListener((msg) => {
             const channelLower = channel.toLowerCase().trim();
             const isBlocked = blockedChannels.some(blocked => {
               const blockedLower = blocked.toLowerCase().trim();
-              return blockedLower === channelLower || 
-                     channelLower.includes(blockedLower) || 
-                     blockedLower.includes(channelLower);
+              return blockedLower === channelLower; // Exact match only
             });
             
             if (isBlocked) {
@@ -3473,18 +3470,21 @@ function checkDistractingThresholds(effectiveCount, effectiveTime, isVideoEnd = 
   // Distracting nudges show during video (not at end)
   if (isVideoEnd) return null;
   
-  // Break: 4 videos OR 60 minutes
-  if (effectiveCount >= 4 || effectiveTime >= 3600) {
+  // Break: 5 videos OR 60 minutes
+  if (effectiveCount >= 5 || effectiveTime >= 3600) {
+    console.log("[FT] 🔍 Limit check: DISTRACTING BREAK", { count: effectiveCount, time: Math.floor(effectiveTime / 60) + "m" });
     return "break";
   }
   
-  // Nudge 2: 3 videos OR 40 minutes
-  if (effectiveCount >= 3 || effectiveTime >= 2400) {
+  // Nudge 2: 4 videos OR 40 minutes
+  if (effectiveCount >= 4 || effectiveTime >= 2400) {
+    console.log("[FT] 🔍 Limit check: DISTRACTING NUDGE2", { count: effectiveCount, time: Math.floor(effectiveTime / 60) + "m" });
     return "nudge2";
   }
   
-  // Nudge 1: 2 videos OR 20 minutes
-  if (effectiveCount >= 2 || effectiveTime >= 1200) {
+  // Nudge 1: 3 videos OR 20 minutes
+  if (effectiveCount >= 3 || effectiveTime >= 1200) {
+    console.log("[FT] 🔍 Limit check: DISTRACTING NUDGE1", { count: effectiveCount, time: Math.floor(effectiveTime / 60) + "m" });
     return "nudge1";
   }
   
@@ -3504,16 +3504,19 @@ function checkProductiveThresholds(count, time, isVideoEnd = false) {
   
   // Break: 7 videos OR 90 minutes
   if (count >= 7 || time >= 5400) {
+    console.log("[FT] 🔍 Limit check: PRODUCTIVE BREAK", { count, time: Math.floor(time / 60) + "m" });
     return "break";
   }
   
   // Nudge 2: 5 videos OR 60 minutes
   if (count >= 5 || time >= 3600) {
+    console.log("[FT] 🔍 Limit check: PRODUCTIVE NUDGE2", { count, time: Math.floor(time / 60) + "m" });
     return "nudge2";
   }
   
-  // Nudge 1: 3 videos OR 40 minutes
-  if (count >= 3 || time >= 2400) {
+  // Nudge 1: 3 videos OR 30 minutes
+  if (count >= 3 || time >= 1800) {
+    console.log("[FT] 🔍 Limit check: PRODUCTIVE NUDGE1", { count, time: Math.floor(time / 60) + "m" });
     return "nudge1";
   }
   
@@ -3524,11 +3527,17 @@ function checkProductiveThresholds(count, time, isVideoEnd = false) {
  * Updates global counters and checks thresholds
  * Called every 60 seconds during video watch
  */
+// Track timer fire count for conditional logging
+let behaviorLoopTimerFireCount = 0;
+
 async function updateBehaviorLoopCounters() {
   if (!isChromeContextValid()) {
     stopBehaviorLoopTracking();
     return;
   }
+  
+  behaviorLoopTimerFireCount++;
+  const shouldLogTimer = (behaviorLoopTimerFireCount % 5 === 0); // Log every 5th timer fire
   
   try {
     // Check if video is paused
@@ -3625,13 +3634,26 @@ async function updateBehaviorLoopCounters() {
         ft_neutral_time_global: counters.ft_neutral_time_global || 0
       });
       
-      const nudgeType = checkDistractingThresholds(effective.effectiveCount, effective.effectiveTime, false);
+      // Add 1 to account for current video being watched (count is only incremented at video end)
+      const effectiveCountWithCurrent = effective.effectiveCount + 1;
+      const nudgeType = checkDistractingThresholds(effectiveCountWithCurrent, effective.effectiveTime, false);
+      
+      // Log timer fire if threshold crossed or every 5th fire
+      if (shouldLogTimer || nudgeType) {
+        console.log("[FT] ⏱️ Timer fire:", { 
+          fireCount: behaviorLoopTimerFireCount, 
+          classification, 
+          incrementalSeconds,
+          thresholdHit: nudgeType || "none"
+        });
+      }
       
       if (nudgeType && !behaviorLoopNudgeShown) {
         behaviorLoopNudgeShown = true;
+        console.log("[FT] 🎯 Popup call: DISTRACTING", { nudgeType, count: effectiveCountWithCurrent, time: Math.floor(effective.effectiveTime / 60) + "m" });
         // Trigger nudge
         showDistractingNudge(nudgeType, {
-          effectiveCount: effective.effectiveCount,
+          effectiveCount: effectiveCountWithCurrent,
           effectiveTime: effective.effectiveTime
         }).catch(err => {
           console.warn("[FT] Error showing distracting nudge:", err.message);
@@ -3646,6 +3668,17 @@ async function updateBehaviorLoopCounters() {
       // Check thresholds (but don't show nudge yet - will show at video end)
       const currentProductiveCount = counters.ft_productive_count_global || 0;
       const nudgeType = checkProductiveThresholds(currentProductiveCount, currentProductiveTime, false);
+      
+      // Log timer fire if threshold crossed or every 5th fire
+      if (shouldLogTimer || nudgeType) {
+        console.log("[FT] ⏱️ Timer fire:", { 
+          fireCount: behaviorLoopTimerFireCount, 
+          classification, 
+          incrementalSeconds,
+          thresholdHit: nudgeType || "none"
+        });
+      }
+      
       if (nudgeType) {
         console.log("[FT] Productive threshold would trigger at video end:", nudgeType);
       }
@@ -3664,13 +3697,27 @@ async function updateBehaviorLoopCounters() {
         ft_neutral_time_global: currentNeutralTime
       });
       
-      const nudgeType = checkDistractingThresholds(effective.effectiveCount, effective.effectiveTime, false);
+      // Add 1 to account for current neutral video being watched (if it's the 3rd+ neutral video)
+      // Note: calculateEffectiveDistracting already handles neutral excess, but we need to add 1 for current video
+      const effectiveCountWithCurrent = effective.effectiveCount + 1;
+      const nudgeType = checkDistractingThresholds(effectiveCountWithCurrent, effective.effectiveTime, false);
+      
+      // Log timer fire if threshold crossed or every 5th fire
+      if (shouldLogTimer || nudgeType) {
+        console.log("[FT] ⏱️ Timer fire:", { 
+          fireCount: behaviorLoopTimerFireCount, 
+          classification, 
+          incrementalSeconds,
+          thresholdHit: nudgeType || "none"
+        });
+      }
       
       if (nudgeType && !behaviorLoopNudgeShown) {
         behaviorLoopNudgeShown = true;
+        console.log("[FT] 🎯 Popup call: NEUTRAL EXCESS → DISTRACTING", { nudgeType, count: effectiveCountWithCurrent, time: Math.floor(effective.effectiveTime / 60) + "m" });
         // Trigger nudge (neutral excess counts as distracting)
         showDistractingNudge(nudgeType, {
-          effectiveCount: effective.effectiveCount,
+          effectiveCount: effectiveCountWithCurrent,
           effectiveTime: effective.effectiveTime
         }).catch(err => {
           console.warn("[FT] Error showing neutral excess nudge:", err.message);
@@ -3682,6 +3729,11 @@ async function updateBehaviorLoopCounters() {
     if (Object.keys(updates).length > 0) {
       await chrome.storage.local.set(updates);
       behaviorLoopAccumulatedTime += incrementalSeconds; // Track accumulated time
+      
+      // Log counter updates (only when they change)
+      const updateKeys = Object.keys(updates);
+      const updateValues = updateKeys.map(key => `${key}: ${updates[key]}`).join(", ");
+      console.log("[FT] 📊 Counter update:", { classification, incrementalSeconds, updates: updateValues });
     }
     
   } catch (error) {
@@ -3706,6 +3758,10 @@ function startBehaviorLoopTracking(videoId, classification) {
   behaviorLoopNudgeShown = false;
   behaviorLoopLastUpdateTime = Date.now();
   behaviorLoopAccumulatedTime = 0;
+  behaviorLoopTimerFireCount = 0; // Reset timer fire count
+  
+  const classificationType = classification?.distraction_level || classification?.category || "unknown";
+  console.log("[FT] 🎬 START tracking:", { videoId, classification: classificationType });
   
   // Start 60-second interval timer
   behaviorLoopTimer = setInterval(() => {
@@ -3745,6 +3801,10 @@ async function stopBehaviorLoopTracking() {
   if (!behaviorLoopStartTime || !behaviorLoopCurrentClassification) {
     return; // Nothing to finalize
   }
+  
+  const classificationType = behaviorLoopCurrentClassification?.distraction_level || 
+                             behaviorLoopCurrentClassification?.category || "unknown";
+  console.log("[FT] 🛑 STOP tracking:", { classification: classificationType, accumulatedTime: behaviorLoopAccumulatedTime });
   
   try {
     // Calculate final watch time (exact time, not incremental)
@@ -3813,6 +3873,7 @@ async function stopBehaviorLoopTracking() {
       const nudgeType = checkProductiveThresholds(newCount, newTime, true);
       
       if (nudgeType) {
+        console.log("[FT] 🎯 Popup call: PRODUCTIVE", { nudgeType, count: newCount, time: Math.floor(newTime / 60) + "m" });
         // Show productive nudge at video end
         showProductiveNudge(nudgeType, {
           count: newCount,
@@ -3836,6 +3897,7 @@ async function stopBehaviorLoopTracking() {
       const nudgeType = checkDistractingThresholds(effective.effectiveCount, effective.effectiveTime, false);
       
       if (nudgeType) {
+        console.log("[FT] 🎯 Popup call: NEUTRAL EXCESS → DISTRACTING (video end)", { nudgeType, count: effective.effectiveCount, time: Math.floor(effective.effectiveTime / 60) + "m" });
         // Show nudge (neutral excess counts as distracting)
         showDistractingNudge(nudgeType, {
           effectiveCount: effective.effectiveCount,
@@ -3849,6 +3911,11 @@ async function stopBehaviorLoopTracking() {
     // Save updated counters
     if (Object.keys(updates).length > 0) {
       await chrome.storage.local.set(updates);
+      
+      // Log counter updates (only when they change)
+      const updateKeys = Object.keys(updates);
+      const updateValues = updateKeys.map(key => `${key}: ${updates[key]}`).join(", ");
+      console.log("[FT] 📊 Counter update (video end):", { classification, remainingTime, updates: updateValues });
     }
     
     // Reset state
@@ -3983,6 +4050,7 @@ async function showDistractingNudge(nudgeType, counters) {
       // Set break lockout (10 minutes)
       const breakUntil = Date.now() + (10 * 60 * 1000);
       await chrome.storage.local.set({ ft_break_lockout_until: breakUntil });
+      console.log("[FT] 🛑 BREAK STARTED: DISTRACTING", { breakUntil: new Date(breakUntil).toISOString(), duration: "10m" });
       
       // Reset counters
       await chrome.storage.local.set({
@@ -4001,6 +4069,7 @@ async function showDistractingNudge(nudgeType, counters) {
   }
   
   document.body.appendChild(overlay);
+  console.log("[FT] ✅ Popup added to DOM: DISTRACTING", { nudgeType, duration, message });
 }
 
 /**
@@ -4037,10 +4106,10 @@ async function showProductiveNudge(nudgeType, counters) {
   let showJournal = false;
   
   if (nudgeType === "nudge1") {
-    message = "You've been learning a lot! Take a break?";
-    duration = 10;
+    message = "Let's make sure you apply what you learned.";
+    duration = 5;
   } else if (nudgeType === "nudge2") {
-    message = "Learning fatigue is real. Rest your brain.";
+    message = "Time to apply this – don't just stack more content.";
     duration = 30;
     showJournal = true;
   } else if (nudgeType === "break") {
@@ -4050,7 +4119,7 @@ async function showProductiveNudge(nudgeType, counters) {
   }
   
   const countText = count >= 3 ? `${count} videos` : "";
-  const timeText = time >= 2400 ? `${Math.floor(time / 60)} minutes` : "";
+  const timeText = time >= 1800 ? `${Math.floor(time / 60)} minutes` : "";
   const thresholdText = [countText, timeText].filter(Boolean).join(" or ");
   
   overlay.innerHTML = `
@@ -4120,9 +4189,10 @@ async function showProductiveNudge(nudgeType, counters) {
         await saveJournalEntry("productive", counters);
       }
       
-      // Set break lockout (10 minutes)
-      const breakUntil = Date.now() + (10 * 60 * 1000);
+      // Set break lockout (5 minutes for productive)
+      const breakUntil = Date.now() + (5 * 60 * 1000);
       await chrome.storage.local.set({ ft_break_lockout_until: breakUntil });
+      console.log("[FT] 🛑 BREAK STARTED: PRODUCTIVE", { breakUntil: new Date(breakUntil).toISOString(), duration: "5m" });
       
       // Reset counters
       await chrome.storage.local.set({
@@ -4139,6 +4209,7 @@ async function showProductiveNudge(nudgeType, counters) {
   }
   
   document.body.appendChild(overlay);
+  console.log("[FT] ✅ Popup added to DOM: PRODUCTIVE", { nudgeType, duration, message });
 }
 
 /**
@@ -4208,6 +4279,7 @@ async function showBreakLockoutOverlay(remainingSeconds) {
   }, 1000);
   
   document.body.appendChild(overlay);
+  console.log("[FT] ✅ Popup added to DOM: BREAK LOCKOUT", { remainingSeconds });
 }
 
 /**
@@ -4416,9 +4488,11 @@ async function handleNavigation() {
     if (Date.now() < breakLockoutUntil) {
       // Break is active - block all video watching
       const pageType = detectPageType();
+      const remainingSeconds = Math.ceil((breakLockoutUntil - Date.now()) / 1000);
+      console.log("[FT] 🛑 BREAK CHECK: Active", { remainingSeconds, pageType });
+      
       if (pageType === "WATCH" || pageType === "SHORTS") {
         // Show break overlay and redirect
-        const remainingSeconds = Math.ceil((breakLockoutUntil - Date.now()) / 1000);
         await showBreakLockoutOverlay(remainingSeconds);
         pauseAndMuteVideo();
         // Redirect to home after a moment
@@ -4427,6 +4501,9 @@ async function handleNavigation() {
         }, 2000);
         return; // Don't continue with normal navigation logic
       }
+    } else if (breakLockoutUntil > 0) {
+      // Break just ended
+      console.log("[FT] ✅ BREAK ENDED", { breakUntil: new Date(breakLockoutUntil).toISOString() });
     }
   } catch (error) {
     console.warn("[FT] Error checking break lockout:", error.message);
@@ -4566,10 +4643,7 @@ async function handleNavigation() {
           const channelLower = channel.toLowerCase().trim();
           const isBlocked = blockedChannels.some(blocked => {
             const blockedLower = blocked.toLowerCase().trim();
-            // Exact match or substring match (handles "Eddie Hall" vs "Eddie Hall The Beast")
-            return blockedLower === channelLower || 
-                   channelLower.includes(blockedLower) || 
-                   blockedLower.includes(channelLower);
+            return blockedLower === channelLower; // Exact match only
           });
           
           if (isBlocked) {
@@ -5651,9 +5725,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
           const channelLower = channel.toLowerCase().trim();
           const isBlocked = newBlockedChannels.some(blocked => {
             const blockedLower = blocked.toLowerCase().trim();
-            return blockedLower === channelLower || 
-                   channelLower.includes(blockedLower) || 
-                   blockedLower.includes(channelLower);
+            return blockedLower === channelLower; // Exact match only
           });
           
           if (isBlocked) {

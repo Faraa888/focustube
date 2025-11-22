@@ -58,16 +58,16 @@ export const NEUTRAL_FREE_COUNT = 2;         // First 2 neutral videos are free
 export const NEUTRAL_FREE_TIME = 1200;       // First 20 minutes (1200s) of neutral content is free
 
 // Distracting content escalation thresholds (whichever hits first: count OR time)
-export const DISTRACTING_NUDGE_1_COUNT = 2;  // 2nd distracting video
+export const DISTRACTING_NUDGE_1_COUNT = 3;  // 3rd distracting video
 export const DISTRACTING_NUDGE_1_TIME = 1200; // 20 minutes (1200s)
-export const DISTRACTING_NUDGE_2_COUNT = 3;  // 3rd distracting video
+export const DISTRACTING_NUDGE_2_COUNT = 4;  // 4th distracting video
 export const DISTRACTING_NUDGE_2_TIME = 2400; // 40 minutes (2400s)
-export const DISTRACTING_BREAK_COUNT = 4;    // 4th distracting video
+export const DISTRACTING_BREAK_COUNT = 5;    // 5th distracting video
 export const DISTRACTING_BREAK_TIME = 3600;   // 60 minutes (3600s)
 
 // Productive fatigue thresholds (whichever hits first: count OR time)
 export const PRODUCTIVE_NUDGE_1_COUNT = 3;   // 3rd productive video
-export const PRODUCTIVE_NUDGE_1_TIME = 2400; // 40 minutes (2400s)
+export const PRODUCTIVE_NUDGE_1_TIME = 1800; // 30 minutes (1800s)
 export const PRODUCTIVE_NUDGE_2_COUNT = 5;   // 5th productive video
 export const PRODUCTIVE_NUDGE_2_TIME = 3600; // 60 minutes (3600s)
 export const PRODUCTIVE_BREAK_COUNT = 7;     // 7th productive video
