@@ -830,39 +830,46 @@ function extractVideoMetadata() {
 
     if (mainVideoContainer) {
       // Search ONLY within main video area (not sidebar)
-      channelElement = mainVideoContainer.querySelector(
+      // Use querySelectorAll to find all channel elements, then pick first valid one
+      // This handles cases where multiple channel elements exist (e.g., "KSI" and "KSI+")
+      const channelElements = mainVideoContainer.querySelectorAll(
         "ytd-channel-name a, #channel-name a, #owner-sub-count a"
       );
       
-      // Verify channel element is from current page (not stale)
-      if (channelElement) {
-        // Check if element is visible (not hidden/stale)
-        const isVisible = channelElement.offsetParent !== null;
-        // Check if it's actually in the main video container (not sidebar)
-        const isInMainVideo = mainVideoContainer.contains(channelElement);
+      // Loop through to find first valid element (like extractChannelFast does)
+      for (const channelEl of channelElements) {
+        const isVisible = channelEl.offsetParent !== null;
+        const isInMainVideo = mainVideoContainer.contains(channelEl);
         
-        if (!isVisible || !isInMainVideo) {
-          // Element is stale or in wrong location, ignore it
-          channelElement = null;
+        if (isVisible && isInMainVideo) {
+          const channelText = channelEl.textContent?.trim();
+          if (channelText && channelText.length > 0) {
+            channelElement = channelEl;
+            break; // Found valid element, stop searching
+          }
         }
       }
     }
 
     // Method 2: If not found, try more specific selectors (still avoiding sidebar)
     if (!channelElement) {
-      const candidate = document.querySelector(
+      const candidates = document.querySelectorAll(
         "ytd-watch-metadata ytd-channel-name a, " +
         "ytd-video-owner-renderer #channel-name a, " +
         "#owner-sub-count a"
       );
       
-      // Verify candidate is from current page
-      if (candidate) {
+      // Loop through to find first valid element
+      for (const candidate of candidates) {
         const isVisible = candidate.offsetParent !== null;
         const isInMainVideo = candidate.closest("#primary, ytd-watch-metadata, ytd-video-owner-renderer");
         
         if (isVisible && isInMainVideo) {
-          channelElement = candidate;
+          const channelText = candidate.textContent?.trim();
+          if (channelText && channelText.length > 0) {
+            channelElement = candidate;
+            break; // Found valid element, stop searching
+          }
         }
       }
     }
@@ -2046,6 +2053,7 @@ async function showSpiralNudge(spiralInfo) {
       
       <div class="ft-milestone-buttons">
         <button id="ft-spiral-continue" class="ft-button ft-button-secondary">Continue</button>
+        <button id="ft-spiral-journal" class="ft-button ft-button-outline">Journal</button>
         <button id="ft-spiral-block-today" class="ft-button ft-button-warning">Block YouTube for Today</button>
         <button id="ft-spiral-block-permanent" class="ft-button ft-button-danger">Block Channel Permanently</button>
       </div>
@@ -2075,8 +2083,37 @@ async function showSpiralNudge(spiralInfo) {
   
   // Button handlers
   const continueBtn = overlay.querySelector("#ft-spiral-continue");
+  const journalBtn = overlay.querySelector("#ft-spiral-journal");
   const blockTodayBtn = overlay.querySelector("#ft-spiral-block-today");
   const blockPermanentBtn = overlay.querySelector("#ft-spiral-block-permanent");
+  
+  if (journalBtn) {
+    journalBtn.addEventListener("click", async () => {
+      // Get videos from last 7 days for this channel
+      const { ft_watch_history = [] } = await chrome.storage.local.get(["ft_watch_history"]);
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      const channelVideos = ft_watch_history
+        .filter(item => {
+          const itemTime = new Date(item.watched_at).getTime();
+          return itemTime > sevenDaysAgo && 
+                 item.channel_name && 
+                 item.channel_name.toLowerCase().trim() === channel.toLowerCase().trim();
+        })
+        .map(item => ({
+          video_id: item.video_id || null,
+          video_title: item.video_title || null,
+          watched_at: item.watched_at || null
+        }));
+      
+      // Open journal modal with spiral context
+      showJournalModal("channel based", {
+        channel: channel,
+        source: "spiral_nudge",
+        videos: channelVideos,
+        spiralInfo: spiralInfo
+      });
+    });
+  }
   
   if (continueBtn) {
     continueBtn.addEventListener("click", async () => {
@@ -3614,6 +3651,14 @@ async function updateBehaviorLoopCounters() {
     const breakLockoutUntil = counters.ft_break_lockout_until || 0;
     if (Date.now() < breakLockoutUntil) {
       // Break is active - don't update counters
+      const remainingSeconds = Math.ceil((breakLockoutUntil - Date.now()) / 1000);
+      const remainingMinutes = Math.floor(remainingSeconds / 60);
+      const remainingSecs = remainingSeconds % 60;
+      const timeRemaining = `${remainingMinutes}:${String(remainingSecs).padStart(2, '0')}`;
+      console.log("[FT] 🛑 BREAK LOCKOUT: Active during counter update", { 
+        remainingTime: timeRemaining,
+        remainingSeconds 
+      });
       return;
     }
     
@@ -3965,14 +4010,15 @@ async function showDistractingNudge(nudgeType, counters) {
   
   if (nudgeType === "nudge1") {
     message = "Still aligned with your goals?";
-    duration = 10;
+    duration = 30; // Changed from 10 to 30 seconds
+    showJournal = true; // Add journal button
   } else if (nudgeType === "nudge2") {
     message = "Still aligned with your goals?";
-    duration = 30;
+    duration = 60; // Changed from 30 to 60 seconds (1 minute)
     showJournal = true;
   } else if (nudgeType === "break") {
     message = "You've been watching distracting content. Take a 10-minute break to reset your focus.";
-    duration = 0; // Break doesn't auto-dismiss
+    duration = 600; // 10 minutes in seconds
     showJournal = true;
   }
   
@@ -3989,49 +4035,59 @@ async function showDistractingNudge(nudgeType, counters) {
       ${duration > 0 ? `
         <div class="ft-spiral-timer">
           <div class="ft-timer-circle">
-            <span id="ft-timer-count">${duration}</span>
+            <span id="ft-timer-count">${nudgeType === "break" ? "600" : duration}</span>
           </div>
         </div>
-      ` : ""}
-      ${showJournal ? `
-        <div class="ft-journal-prompt" style="margin: 16px 0;">
-          <textarea 
-            id="ft-journal-input" 
-            placeholder="Optional: What triggered you? (saves to your journal)"
-            style="width: 100%; min-height: 60px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; resize: vertical;"
-          ></textarea>
-        </div>
+        ${nudgeType === "break" ? `
+          <p style="text-align: center; color: #666; font-size: 14px; margin-top: 16px;">
+            Time remaining: <span id="ft-break-time-text">10:00</span>
+          </p>
+        ` : ""}
       ` : ""}
       <div class="ft-milestone-buttons">
         ${nudgeType === "break" ? `
-          <button id="ft-break-accept" class="ft-button ft-button-primary">Take Break</button>
+          ${showJournal ? `<button id="ft-journal-btn" class="ft-button ft-button-outline">Journal</button>` : ""}
         ` : `
           <button id="ft-nudge-continue" class="ft-button ft-button-secondary">Continue</button>
+          ${showJournal ? `<button id="ft-journal-btn" class="ft-button ft-button-outline">Journal</button>` : ""}
         `}
       </div>
     </div>
   `;
   
-  // Countdown timer (if not break)
+  // Countdown timer (for all nudges including break)
   let timerInterval = null;
   if (duration > 0) {
     let timeLeft = duration;
     const timerEl = overlay.querySelector("#ft-timer-count");
+    const timeTextEl = overlay.querySelector("#ft-break-time-text"); // For break overlay MM:SS format
+    
     timerInterval = setInterval(() => {
       timeLeft--;
       if (timerEl) {
         timerEl.textContent = timeLeft;
       }
+      if (timeTextEl && nudgeType === "break") {
+        // Format as MM:SS for break overlay
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+        timeTextEl.textContent = `${minutes}:${String(seconds).padStart(2, '0')}`;
+      }
       if (timeLeft <= 0) {
         clearInterval(timerInterval);
-        dismissDistractingNudge(overlay, showJournal);
+        if (nudgeType === "break") {
+          // Auto-redirect after 10 minutes
+          handleBreakComplete();
+        } else {
+          dismissDistractingNudge(overlay, showJournal);
+        }
       }
     }, 1000);
   }
   
   // Button handlers
   const continueBtn = overlay.querySelector("#ft-nudge-continue");
-  const breakBtn = overlay.querySelector("#ft-break-accept");
+  const journalBtn = overlay.querySelector("#ft-journal-btn");
   
   if (continueBtn) {
     continueBtn.addEventListener("click", () => {
@@ -4040,33 +4096,17 @@ async function showDistractingNudge(nudgeType, counters) {
     });
   }
   
-  if (breakBtn) {
-    breakBtn.addEventListener("click", async () => {
-      // Save journal if provided
-      if (showJournal) {
-        await saveJournalEntry("distracting", counters);
-      }
-      
-      // Set break lockout (10 minutes)
-      const breakUntil = Date.now() + (10 * 60 * 1000);
-      await chrome.storage.local.set({ ft_break_lockout_until: breakUntil });
-      console.log("[FT] 🛑 BREAK STARTED: DISTRACTING", { breakUntil: new Date(breakUntil).toISOString(), duration: "10m" });
-      
-      // Reset counters
-      await chrome.storage.local.set({
-        ft_distracting_count_global: 0,
-        ft_distracting_time_global: 0,
-        ft_neutral_count_global: 0,
-        ft_neutral_time_global: 0
+  if (journalBtn) {
+    journalBtn.addEventListener("click", () => {
+      // Don't dismiss the nudge, just open journal modal (timer continues)
+      showJournalModal("distracting", {
+        ...counters,
+        source: "behavior_loop_negative"
       });
-      
-      overlay.remove();
-      restoreVideoState();
-      
-      // Redirect to home
-      window.location.href = "https://www.youtube.com/";
     });
   }
+  
+  // Break button removed - break auto-completes after 10 minutes via timer
   
   document.body.appendChild(overlay);
   console.log("[FT] ✅ Popup added to DOM: DISTRACTING", { nudgeType, duration, message });
@@ -4076,11 +4116,49 @@ async function showDistractingNudge(nudgeType, counters) {
  * Dismisses distracting nudge and saves journal if provided
  */
 async function dismissDistractingNudge(overlay, showJournal) {
-  if (showJournal) {
-    await saveJournalEntry("distracting", {});
-  }
+  // Journal is now handled via separate modal, so no need to save here
   overlay.remove();
   restoreVideoState();
+}
+
+/**
+ * Handles break completion after 10-minute timer expires
+ * Sets break lockout, resets counters, and redirects to YouTube home
+ */
+async function handleBreakComplete() {
+  try {
+    // Set break lockout (10 minutes from now)
+    const breakUntil = Date.now() + (10 * 60 * 1000);
+    await chrome.storage.local.set({ ft_break_lockout_until: breakUntil });
+    const expiresAt = new Date(breakUntil).toLocaleTimeString();
+    console.log("[FT] 🛑 BREAK COMPLETE: Auto-redirecting", { 
+      breakUntil: new Date(breakUntil).toISOString(),
+      expiresAt,
+      duration: "10m",
+      lockoutActive: true
+    });
+    
+    // Reset counters (after lockout period, counters will be reset)
+    // Note: Counters reset happens after lockout period, not immediately
+    await chrome.storage.local.set({
+      ft_distracting_count_global: 0,
+      ft_distracting_time_global: 0,
+      ft_neutral_count_global: 0,
+      ft_neutral_time_global: 0
+    });
+    
+    // Remove overlay
+    const overlay = document.getElementById("ft-behavior-nudge");
+    if (overlay) overlay.remove();
+    restoreVideoState();
+    
+    // Redirect to home
+    window.location.href = "https://www.youtube.com/";
+  } catch (error) {
+    console.error("[FT] Error handling break completion:", error);
+    // Still try to redirect even if there's an error
+    window.location.href = "https://www.youtube.com/";
+  }
 }
 
 /**
@@ -4107,14 +4185,15 @@ async function showProductiveNudge(nudgeType, counters) {
   
   if (nudgeType === "nudge1") {
     message = "Let's make sure you apply what you learned.";
-    duration = 5;
+    duration = 30; // Changed from 5 to 30 seconds
+    showJournal = true; // Add journal button
   } else if (nudgeType === "nudge2") {
     message = "Time to apply this – don't just stack more content.";
-    duration = 30;
+    duration = 60; // Changed from 30 to 60 seconds (1 minute)
     showJournal = true;
   } else if (nudgeType === "break") {
     message = "You've watched 7 educational videos today. Time to rest the brain.";
-    duration = 0; // Break doesn't auto-dismiss
+    duration = 600; // 10 minutes in seconds
     showJournal = true;
   }
   
@@ -4131,49 +4210,59 @@ async function showProductiveNudge(nudgeType, counters) {
       ${duration > 0 ? `
         <div class="ft-spiral-timer">
           <div class="ft-timer-circle">
-            <span id="ft-timer-count">${duration}</span>
+            <span id="ft-timer-count">${nudgeType === "break" ? "600" : duration}</span>
           </div>
         </div>
-      ` : ""}
-      ${showJournal ? `
-        <div class="ft-journal-prompt" style="margin: 16px 0;">
-          <textarea 
-            id="ft-journal-input" 
-            placeholder="Optional: What did you learn? (saves to your journal)"
-            style="width: 100%; min-height: 60px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; resize: vertical;"
-          ></textarea>
-        </div>
+        ${nudgeType === "break" ? `
+          <p style="text-align: center; color: #666; font-size: 14px; margin-top: 16px;">
+            Time remaining: <span id="ft-break-time-text">10:00</span>
+          </p>
+        ` : ""}
       ` : ""}
       <div class="ft-milestone-buttons">
         ${nudgeType === "break" ? `
-          <button id="ft-break-accept" class="ft-button ft-button-primary">Take Break</button>
+          ${showJournal ? `<button id="ft-journal-btn" class="ft-button ft-button-outline">Journal</button>` : ""}
         ` : `
           <button id="ft-nudge-continue" class="ft-button ft-button-secondary">Continue</button>
+          ${showJournal ? `<button id="ft-journal-btn" class="ft-button ft-button-outline">Journal</button>` : ""}
         `}
       </div>
     </div>
   `;
   
-  // Countdown timer (if not break)
+  // Countdown timer (for all nudges including break)
   let timerInterval = null;
   if (duration > 0) {
     let timeLeft = duration;
     const timerEl = overlay.querySelector("#ft-timer-count");
+    const timeTextEl = overlay.querySelector("#ft-break-time-text"); // For break overlay MM:SS format
+    
     timerInterval = setInterval(() => {
       timeLeft--;
       if (timerEl) {
         timerEl.textContent = timeLeft;
       }
+      if (timeTextEl && nudgeType === "break") {
+        // Format as MM:SS for break overlay
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+        timeTextEl.textContent = `${minutes}:${String(seconds).padStart(2, '0')}`;
+      }
       if (timeLeft <= 0) {
         clearInterval(timerInterval);
-        dismissProductiveNudge(overlay, showJournal);
+        if (nudgeType === "break") {
+          // Auto-redirect after 10 minutes
+          handleProductiveBreakComplete();
+        } else {
+          dismissProductiveNudge(overlay, showJournal);
+        }
       }
     }, 1000);
   }
   
   // Button handlers
   const continueBtn = overlay.querySelector("#ft-nudge-continue");
-  const breakBtn = overlay.querySelector("#ft-break-accept");
+  const journalBtn = overlay.querySelector("#ft-journal-btn");
   
   if (continueBtn) {
     continueBtn.addEventListener("click", () => {
@@ -4182,31 +4271,17 @@ async function showProductiveNudge(nudgeType, counters) {
     });
   }
   
-  if (breakBtn) {
-    breakBtn.addEventListener("click", async () => {
-      // Save journal if provided
-      if (showJournal) {
-        await saveJournalEntry("productive", counters);
-      }
-      
-      // Set break lockout (5 minutes for productive)
-      const breakUntil = Date.now() + (5 * 60 * 1000);
-      await chrome.storage.local.set({ ft_break_lockout_until: breakUntil });
-      console.log("[FT] 🛑 BREAK STARTED: PRODUCTIVE", { breakUntil: new Date(breakUntil).toISOString(), duration: "5m" });
-      
-      // Reset counters
-      await chrome.storage.local.set({
-        ft_productive_count_global: 0,
-        ft_productive_time_global: 0
+  if (journalBtn) {
+    journalBtn.addEventListener("click", () => {
+      // Don't dismiss the nudge, just open journal modal (timer continues)
+      showJournalModal("productive", {
+        ...counters,
+        source: "behavior_loop_positive"
       });
-      
-      overlay.remove();
-      restoreVideoState();
-      
-      // Redirect to home
-      window.location.href = "https://www.youtube.com/";
     });
   }
+  
+  // Break button removed - break auto-completes after 10 minutes via timer
   
   document.body.appendChild(overlay);
   console.log("[FT] ✅ Popup added to DOM: PRODUCTIVE", { nudgeType, duration, message });
@@ -4216,11 +4291,120 @@ async function showProductiveNudge(nudgeType, counters) {
  * Dismisses productive nudge and saves journal if provided
  */
 async function dismissProductiveNudge(overlay, showJournal) {
-  if (showJournal) {
-    await saveJournalEntry("productive", {});
-  }
+  // Journal is now handled via separate modal, so no need to save here
   overlay.remove();
   restoreVideoState();
+}
+
+/**
+ * Handles productive break completion after 10-minute timer expires
+ * Sets break lockout, resets productive counters only, and redirects to YouTube home
+ */
+async function handleProductiveBreakComplete() {
+  try {
+    // Set break lockout (10 minutes from now)
+    const breakUntil = Date.now() + (10 * 60 * 1000);
+    await chrome.storage.local.set({ ft_break_lockout_until: breakUntil });
+    const expiresAt = new Date(breakUntil).toLocaleTimeString();
+    console.log("[FT] 🛑 BREAK COMPLETE: PRODUCTIVE - Auto-redirecting", { 
+      breakUntil: new Date(breakUntil).toISOString(),
+      expiresAt,
+      duration: "10m",
+      lockoutActive: true
+    });
+    
+    // Reset productive counters only (not distracting/neutral)
+    await chrome.storage.local.set({
+      ft_productive_count_global: 0,
+      ft_productive_time_global: 0
+    });
+    
+    // Remove overlay
+    const overlay = document.getElementById("ft-behavior-nudge");
+    if (overlay) overlay.remove();
+    restoreVideoState();
+    
+    // Redirect to home
+    window.location.href = "https://www.youtube.com/";
+  } catch (error) {
+    console.error("[FT] Error handling productive break completion:", error);
+    // Still try to redirect even if there's an error
+    window.location.href = "https://www.youtube.com/";
+  }
+}
+
+/**
+ * Shows journal modal (separate from nudge, not timer-locked)
+ * @param {string} distractionLevel - "distracting" or "productive"
+ * @param {Object} context - Context for journal entry
+ */
+function showJournalModal(distractionLevel, context) {
+  // Remove any existing journal modal
+  const existing = document.getElementById("ft-journal-modal");
+  if (existing) existing.remove();
+  
+  // Get current video metadata (or use from context for spiral)
+  const meta = extractVideoMetadata();
+  const channel = context?.channel || meta?.channel || "Unknown";
+  const videoTitle = meta?.title || "Current video";
+  const isSpiral = context?.source === "spiral_nudge";
+  
+  const modal = document.createElement("div");
+  modal.id = "ft-journal-modal";
+  
+  // Different prompt for spiral vs behavior loop
+  let promptText = "";
+  let placeholderText = "";
+  if (isSpiral) {
+    promptText = `You've watched a lot of ${channel} this week. What's going on?`;
+    placeholderText = "What patterns do you notice? (optional)";
+  } else if (distractionLevel === "distracting") {
+    promptText = `What triggered you while watching "${videoTitle}"?`;
+    placeholderText = "What pulled you off track? (optional)";
+  } else {
+    promptText = `What did you learn from "${videoTitle}"?`;
+    placeholderText = "What will you apply from this? (optional)";
+  }
+  
+  modal.innerHTML = `
+    <div class="ft-journal-box">
+      <h2>📝 Journal Entry</h2>
+      <p class="ft-journal-context">
+        ${promptText}
+      </p>
+      <textarea 
+        id="ft-journal-modal-input" 
+        placeholder="${placeholderText}"
+        style="width: 100%; min-height: 120px; padding: 12px; border: 1px solid #555; border-radius: 8px; font-size: 14px; resize: vertical; background: #1a1a1a; color: #fff;"
+      ></textarea>
+      <div class="ft-journal-buttons">
+        <button id="ft-journal-save" class="ft-button ft-button-primary">Save</button>
+        <button id="ft-journal-cancel" class="ft-button ft-button-secondary">Cancel</button>
+      </div>
+    </div>
+  `;
+  
+  // Button handlers
+  const saveBtn = modal.querySelector("#ft-journal-save");
+  const cancelBtn = modal.querySelector("#ft-journal-cancel");
+  
+  saveBtn.addEventListener("click", async () => {
+    const journalInput = modal.querySelector("#ft-journal-modal-input");
+    const journalText = journalInput?.value?.trim() || "";
+    
+    if (journalText) {
+      await saveJournalEntry(distractionLevel, { ...context, channel });
+    }
+    
+    modal.remove();
+  });
+  
+  cancelBtn.addEventListener("click", () => {
+    modal.remove();
+  });
+  
+  document.body.appendChild(modal);
+  console.log("[FT] ✅ Journal modal opened:", { distractionLevel, channel, videoTitle, isSpiral });
 }
 
 /**
@@ -4289,7 +4473,10 @@ async function showBreakLockoutOverlay(remainingSeconds) {
  */
 async function saveJournalEntry(distractionLevel, context) {
   try {
-    const journalInput = document.getElementById("ft-journal-input");
+    // Try to get journal text from modal first, then fallback to old textarea
+    const journalModalInput = document.getElementById("ft-journal-modal-input");
+    const journalOldInput = document.getElementById("ft-journal-input");
+    const journalInput = journalModalInput || journalOldInput;
     const journalText = journalInput?.value?.trim() || "";
     
     if (!journalText) {
@@ -4297,9 +4484,24 @@ async function saveJournalEntry(distractionLevel, context) {
       return;
     }
     
-    // Get current video metadata
+    // Get current video metadata (or use channel from context if provided)
     const meta = extractVideoMetadata();
-    const channel = meta?.channel || "Unknown";
+    const channel = context?.channel || meta?.channel || "Unknown";
+    const videoTitle = meta?.title || null;
+    const videoUrl = meta?.url || location.href || null;
+    
+    // Determine context_source based on context
+    let contextSource = null;
+    if (context?.source === "spiral_nudge") {
+      contextSource = "spiral_nudge";
+    } else if (distractionLevel === "distracting") {
+      contextSource = "behavior_loop_negative";
+    } else if (distractionLevel === "productive") {
+      contextSource = "behavior_loop_positive";
+    }
+    
+    // Get videos for spiral (if applicable)
+    const videos = context?.videos || null;
     
     // Get user email
     const { ft_user_email } = await chrome.storage.local.get(["ft_user_email"]);
@@ -4314,7 +4516,11 @@ async function saveJournalEntry(distractionLevel, context) {
       type: "FT_SAVE_JOURNAL",
       note: journalText,
       channel: channel,
-      distraction_level: distractionLevel
+      title: videoTitle,
+      url: videoUrl,
+      distraction_level: distractionLevel,
+      source: contextSource,
+      videos: videos
     });
     
     if (response?.ok) {
@@ -4323,7 +4529,7 @@ async function saveJournalEntry(distractionLevel, context) {
       console.warn("[FT] Failed to save journal entry:", response?.error);
     }
     
-    console.log("[FT] Journal entry saved:", { channel, distractionLevel, textLength: journalText.length });
+    console.log("[FT] Journal entry saved:", { channel, distractionLevel, source: contextSource, textLength: journalText.length, videosCount: videos?.length || 0 });
   } catch (error) {
     console.warn("[FT] Error saving journal entry:", error.message);
   }
@@ -4489,7 +4695,17 @@ async function handleNavigation() {
       // Break is active - block all video watching
       const pageType = detectPageType();
       const remainingSeconds = Math.ceil((breakLockoutUntil - Date.now()) / 1000);
-      console.log("[FT] 🛑 BREAK CHECK: Active", { remainingSeconds, pageType });
+      const remainingMinutes = Math.floor(remainingSeconds / 60);
+      const remainingSecs = remainingSeconds % 60;
+      const timeRemaining = `${remainingMinutes}:${String(remainingSecs).padStart(2, '0')}`;
+      const expiresAt = new Date(breakLockoutUntil).toLocaleTimeString();
+      
+      console.log("[FT] 🛑 BREAK CHECK: Active", { 
+        remainingSeconds, 
+        remainingTime: timeRemaining,
+        expiresAt,
+        pageType 
+      });
       
       if (pageType === "WATCH" || pageType === "SHORTS") {
         // Show break overlay and redirect
@@ -4503,7 +4719,14 @@ async function handleNavigation() {
       }
     } else if (breakLockoutUntil > 0) {
       // Break just ended
-      console.log("[FT] ✅ BREAK ENDED", { breakUntil: new Date(breakLockoutUntil).toISOString() });
+      const expiredAt = new Date(breakLockoutUntil).toLocaleTimeString();
+      console.log("[FT] ✅ BREAK ENDED", { 
+        expiredAt,
+        breakUntil: new Date(breakLockoutUntil).toISOString() 
+      });
+    } else {
+      // No break lockout active
+      console.log("[FT] ✅ BREAK CHECK: No lockout active");
     }
   } catch (error) {
     console.warn("[FT] Error checking break lockout:", error.message);
@@ -5190,17 +5413,18 @@ async function handleNavigation() {
   }
 
   // Update dev panel with AI classification results (only if valid)
-  const devPanel = document.getElementById("ft-dev-toggle");
-  if (devPanel && resp.aiClassification) {
-    // Validate video_id before updating dev panel
-    const responseVideoId = resp.aiClassification.video_id;
-    const currentVideoId = videoMetadata?.video_id || extractVideoIdFromUrl();
-    if (responseVideoId === currentVideoId) {
-      await updateDevPanelStatus(devPanel, resp.aiClassification);
-    } else {
-      console.warn("[FT] Dev panel: Classification video_id mismatch, not updating");
-    }
-  }
+  // Dev panel disabled - removed per user request
+  // const devPanel = document.getElementById("ft-dev-toggle");
+  // if (devPanel && resp.aiClassification) {
+  //   // Validate video_id before updating dev panel
+  //   const responseVideoId = resp.aiClassification.video_id;
+  //   const currentVideoId = videoMetadata?.video_id || extractVideoIdFromUrl();
+  //   if (responseVideoId === currentVideoId) {
+  //     await updateDevPanelStatus(devPanel, resp.aiClassification);
+  //   } else {
+  //     console.warn("[FT] Dev panel: Classification video_id mismatch, not updating");
+  //   }
+  // }
 
   // Handle focus window blocking (before other checks)
   if (resp.blocked && resp.reason === "outside_focus_window" && resp.focusWindowInfo) {
@@ -5646,11 +5870,12 @@ function injectDevToggle() {
 }
 
 // Run once DOM is ready
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", injectDevToggle);
-} else {
-  injectDevToggle();
-}
+// Dev panel disabled - removed per user request
+// if (document.readyState === "loading") {
+//   document.addEventListener("DOMContentLoaded", injectDevToggle);
+// } else {
+//   injectDevToggle();
+// }
 
 // ─────────────────────────────────────────────────────────────
 // FULLSCREEN DETECTION (hide search counter in fullscreen)

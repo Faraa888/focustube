@@ -868,7 +868,7 @@ async function handleMessage(msg) {
 
   if (msg?.type === "FT_SAVE_JOURNAL") {
     try {
-      const { note, context, channel, distraction_level } = msg;
+      const { note, channel, title, url, distraction_level, source, videos } = msg;
       if (!note || typeof note !== "string" || note.trim() === "") {
         return { ok: false, error: "Note is required" };
       }
@@ -878,12 +878,13 @@ async function handleMessage(msg) {
         return { ok: false, error: "User ID or server URL not set" };
       }
 
-      // Build context with channel and distraction_level
+      // Build context object for backend
       const journalContext = {
-        ...(context || {}),
         channel: channel || null,
-        distraction_level: distraction_level || null,
-        timestamp: new Date().toISOString()
+        title: title || null,
+        url: url || null,
+        source: source || null,
+        videos: videos || null
       };
 
       // Send to server
@@ -895,6 +896,7 @@ async function handleMessage(msg) {
         body: JSON.stringify({
           user_id: userId,
           note: note.trim(),
+          distraction_level: distraction_level || null,
           context: journalContext,
         }),
       });
@@ -909,7 +911,7 @@ async function handleMessage(msg) {
         throw new Error(data.error || "Failed to save journal entry");
       }
 
-      LOG("Journal entry saved:", { note: note.substring(0, 50) + "..." });
+      LOG("Journal entry saved:", { note: note.substring(0, 50) + "...", source, distraction_level });
       return { ok: true, message: "Journal entry saved" };
     } catch (err) {
       console.error("[FT] Save journal error:", err);
@@ -1191,7 +1193,14 @@ function extractVideoId(url) {
  * @param {string} distractionLevel - Video category ("distracting" | "neutral" | "productive")
  * @returns {Promise<number>} - Time watched in seconds
  */
-async function finalizeVideoWatch(videoId, startTime, distractionLevel, categoryPrimary = null) {
+async function finalizeVideoWatch(
+  videoId, 
+  startTime, 
+  distractionLevel, 
+  categoryPrimary = null,
+  videoTitle = null,      // NEW: Accept title parameter (from saved tracking data)
+  channelName = null      // NEW: Accept channel parameter (from saved tracking data)
+) {
   if (!videoId || !startTime) {
     return 0;
   }
@@ -1219,10 +1228,12 @@ async function finalizeVideoWatch(videoId, startTime, distractionLevel, category
     });
   }
 
-  // Get video title and channel from current video classification
+  // Use passed parameters (from saved tracking data), fallback to "Unknown" if not provided
+  // This ensures we use the metadata that was saved when tracking started, not what's currently in shared state
+  const finalTitle = videoTitle || "Unknown";
+  const finalChannel = channelName || "Unknown";
+  // Still get confidence from shared state (it's not passed as parameter)
   const { ft_current_video_classification } = await getLocal(["ft_current_video_classification"]);
-  const videoTitle = ft_current_video_classification?.video_title || "Unknown";
-  const channelName = ft_current_video_classification?.channel_name || "Unknown";
   const confidenceDistraction = ft_current_video_classification?.confidence_distraction ?? null;
 
   if (durationSeconds < WATCH_SYNC_MIN_SECONDS) {
@@ -1239,8 +1250,8 @@ async function finalizeVideoWatch(videoId, startTime, distractionLevel, category
 
   const watchEvent = {
     video_id: videoId,
-    video_title: videoTitle,
-    channel_name: channelName,
+    video_title: finalTitle,
+    channel_name: finalChannel,
     watch_seconds: durationSeconds,
     started_at: startedAtIso,
     watched_at: finishedAtIso,
@@ -1260,7 +1271,7 @@ async function finalizeVideoWatch(videoId, startTime, distractionLevel, category
 
   LOG("Watch event queued:", {
     videoId: videoId.substring(0, 10),
-    title: videoTitle.substring(0, 30),
+    title: finalTitle.substring(0, 30),
     duration: `${durationSeconds}s`,
     queueSize: queue.length,
   });
@@ -1605,7 +1616,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   // - User enters a new WATCH page (need to finalize previous video first)
   const { ft_current_video_classification: prevVideo } = await getLocal(["ft_current_video_classification"]);
   if (prevVideo && prevVideo.startTime) {
-    const { videoId, distraction_level, category_primary, startTime } = prevVideo;
+    const { videoId, distraction_level, category_primary, startTime, video_title, channel_name } = prevVideo;
     // Only finalize if:
     // - We're leaving WATCH page (going to different page type)
     // - OR we're entering a new WATCH page (different video ID)
@@ -1615,7 +1626,14 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     
     if (isLeavingWatchPage || isNewVideo) {
       clearWatchClassificationTimer();
-      await finalizeVideoWatch(videoId, startTime, distraction_level, category_primary);
+      await finalizeVideoWatch(
+        videoId, 
+        startTime, 
+        distraction_level, 
+        category_primary,
+        video_title || "Unknown",  // Pass saved title
+        channel_name || "Unknown"   // Pass saved channel
+      );
       // Clear previous video tracking
       await setLocal({ ft_current_video_classification: null });
     }

@@ -569,31 +569,41 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 0.98);
   backdrop-filter: blur(8px);
-  padding: 20px;
+  padding: 0;
+  width: 100%;
+  height: 100%;
 }
 
 #ft-spiral-nudge .ft-milestone-box {
-  max-width: 500px;
-  background: #121212;
-  padding: 32px;
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  background: #0a0a0a;
+  padding: 60px;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   color: #fff;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 #ft-spiral-nudge h2 {
-  font-size: 24px;
-  margin: 0 0 16px 0;
+  font-size: 48px;
+  margin: 0 0 24px 0;
   color: #ffaa00;
   line-height: 1.4;
 }
 
 #ft-spiral-nudge .ft-milestone-intro {
-  font-size: 16px;
-  margin: 16px 0 24px 0;
+  font-size: 24px;
+  margin: 16px 0 32px 0;
   color: #ccc;
   font-weight: 500;
   line-height: 1.5;
@@ -602,12 +612,12 @@
 #ft-spiral-nudge .ft-spiral-timer {
   display: flex;
   justify-content: center;
-  margin: 24px 0;
+  margin: 40px 0;
 }
 
 #ft-spiral-nudge .ft-timer-circle {
-  width: 80px;
-  height: 80px;
+  width: 120px;
+  height: 120px;
   border-radius: 50%;
   border: 4px solid #ffaa00;
   display: flex;
@@ -628,7 +638,7 @@
 }
 
 #ft-spiral-nudge .ft-timer-circle #ft-timer-count {
-  font-size: 32px;
+  font-size: 48px;
   font-weight: 700;
   color: #ffaa00;
   line-height: 1;
@@ -636,9 +646,9 @@
 
 #ft-spiral-nudge .ft-milestone-buttons {
   display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 24px;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 40px;
   flex-wrap: wrap;
 }
 
@@ -683,6 +693,17 @@
 
 #ft-spiral-nudge .ft-button-danger:hover {
   background: #ff6666;
+}
+
+#ft-spiral-nudge .ft-button-outline {
+  background: transparent;
+  color: #fff;
+  border: 2px solid #555;
+}
+
+#ft-spiral-nudge .ft-button-outline:hover {
+  background: #222;
+  border-color: #777;
 }
 
 /* Focus Window Overlay */
@@ -949,3 +970,137 @@
   }
 }
 
+/* Behavior loop nudge - full screen overlay */
+#ft-behavior-nudge {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.98);
+  backdrop-filter: blur(8px);
+  padding: 0;
+}
+
+#ft-behavior-nudge .ft-milestone-box {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  background: #0a0a0a;
+  padding: 60px;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+#ft-behavior-nudge h2 {
+  font-size: 48px;
+  margin: 0 0 24px 0;
+  color: #ff6666;
+  line-height: 1.4;
+}
+
+#ft-behavior-nudge .ft-milestone-intro {
+  font-size: 24px;
+  margin: 24px 0 32px 0;
+  color: #ccc;
+  font-weight: 500;
+}
+
+#ft-behavior-nudge .ft-spiral-timer {
+  margin: 40px 0;
+}
+
+#ft-behavior-nudge .ft-timer-circle {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 4px solid #ff6666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+#ft-behavior-nudge #ft-timer-count {
+  font-size: 48px;
+  font-weight: bold;
+  color: #ff6666;
+}
+
+#ft-behavior-nudge .ft-milestone-buttons {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin-top: 40px;
+}
+
+#ft-behavior-nudge .ft-button {
+  padding: 16px 32px;
+  font-size: 18px;
+  min-width: 150px;
+}
+
+#ft-behavior-nudge .ft-button-outline {
+  background: transparent;
+  color: #fff;
+  border: 1px solid #555;
+}
+
+#ft-behavior-nudge .ft-button-outline:hover {
+  background: #1a1a1a;
+}
+
+/* Journal Modal (separate from nudge, not timer-locked) */
+#ft-journal-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483648; /* Above nudge */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.95);
+  backdrop-filter: blur(8px);
+}
+
+#ft-journal-modal .ft-journal-box {
+  width: 90%;
+  max-width: 600px;
+  background: #0a0a0a;
+  padding: 40px;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+#ft-journal-modal h2 {
+  font-size: 32px;
+  margin: 0 0 16px 0;
+  color: #3ea6ff;
+}
+
+#ft-journal-modal .ft-journal-context {
+  font-size: 16px;
+  margin: 0 0 20px 0;
+  color: #ccc;
+}
+
+#ft-journal-modal .ft-journal-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+#ft-journal-modal .ft-button {
+  padding: 12px 24px;
+  font-size: 16px;
+  min-width: 100px;
+}

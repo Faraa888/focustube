@@ -2044,7 +2044,7 @@ app.post("/events/watch", async (req, res) => {
  */
 app.post("/journal", async (req, res) => {
   try {
-    const { user_id, note, context } = req.body || {};
+    const { user_id, note, distraction_level, context } = req.body || {};
 
     // Validate input
     if (!user_id || typeof user_id !== "string") {
@@ -2065,6 +2065,7 @@ app.post("/journal", async (req, res) => {
     const success = await insertJournalEntry({
       user_id,
       note: note.trim(),
+      distraction_level: distraction_level || null,
       context: context || {},
     });
 
@@ -2076,7 +2077,7 @@ app.post("/journal", async (req, res) => {
       });
     }
 
-    console.log(`[Journal] Entry saved for user ${user_id}: ${note.substring(0, 50)}...`);
+    console.log(`[Journal] Entry saved for user ${user_id}: ${note.substring(0, 50)}... (source: ${context?.source || "unknown"}, level: ${distraction_level || "unknown"})`);
     res.status(200).json({ ok: true, message: "Journal entry saved" });
   } catch (error: any) {
     console.error("[Journal] Error processing journal entry:", error);

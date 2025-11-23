@@ -464,11 +464,13 @@ export async function pruneVideoData(days: number, userId?: string): Promise<boo
 export async function insertJournalEntry(payload: {
   user_id: string;
   note: string;
+  distraction_level?: string | null;
   context?: {
     url?: string;
     title?: string;
     channel?: string;
     source?: string;
+    videos?: Array<{ video_id?: string | null; video_title?: string | null; watched_at?: string | null }> | null;
   };
 }): Promise<boolean> {
   try {
@@ -477,7 +479,7 @@ export async function insertJournalEntry(payload: {
       return false;
     }
 
-    const { user_id, note, context } = payload;
+    const { user_id, note, distraction_level, context } = payload;
 
     if (!user_id || !note || note.trim() === "") {
       console.warn("[Supabase] Missing user_id or note for journal entry");
@@ -488,10 +490,12 @@ export async function insertJournalEntry(payload: {
     const { error } = await supabase.from("journal_entries").insert({
       user_id,
       note: note.trim(),
+      distraction_level: distraction_level || null,
       context_url: context?.url || null,
       context_title: context?.title || null,
       context_channel: context?.channel || null,
       context_source: context?.source || null,
+      context_videos: context?.videos || null, // JSONB - Supabase handles JSON automatically
       created_at: nowIso,
     });
 
