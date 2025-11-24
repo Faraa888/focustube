@@ -276,6 +276,16 @@ app.post("/ai/classify", async (req, res) => {
       });
     }
 
+    // Check if user can record data (Pro or active Trial only)
+    // Note: Extension should check ft_can_record before calling, but this is a safety net
+    const userEmail = user_id.toLowerCase().trim();
+    const canRecord = await canUserRecord(userEmail);
+    if (!canRecord) {
+      console.log(`[AI Classify] Classification returned but not saved (inactive plan): ${userEmail}`);
+      // Still return a neutral result so extension doesn't break, but don't save to DB
+      // Extension should check ft_can_record before calling this endpoint
+    }
+
     // Fetch anti-goals from database for logging
     let userAntiGoals: string[] = [];
     if (user_id) {
@@ -668,8 +678,8 @@ No extra commentary.`;
       // Result already set to failsafe above (with mapping)
     }
 
-    // Store classification for analytics (fire-and-forget)
-    if (result && isVideoRequest && user_id) {
+    // Store classification for analytics (fire-and-forget) - only if user can record
+    if (result && isVideoRequest && user_id && canRecord) {
       // Look up UUID from email (user_id is email from extension)
       getUserIdFromEmail(user_id.toLowerCase().trim()).then((userId) => {
         if (!userId) {
@@ -689,6 +699,8 @@ No extra commentary.`;
       }).catch((dbErr) => {
         console.warn("[AI Classify] Failed to upsert video classification (non-blocking):", dbErr);
       });
+    } else if (result && isVideoRequest && user_id && !canRecord) {
+      // User can't record - classification was computed but not saved (as logged above)
     }
 
     // Cache the result (even if it's a fallback)
@@ -780,6 +792,24 @@ app.post("/video/update-watch-time", async (req, res) => {
  * Returns user plan and trial info from Supabase database (cached for 24h)
  * Response: { plan: "trial"|"pro"|"free", days_left?: number }
  */
+/**
+ * Helper function to check if a user can record data (Pro or active Trial)
+ * @param email - User email address
+ * @returns Promise<boolean> - true if user can record, false otherwise
+ */
+async function canUserRecord(email: string): Promise<boolean> {
+  const planInfo = await getUserPlanInfo(email);
+  if (!planInfo) return false;
+  const { plan, trial_expires_at } = planInfo;
+  if (plan === "pro") return true;
+  if (plan === "trial" && trial_expires_at) {
+    const expiresAt = new Date(trial_expires_at);
+    const now = new Date();
+    return expiresAt.getTime() > now.getTime();
+  }
+  return false;
+}
+
 app.get("/license/verify", async (req, res) => {
   try {
     const email = req.query.email as string;
@@ -809,9 +839,13 @@ app.get("/license/verify", async (req, res) => {
         days_left = Math.max(0, diffDays); // Don't return negative days
       }
 
+      // Calculate can_record flag
+      const can_record = plan === "pro" || (plan === "trial" && trial_expires_at && new Date(trial_expires_at).getTime() > Date.now());
+
       const response: any = {
         exists: true,
         plan,
+        can_record,
       };
       if (days_left !== undefined) {
         response.days_left = days_left;
@@ -834,6 +868,7 @@ app.get("/license/verify", async (req, res) => {
       res.json({
         exists: false,
         plan: "free", // Default for non-existent users
+        can_record: false,
       });
     } else {
       const { plan, trial_expires_at } = planInfo;
@@ -850,9 +885,13 @@ app.get("/license/verify", async (req, res) => {
         days_left = Math.max(0, diffDays); // Don't return negative days
       }
 
+      // Calculate can_record flag
+      const can_record = plan === "pro" || (plan === "trial" && trial_expires_at && new Date(trial_expires_at).getTime() > Date.now());
+
       const response: any = { 
         exists: true,
-        plan 
+        plan,
+        can_record,
       };
       if (days_left !== undefined) {
         response.days_left = days_left;
@@ -1174,6 +1213,22 @@ app.post("/extension/save-data", async (req, res) => {
       });
     }
 
+    // Check if user can record data (Pro or active Trial only)
+    const canRecord = await canUserRecord(userEmail);
+    if (!canRecord) {
+      // Block all writes for free users (settings, goals, behavior loop counters)
+      // Still allow blocked_channels validation check (for safety), but block the actual write
+      if (data.settings !== undefined || data.goals !== undefined || data.anti_goals !== undefined) {
+        console.log(`[Extension Save] Blocked settings write for inactive plan: ${userEmail}`);
+        return res.status(400).json({ 
+          ok: false, 
+          error: "plan_inactive", 
+          message: "Upgrade to Pro to change settings" 
+        });
+      }
+      // If only blocked_channels is being updated, we'll validate it but block the write below
+    }
+
     // ─────────────────────────────────────────────────────────────
     // SAFETY CHECK: Reject if blocked_channels list shrinks
     // Channels are permanently blocked - list can only grow
@@ -1244,6 +1299,16 @@ app.post("/extension/save-data", async (req, res) => {
       return res.status(400).json({
         ok: false,
         error: "user_id does not match authenticated user",
+      });
+    }
+
+    // Block all writes if user can't record
+    if (!canRecord) {
+      console.log(`[Extension Save] Blocked all writes for inactive plan: ${userEmail}`);
+      return res.status(400).json({ 
+        ok: false, 
+        error: "plan_inactive", 
+        message: "Upgrade to Pro to change settings" 
       });
     }
 
@@ -1712,7 +1777,7 @@ app.get("/dashboard/stats", async (req, res) => {
           const seconds = Number(w.watch_seconds ?? w.seconds ?? 0);
           // Filter: 7-day window AND watch_seconds >= 45 AND hour matches bucket
           return watchedAt >= sevenDaysAgoForHourly && 
-                 seconds >= 45 && 
+                 seconds >= 30 && 
                  block.hours.includes(watchedAt.getHours());
         })
         .forEach((w: any) => {
@@ -1978,6 +2043,17 @@ app.post("/events/watch", async (req, res) => {
       console.warn("[Events] User not found for email:", userEmail);
       return res.status(404).json({ ok: false, error: "User not found" });
     }
+
+    // Check if user can record data (Pro or active Trial only)
+    const canRecord = await canUserRecord(userEmail);
+    if (!canRecord) {
+      console.log(`[Events] Blocked watch event write for inactive plan: ${userEmail}`);
+      return res.status(400).json({ 
+        ok: false, 
+        error: "plan_inactive", 
+        message: "Upgrade to Pro to resume tracking" 
+      });
+    }
     type SanitizedEvent = {
       video_id: string;
       video_title?: string | null;
@@ -2011,7 +2087,7 @@ app.post("/events/watch", async (req, res) => {
         };
       })
       .filter((event): event is SanitizedEvent => event !== null)
-      .filter((event) => event.watch_seconds >= 45);
+      .filter((event) => event.watch_seconds >= 30);
 
     if (sanitized.length === 0) {
       return res.json({ ok: true, count: 0 });

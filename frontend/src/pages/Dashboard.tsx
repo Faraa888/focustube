@@ -25,6 +25,7 @@ const Dashboard = () => {
   const [statsError, setStatsError] = useState<string | null>(null);
   const [blockedChannels, setBlockedChannels] = useState<string[]>([]);
   const [blockingChannel, setBlockingChannel] = useState<string | null>(null);
+  const [showUpgradeBanner, setShowUpgradeBanner] = useState(false);
 
   // Fetch dashboard stats and blocked channels
   useEffect(() => {
@@ -34,6 +35,16 @@ const Dashboard = () => {
         if (!user?.email) {
           setStatsLoading(false);
           return;
+        }
+
+        // Check plan via /license/verify to get can_record flag
+        const planResponse = await fetch(
+          `https://focustube-backend-4xah.onrender.com/license/verify?email=${encodeURIComponent(user.email)}`
+        );
+        if (planResponse.ok) {
+          const planData = await planResponse.json();
+          const canRecord = planData.can_record !== undefined ? planData.can_record : true;
+          setShowUpgradeBanner(!canRecord);
         }
 
         // Fetch stats
@@ -98,6 +109,21 @@ const Dashboard = () => {
       <Header />
       
       <main className="flex-1 container mx-auto px-4 py-8 mt-16">
+        {/* Upgrade Banner */}
+        {showUpgradeBanner && (
+          <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-center justify-between gap-4">
+            <span className="text-yellow-500 font-medium">
+              Tracking paused — Upgrade to Pro to resume logging your sessions
+            </span>
+            <Button
+              onClick={() => window.open("/pricing", "_blank")}
+              size="sm"
+              className="bg-yellow-500 hover:bg-yellow-600 text-black"
+            >
+              Upgrade
+            </Button>
+          </div>
+        )}
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Your Stats</h1>
           <p className="text-muted-foreground">

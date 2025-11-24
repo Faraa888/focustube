@@ -517,6 +517,10 @@ export async function syncPlanFromServer(force = false) {
     toStore.ft_days_left = null;
   }
   
+  // Store can_record flag (Pro or active Trial only)
+  const canRecord = planInfo.can_record !== undefined ? planInfo.can_record : false;
+  toStore.ft_can_record = canRecord;
+  
   if (Object.keys(toStore).length > 0) {
     await setLocal(toStore);
   }
@@ -524,9 +528,9 @@ export async function syncPlanFromServer(force = false) {
   lastSyncTime = now;
 
   if (planInfo.plan === "trial" && planInfo.days_left !== null) {
-    console.log(`[FT] Plan synced from server: ${planInfo.plan} (${planInfo.days_left} days left)`);
+    console.log(`[FT] Plan synced from server: ${planInfo.plan} (${planInfo.days_left} days left, can_record: ${canRecord})`);
   } else {
-    console.log(`[FT] Plan synced from server: ${planInfo.plan}`);
+    console.log(`[FT] Plan synced from server: ${planInfo.plan} (can_record: ${canRecord})`);
   }
   return true;
 }
@@ -894,22 +898,26 @@ export async function saveExtensionDataToServer(data = null) {
     ]);
 
     // Merge focus window settings, spiral events, and behavior loop data into settings object
+    // Only include behavior loop counters if user can record (Pro feature)
     const settingsToSave = {
       ...ft_extension_settings,
       focus_window_enabled: ft_focus_window_enabled,
       focus_window_start: ft_focus_window_start,
       focus_window_end: ft_focus_window_end,
       spiral_events: ft_spiral_events, // Store in settings JSONB for now
-      // Behavior loop awareness counters
-      distracting_count_global: ft_distracting_count_global,
-      distracting_time_global: ft_distracting_time_global,
-      productive_count_global: ft_productive_count_global,
-      productive_time_global: ft_productive_time_global,
-      neutral_count_global: ft_neutral_count_global,
-      neutral_time_global: ft_neutral_time_global,
-      break_lockout_until: ft_break_lockout_until,
-      spiral_dismissed_channels: ft_spiral_dismissed_channels,
     };
+    
+    // Behavior loop awareness counters (Pro feature only)
+    if (ft_can_record) {
+      settingsToSave.distracting_count_global = ft_distracting_count_global;
+      settingsToSave.distracting_time_global = ft_distracting_time_global;
+      settingsToSave.productive_count_global = ft_productive_count_global;
+      settingsToSave.productive_time_global = ft_productive_time_global;
+      settingsToSave.neutral_count_global = ft_neutral_count_global;
+      settingsToSave.neutral_time_global = ft_neutral_time_global;
+      settingsToSave.break_lockout_until = ft_break_lockout_until;
+      settingsToSave.spiral_dismissed_channels = ft_spiral_dismissed_channels;
+    }
 
     // If data is provided: send ONLY those keys (no merging from local)
     // If data is null: full sync, send everything from local

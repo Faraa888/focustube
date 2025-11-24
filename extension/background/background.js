@@ -184,12 +184,25 @@ async function sendWatchEventBatch() {
 
     if (!response.ok) {
       console.warn(`[FT] Failed to send watch event batch: ${response.status} ${response.statusText}`);
+      // If server returns plan_inactive error, update local flag
+      if (response.status === 400) {
+        const errorData = await response.json().catch(() => ({}));
+        if (errorData.error === "plan_inactive") {
+          console.log("[FT] Server indicates plan inactive, updating ft_can_record");
+          await setLocal({ ft_can_record: false });
+        }
+      }
       return false;
     }
 
     const data = await response.json();
     if (!data.ok) {
       console.warn("[FT] Server returned error for watch event batch:", data.error);
+      // If server returns plan_inactive error, update local flag
+      if (data.error === "plan_inactive") {
+        console.log("[FT] Server indicates plan inactive, updating ft_can_record");
+        await setLocal({ ft_can_record: false });
+      }
       return false;
     }
 
@@ -1055,12 +1068,14 @@ async function classifyVideo(videoMetadata) {
  */
 async function classifyContent(input, context = "search") {
   try {
-    // Get user ID, plan, and goals
+    // Get user ID, plan, goals, and can_record flag
     const userId = await getUserId();
-    const { ft_plan, ft_user_goals } = await getLocal(["ft_plan", "ft_user_goals"]);
+    const { ft_plan, ft_user_goals, ft_can_record } = await getLocal(["ft_plan", "ft_user_goals", "ft_can_record"]);
     
-    // Only classify for Pro or Trial users (trial gets Pro features)
-    if (!ft_plan || (ft_plan !== "pro" && ft_plan !== "trial")) {
+    // Only classify if user can record (Pro or active Trial only)
+    // Free users and expired trial users don't get AI classification
+    if (!ft_can_record) {
+      console.log("[FT] AI classification skipped (plan inactive)");
       return null;
     }
 
@@ -1961,9 +1976,12 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
 
   // 9. Build context for evaluateBlock()
   const channel = (pageType === "WATCH" && videoMetadata) ? videoMetadata.channel : null;
-  const blockedChannels = state.ft_blocked_channels || [];
-  
-  
+  // Disable channel blocking for free users (Pro feature)
+  const canRecord = state.ft_can_record !== false; // Default to true if not set (backward compat)
+  const blockedChannels = canRecord ? (state.ft_blocked_channels || []) : [];
+  if (!canRecord && state.ft_blocked_channels && state.ft_blocked_channels.length > 0) {
+    console.log("[FT] Channel blocking disabled (plan inactive)");
+  }
   
   const ctx = {
     plan,

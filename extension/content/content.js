@@ -580,7 +580,18 @@ function extractChannelFast() {
     return channelText.trim();
   }
   
-  // Method 1: Meta tags FIRST (fastest, most reliable)
+  // Method 1: YouTube internal data structure (MOST RELIABLE - NEW)
+  // This is the primary source - available immediately and always accurate
+  if (window.ytInitialPlayerResponse?.videoDetails?.author) {
+    const channelName = window.ytInitialPlayerResponse.videoDetails.author.trim();
+    const playerVideoId = window.ytInitialPlayerResponse.videoDetails.videoId;
+    // Verify it's for the current video (prevents stale data from previous navigation)
+    if (channelName && (playerVideoId === currentVideoId || !currentVideoId)) {
+      return extractFirstChannel(channelName); // ✅ Handles multi-channel automatically
+    }
+  }
+  
+  // Method 2: Meta tags (fast, reliable fallback)
   const metaChannel = document.querySelector('meta[property="og:video:channel_name"]');
   const metaUrl = document.querySelector('meta[property="og:url"]');
   
@@ -601,7 +612,7 @@ function extractChannelFast() {
     }
   }
   
-  // Method 2: DOM fallback - try querySelectorAll to find first valid channel
+  // Method 3: DOM fallback - try querySelectorAll to find first valid channel
   const mainVideoContainer = document.querySelector(
     "#primary-inner, ytd-watch-metadata, ytd-video-owner-renderer"
   );
@@ -625,7 +636,7 @@ function extractChannelFast() {
     }
   }
   
-  // Method 3: Last resort - try more specific DOM selectors with querySelectorAll
+  // Method 4: Last resort - try more specific DOM selectors with querySelectorAll
   const candidates = document.querySelectorAll(
     "ytd-watch-metadata ytd-channel-name a, " +
     "ytd-video-owner-renderer #channel-name a"
@@ -777,160 +788,165 @@ function extractVideoMetadata() {
     // 0.5. Detect if this is a Shorts video
     const pathname = location.pathname;
     metadata.is_shorts = pathname.startsWith("/shorts/") || pathname.includes("/shorts/");
-    // 1. Video Title
-    const titleElement = document.querySelector("h1.ytd-watch-metadata yt-formatted-string, h1.ytd-video-primary-info-renderer, h1.title");
-    if (titleElement) {
-      metadata.title = titleElement.textContent?.trim() || null;
-    } else {
-      // Fallback: try meta tag
-      const metaTitle = document.querySelector('meta[property="og:title"]');
-      if (metaTitle) {
-        metadata.title = metaTitle.getAttribute("content")?.trim() || null;
+    
+    // Helper: Extract first channel from text (handles "Channel A & Channel B" or "A, B, C")
+    function extractFirstChannel(channelText) {
+      if (!channelText) return null;
+      const separators = /[&,]/;
+      if (separators.test(channelText)) {
+        const parts = channelText.split(separators).map(s => s.trim()).filter(s => s.length > 0);
+        return parts[0] || channelText.trim();
+      }
+      return channelText.trim();
+    }
+    
+    // PRIMARY SOURCE: YouTube internal data structure (MOST RELIABLE)
+    // Extract all available data from ytInitialPlayerResponse.videoDetails
+    const videoDetails = window.ytInitialPlayerResponse?.videoDetails;
+    const currentVideoId = metadata.video_id;
+    
+    if (videoDetails && videoDetails.videoId === currentVideoId) {
+      // Verify it's for the current video (prevents stale data from previous navigation)
+      if (videoDetails.title) {
+        metadata.title = videoDetails.title.trim();
+      }
+      if (videoDetails.shortDescription) {
+        metadata.description = videoDetails.shortDescription.trim().substring(0, 500);
+      }
+      if (Array.isArray(videoDetails.keywords) && videoDetails.keywords.length > 0) {
+        metadata.tags = videoDetails.keywords;
+      }
+      if (videoDetails.author) {
+        metadata.channel = extractFirstChannel(videoDetails.author.trim());
+      }
+      if (videoDetails.lengthSeconds) {
+        metadata.duration_seconds = parseInt(videoDetails.lengthSeconds, 10) || null;
       }
     }
-
-    // 2. Video Description
-    const descElement = document.querySelector("#description, ytd-video-secondary-info-renderer #description, #watch-description-text");
-    if (descElement) {
-      const descText = descElement.textContent?.trim() || "";
-      metadata.description = descText.substring(0, 500); // Truncate to 500 chars
-    } else {
-      // Fallback: try meta tag
-      const metaDesc = document.querySelector('meta[property="og:description"]');
-      if (metaDesc) {
-        metadata.description = metaDesc.getAttribute("content")?.trim()?.substring(0, 500) || null;
-      }
-    }
-
-    // 3. Video Tags
-    // Try multiple selectors for tags
-    const tagElements = document.querySelectorAll(
-      'ytd-watch-metadata #container ytd-badge-supported-renderer, ' +
-      'meta[property="og:video:tag"], ' +
-      'ytd-metadata-row-renderer[has-metadata-layout="COMPACT"] a'
-    );
-    if (tagElements.length > 0) {
-      tagElements.forEach(el => {
-        const tagText = el.textContent?.trim() || el.getAttribute("content")?.trim();
-        if (tagText && tagText.length > 0) {
-          metadata.tags.push(tagText);
-        }
-      });
-    }
-
-    // 4. Channel Name - ONLY from main video, not sidebar
-    // Also verify it's from current page, not stale from previous page
-    let channelElement = null;
-    const currentVideoId = extractVideoIdFromUrl();
-
-    // Method 1: Look within main video container (most reliable)
-    const mainVideoContainer = document.querySelector(
-      "#primary-inner, ytd-watch-metadata, ytd-video-owner-renderer"
-    );
-
-    if (mainVideoContainer) {
-      // Search ONLY within main video area (not sidebar)
-      // Use querySelectorAll to find all channel elements, then pick first valid one
-      // This handles cases where multiple channel elements exist (e.g., "KSI" and "KSI+")
-      const channelElements = mainVideoContainer.querySelectorAll(
-        "ytd-channel-name a, #channel-name a, #owner-sub-count a"
-      );
-      
-      // Loop through to find first valid element (like extractChannelFast does)
-      for (const channelEl of channelElements) {
-        const isVisible = channelEl.offsetParent !== null;
-        const isInMainVideo = mainVideoContainer.contains(channelEl);
-        
-        if (isVisible && isInMainVideo) {
-          const channelText = channelEl.textContent?.trim();
-          if (channelText && channelText.length > 0) {
-            channelElement = channelEl;
-            break; // Found valid element, stop searching
-          }
-        }
-      }
-    }
-
-    // Method 2: If not found, try more specific selectors (still avoiding sidebar)
-    if (!channelElement) {
-      const candidates = document.querySelectorAll(
-        "ytd-watch-metadata ytd-channel-name a, " +
-        "ytd-video-owner-renderer #channel-name a, " +
-        "#owner-sub-count a"
-      );
-      
-      // Loop through to find first valid element
-      for (const candidate of candidates) {
-        const isVisible = candidate.offsetParent !== null;
-        const isInMainVideo = candidate.closest("#primary, ytd-watch-metadata, ytd-video-owner-renderer");
-        
-        if (isVisible && isInMainVideo) {
-          const channelText = candidate.textContent?.trim();
-          if (channelText && channelText.length > 0) {
-            channelElement = candidate;
-            break; // Found valid element, stop searching
-          }
-        }
-      }
-    }
-
-    // Method 3: Fallback to meta tags (most reliable, but may not always be present)
-    if (!channelElement) {
-      const metaChannel = document.querySelector('meta[property="og:video:channel_name"]');
-      if (metaChannel) {
-        const channelName = metaChannel.getAttribute("content")?.trim();
-        // Verify meta tag is for current video by checking URL matches
-        const metaUrl = document.querySelector('meta[property="og:url"]');
-        if (metaUrl) {
-          const metaVideoId = extractVideoIdFromUrl(metaUrl.getAttribute("content"));
-          if (metaVideoId === currentVideoId && channelName) {
-            // Extract first channel if multiple channels (e.g., "MrBeast & Dude Perfect" → "MrBeast")
-            const separators = /[&,]/;
-            if (separators.test(channelName)) {
-              const parts = channelName.split(separators).map(s => s.trim()).filter(s => s.length > 0);
-              metadata.channel = parts[0] || channelName.trim();
-            } else {
-              metadata.channel = channelName;
-            }
-          }
-        } else if (channelName) {
-          // If no URL meta tag, trust the channel name (meta tags are usually fresh)
-          // Extract first channel if multiple channels
-          const separators = /[&,]/;
-          if (separators.test(channelName)) {
-            const parts = channelName.split(separators).map(s => s.trim()).filter(s => s.length > 0);
-            metadata.channel = parts[0] || channelName.trim();
-          } else {
-            metadata.channel = channelName;
-          }
-        }
-      }
-    } else {
-      // Verify channel element is actually for current video
-      const channelText = channelElement.textContent?.trim();
-      if (channelText) {
-        // Extract first channel if multiple channels (e.g., "MrBeast & Dude Perfect" → "MrBeast")
-        const separators = /[&,]/;
-        if (separators.test(channelText)) {
-          const parts = channelText.split(separators).map(s => s.trim()).filter(s => s.length > 0);
-          metadata.channel = parts[0] || channelText.trim();
-        } else {
-          metadata.channel = channelText;
-        }
+    
+    // 1. Video Title (fallback if not from videoDetails)
+    if (!metadata.title) {
+      const titleElement = document.querySelector("h1.ytd-watch-metadata yt-formatted-string, h1.ytd-video-primary-info-renderer, h1.title");
+      if (titleElement) {
+        metadata.title = titleElement.textContent?.trim() || null;
       } else {
-        // Channel element found but no text - might be stale, try meta tags
-        const metaChannel = document.querySelector('meta[property="og:video:channel_name"]');
-        if (metaChannel) {
-          const channelName = metaChannel.getAttribute("content")?.trim();
-          if (channelName) {
-            // Extract first channel if multiple channels
-            const separators = /[&,]/;
-            if (separators.test(channelName)) {
-              const parts = channelName.split(separators).map(s => s.trim()).filter(s => s.length > 0);
-              metadata.channel = parts[0] || channelName.trim();
-            } else {
-              metadata.channel = channelName;
+        // Fallback: try meta tag
+        const metaTitle = document.querySelector('meta[property="og:title"]');
+        if (metaTitle) {
+          metadata.title = metaTitle.getAttribute("content")?.trim() || null;
+        }
+      }
+    }
+
+    // 2. Video Description (fallback if not from videoDetails)
+    if (!metadata.description) {
+      const descElement = document.querySelector("#description, ytd-video-secondary-info-renderer #description, #watch-description-text");
+      if (descElement) {
+        const descText = descElement.textContent?.trim() || "";
+        metadata.description = descText.substring(0, 500); // Truncate to 500 chars
+      } else {
+        // Fallback: try meta tag
+        const metaDesc = document.querySelector('meta[property="og:description"]');
+        if (metaDesc) {
+          metadata.description = metaDesc.getAttribute("content")?.trim()?.substring(0, 500) || null;
+        }
+      }
+    }
+
+    // 3. Video Tags (fallback if not from videoDetails)
+    if (!metadata.tags || metadata.tags.length === 0) {
+      // Try multiple selectors for tags
+      const tagElements = document.querySelectorAll(
+        'ytd-watch-metadata #container ytd-badge-supported-renderer, ' +
+        'meta[property="og:video:tag"], ' +
+        'ytd-metadata-row-renderer[has-metadata-layout="COMPACT"] a'
+      );
+      if (tagElements.length > 0) {
+        metadata.tags = [];
+        tagElements.forEach(el => {
+          const tagText = el.textContent?.trim() || el.getAttribute("content")?.trim();
+          if (tagText && tagText.length > 0) {
+            metadata.tags.push(tagText);
+          }
+        });
+      }
+    }
+
+    // 4. Channel Name - Use YouTube internal data first, then fallbacks
+    // (Already extracted from videoDetails above if available)
+    if (!metadata.channel) {
+      let channelElement = null;
+
+      // Method 1: Meta tags (reliable fallback)
+      const metaChannel = document.querySelector('meta[property="og:video:channel_name"]');
+      const metaUrl = document.querySelector('meta[property="og:url"]');
+      
+      if (metaChannel && metaUrl) {
+        const channelName = metaChannel.getAttribute("content")?.trim();
+        const metaVideoId = extractVideoIdFromUrl(metaUrl.getAttribute("content"));
+        
+        if (metaVideoId === currentVideoId && channelName) {
+          metadata.channel = extractFirstChannel(channelName);
+        }
+      } else if (metaChannel) {
+        const channelName = metaChannel.getAttribute("content")?.trim();
+        if (channelName) {
+          metadata.channel = extractFirstChannel(channelName);
+        }
+      }
+
+      // Method 2: DOM fallback - look within main video container
+      if (!metadata.channel) {
+        const mainVideoContainer = document.querySelector(
+          "#primary-inner, ytd-watch-metadata, ytd-video-owner-renderer"
+        );
+
+        if (mainVideoContainer) {
+          const channelElements = mainVideoContainer.querySelectorAll(
+            "ytd-channel-name a, #channel-name a, #owner-sub-count a"
+          );
+          
+          for (const channelEl of channelElements) {
+            const isVisible = channelEl.offsetParent !== null;
+            const isInMainVideo = mainVideoContainer.contains(channelEl);
+            
+            if (isVisible && isInMainVideo) {
+              const channelText = channelEl.textContent?.trim();
+              if (channelText && channelText.length > 0) {
+                channelElement = channelEl;
+                break;
+              }
             }
+          }
+        }
+
+        // Method 3: Try more specific selectors
+        if (!channelElement) {
+          const candidates = document.querySelectorAll(
+            "ytd-watch-metadata ytd-channel-name a, " +
+            "ytd-video-owner-renderer #channel-name a, " +
+            "#owner-sub-count a"
+          );
+          
+          for (const candidate of candidates) {
+            const isVisible = candidate.offsetParent !== null;
+            const isInMainVideo = candidate.closest("#primary, ytd-watch-metadata, ytd-video-owner-renderer");
+            
+            if (isVisible && isInMainVideo) {
+              const channelText = candidate.textContent?.trim();
+              if (channelText && channelText.length > 0) {
+                channelElement = candidate;
+                break;
+              }
+            }
+          }
+        }
+        
+        // Extract channel from found element
+        if (channelElement) {
+          const channelText = channelElement.textContent?.trim();
+          if (channelText) {
+            metadata.channel = extractFirstChannel(channelText);
           }
         }
       }
@@ -986,33 +1002,35 @@ function extractVideoMetadata() {
       }
     }
 
-    // 7. Video Duration
-    // Try meta tag first
-    const durationMeta = document.querySelector('meta[itemprop="duration"]');
-    if (durationMeta) {
-      const durationContent = durationMeta.getAttribute("content");
-      // ISO 8601 duration format: PT4M13S → 253 seconds
-      if (durationContent && durationContent.startsWith("PT")) {
-        const match = durationContent.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-        if (match) {
-          const hours = parseInt(match[1] || 0);
-          const minutes = parseInt(match[2] || 0);
-          const seconds = parseInt(match[3] || 0);
-          metadata.duration_seconds = hours * 3600 + minutes * 60 + seconds;
+    // 7. Video Duration (fallback if not from videoDetails)
+    if (!metadata.duration_seconds) {
+      // Try meta tag first
+      const durationMeta = document.querySelector('meta[itemprop="duration"]');
+      if (durationMeta) {
+        const durationContent = durationMeta.getAttribute("content");
+        // ISO 8601 duration format: PT4M13S → 253 seconds
+        if (durationContent && durationContent.startsWith("PT")) {
+          const match = durationContent.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+          if (match) {
+            const hours = parseInt(match[1] || 0);
+            const minutes = parseInt(match[2] || 0);
+            const seconds = parseInt(match[3] || 0);
+            metadata.duration_seconds = hours * 3600 + minutes * 60 + seconds;
+          }
         }
-      }
-    } else {
-      // Fallback: try DOM element
-      const durationElement = document.querySelector("span.ytp-time-duration, .ytp-time-duration");
-      if (durationElement) {
-        const durationText = durationElement.textContent?.trim();
-        if (durationText) {
-          // Parse "4:13" or "1:23:45" format
-          const parts = durationText.split(":").map(Number);
-          if (parts.length === 2) {
-            metadata.duration_seconds = parts[0] * 60 + parts[1];
-          } else if (parts.length === 3) {
-            metadata.duration_seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+      } else {
+        // Fallback: try DOM element
+        const durationElement = document.querySelector("span.ytp-time-duration, .ytp-time-duration");
+        if (durationElement) {
+          const durationText = durationElement.textContent?.trim();
+          if (durationText) {
+            // Parse "4:13" or "1:23:45" format
+            const parts = durationText.split(":").map(Number);
+            if (parts.length === 2) {
+              metadata.duration_seconds = parts[0] * 60 + parts[1];
+            } else if (parts.length === 3) {
+              metadata.duration_seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+            }
           }
         }
       }
@@ -3568,6 +3586,12 @@ function checkProductiveThresholds(count, time, isVideoEnd = false) {
 let behaviorLoopTimerFireCount = 0;
 
 async function updateBehaviorLoopCounters() {
+  // Check if user can record data (Pro or active Trial only)
+  const { ft_can_record } = await chrome.storage.local.get(["ft_can_record"]);
+  if (!ft_can_record) {
+    // Free users don't get behavior loop awareness (Pro feature)
+    return;
+  }
   if (!isChromeContextValid()) {
     stopBehaviorLoopTracking();
     return;
@@ -3791,7 +3815,14 @@ async function updateBehaviorLoopCounters() {
  * @param {string} videoId - Current video ID
  * @param {Object} classification - Video classification (distracting/productive/neutral)
  */
-function startBehaviorLoopTracking(videoId, classification) {
+async function startBehaviorLoopTracking(videoId, classification) {
+  // Check if user can record data (Pro or active Trial only)
+  const { ft_can_record } = await chrome.storage.local.get(["ft_can_record"]);
+  if (!ft_can_record) {
+    // Free users don't get behavior loop awareness (Pro feature)
+    return;
+  }
+  
   // Stop any existing tracking
   stopBehaviorLoopTracking();
   
@@ -4503,11 +4534,19 @@ async function saveJournalEntry(distractionLevel, context) {
     // Get videos for spiral (if applicable)
     const videos = context?.videos || null;
     
-    // Get user email
-    const { ft_user_email } = await chrome.storage.local.get(["ft_user_email"]);
+    // Get user email and can_record flag
+    const { ft_user_email, ft_can_record } = await chrome.storage.local.get(["ft_user_email", "ft_can_record"]);
     
     if (!ft_user_email) {
       console.warn("[FT] No user email for journal entry");
+      return;
+    }
+    
+    // Check if user can record data (Pro or active Trial only)
+    if (!ft_can_record) {
+      console.log("[FT] Journal entry skipped (plan inactive)");
+      // Show user message
+      alert("Upgrade to Pro to save journal entries");
       return;
     }
     

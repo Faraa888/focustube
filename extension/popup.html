@@ -452,7 +452,17 @@
           </div>
           <button id="trialUpgradeBtn" class="trial-banner-button">Upgrade</button>
         </div>
-        <button id="manageAccountBtn" class="btn-secondary" style="margin-top: 12px;">Manage Account</button>
+        <div id="upgradeMessage" class="trial-banner hidden" style="background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.35);">
+          <div class="trial-banner-copy">
+            <strong>Tracking paused</strong>
+            <span>Upgrade to Pro to resume logging your sessions</span>
+          </div>
+          <button id="upgradeBtn" class="trial-banner-button" style="background: #ef4444; border-color: #ef4444;">Upgrade</button>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 12px;">
+          <button id="refreshPlanBtn" class="btn-outline" style="flex: 1;">Refresh Plan</button>
+          <button id="manageAccountBtn" class="btn-secondary" style="flex: 1;">Manage Account</button>
+        </div>
       </div>
 
       <div id="message" class="message hidden"></div>

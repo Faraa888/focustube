@@ -24,6 +24,9 @@ const trialBanner = document.getElementById("trialBanner");
 const trialBannerTitle = document.getElementById("trialBannerTitle");
 const trialBannerSubtitle = document.getElementById("trialBannerSubtitle");
 const trialUpgradeBtn = document.getElementById("trialUpgradeBtn");
+const upgradeMessage = document.getElementById("upgradeMessage");
+const upgradeBtn = document.getElementById("upgradeBtn");
+const refreshPlanBtn = document.getElementById("refreshPlanBtn");
 
 if (trialUpgradeBtn) {
   trialUpgradeBtn.addEventListener("click", () => {
@@ -31,6 +34,42 @@ if (trialUpgradeBtn) {
       window.open(`${FRONTEND_URL}/pricing`, "_blank", "noopener");
     } catch (error) {
       console.warn("⚠️ [POPUP] Failed to open pricing page:", error);
+    }
+  });
+}
+
+if (upgradeBtn) {
+  upgradeBtn.addEventListener("click", () => {
+    try {
+      window.open(`${FRONTEND_URL}/pricing`, "_blank", "noopener");
+    } catch (error) {
+      console.warn("⚠️ [POPUP] Failed to open pricing page:", error);
+    }
+  });
+}
+
+if (refreshPlanBtn) {
+  refreshPlanBtn.addEventListener("click", async () => {
+    try {
+      refreshPlanBtn.disabled = true;
+      refreshPlanBtn.textContent = "Refreshing...";
+      // Force sync plan from server
+      chrome.runtime.sendMessage({
+        type: "FT_SYNC_PLAN",
+        force: true,
+      }).catch(() => {
+        // Background might not be ready, that's okay
+      });
+      // Reload after a short delay
+      setTimeout(() => {
+        loadCurrentEmail().catch(console.error);
+        refreshPlanBtn.disabled = false;
+        refreshPlanBtn.textContent = "Refresh Plan";
+      }, 1000);
+    } catch (error) {
+      console.error("Error refreshing plan:", error);
+      refreshPlanBtn.disabled = false;
+      refreshPlanBtn.textContent = "Refresh Plan";
     }
   });
 }
@@ -139,6 +178,8 @@ async function loadCurrentEmail() {
             typeof planData.days_left === "number"
               ? planData.days_left
               : (result.ft_days_left ?? null);
+          const canRecord = planData.can_record !== undefined ? planData.can_record : true;
+          
           statusEmail.textContent = email;
           statusPlan.textContent = `Plan: ${currentPlan.toUpperCase()}`;
           statusIcon.className = "status-icon connected";
@@ -146,9 +187,25 @@ async function loadCurrentEmail() {
           showStatus();
           renderTrialBanner(currentPlan, daysLeft);
           
-          // Update stored days left if backend returned a value
+          // Show upgrade message if user can't record (free or expired trial)
+          if (upgradeMessage) {
+            if (!canRecord) {
+              upgradeMessage.classList.remove("hidden");
+            } else {
+              upgradeMessage.classList.add("hidden");
+            }
+          }
+          
+          // Update stored days left and can_record if backend returned values
+          const updates = {};
           if (typeof planData.days_left === "number") {
-            await chrome.storage.local.set({ ft_days_left: planData.days_left });
+            updates.ft_days_left = planData.days_left;
+          }
+          if (planData.can_record !== undefined) {
+            updates.ft_can_record = planData.can_record;
+          }
+          if (Object.keys(updates).length > 0) {
+            await chrome.storage.local.set(updates);
           }
           
           // Update plan in storage if it changed

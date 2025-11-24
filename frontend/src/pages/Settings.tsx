@@ -49,6 +49,7 @@ const Settings = () => {
   
   const [userPlan, setUserPlan] = useState<"free" | "pro" | "trial">("free");
   const [loadingSettings, setLoadingSettings] = useState(true);
+  const [isFreeMode, setIsFreeMode] = useState(false);
 
   // Load all settings on mount
   useEffect(() => {
@@ -68,6 +69,19 @@ const Settings = () => {
           return;
         }
 
+        // Check plan via /license/verify to get can_record flag
+        const planResponse = await fetch(
+          `https://focustube-backend-4xah.onrender.com/license/verify?email=${encodeURIComponent(user.email)}`
+        );
+        if (planResponse.ok) {
+          const planData = await planResponse.json();
+          const canRecord = planData.can_record !== undefined ? planData.can_record : true;
+          setIsFreeMode(!canRecord);
+          if (planData.plan) {
+            setUserPlan(planData.plan);
+          }
+        }
+
         // Get user plan and goals
         const { data: userData } = await supabase
           .from("users")
@@ -76,7 +90,10 @@ const Settings = () => {
           .single();
         
         if (userData) {
-          setUserPlan(userData.plan || "free");
+          // Only update plan if not already set from /license/verify
+          if (!userPlan || userPlan === "free") {
+            setUserPlan(userData.plan || "free");
+          }
           
           // Parse goals and anti-goals from JSON (show exact saved, no defaults)
           if (userData.goals) {
@@ -629,7 +646,7 @@ const Settings = () => {
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
       
-      <main className="flex-1 container mx-auto px-4 py-8 mt-16 max-w-4xl">
+      <main className="flex-1 container mx-auto px-4 py-8 mt-16 max-w-4xl relative">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Your FocusTube</h1>
           <p className="text-muted-foreground">
@@ -637,7 +654,25 @@ const Settings = () => {
           </p>
         </div>
 
-        <Tabs defaultValue="goals" className="space-y-6">
+        {/* Free Mode Overlay */}
+        {isFreeMode && (
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center rounded-lg">
+            <div className="bg-background border border-border rounded-lg p-8 max-w-md text-center space-y-4">
+              <h3 className="text-2xl font-bold">Settings Locked</h3>
+              <p className="text-muted-foreground">
+                Upgrade to Pro to customise your settings
+              </p>
+              <Button
+                onClick={() => window.open("/pricing", "_blank")}
+                className="w-full"
+              >
+                Upgrade to Pro
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <Tabs defaultValue="goals" className="space-y-6" style={{ pointerEvents: isFreeMode ? "none" : "auto", opacity: isFreeMode ? 0.5 : 1 }}>
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="goals">Goals</TabsTrigger>
             <TabsTrigger value="blocked">Blocked Channels</TabsTrigger>
