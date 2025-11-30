@@ -408,6 +408,11 @@ if (manageAccountBtn) manageAccountBtn.addEventListener("click", handleManageAcc
 // Load current state on popup open
 loadCurrentEmail().catch(console.error);
 
+// Sync plan from server on popup open (quick check)
+chrome.runtime.sendMessage({ type: "FT_SYNC_PLAN" }).catch((err) => {
+  console.warn("⚠️ [POPUP] Failed to trigger plan sync:", err);
+});
+
 // Listen for storage changes (when frontend stores email)
 chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace === 'local') {

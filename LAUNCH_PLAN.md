@@ -1,261 +1,239 @@
-# FocusTube Launch Plan - 12 Hour Sprint
+# 🚀 FocusTube Sunday Launch Plan
 
-**Goal:** Ship MVP with core functionality tested and deployed
-
----
-
-## Phase 1: Core Functionality (3 hours)
-
-### 1.1 Data Sync & Storage (45 min)
-- [ ] Watch 3 videos → confirm they appear in `video_sessions` within 60s
-- [ ] Switch accounts → confirm dashboard shows correct user's data only
-- [ ] Check `user_email` auto-populates in all tables (triggers working)
-- [ ] Test offline → watch video, reconnect → confirm queue flushes
-
-**Success:** Videos sync to Supabase, no cross-account contamination
+**Target:** Launch by Sunday  
+**Status:** Final sprint to production
 
 ---
 
-### 1.2 Blocked Channels (30 min)
-- [ ] Add channel via Settings → confirm it saves to Supabase
-- [ ] Try to remove channel → expect UI prevents it (button removed)
-- [ ] Try to save smaller list via API → expect 400 error
-- [ ] Confirm channels persist after logout/login
+## 📍 CURRENT STATUS
 
-**Success:** Channels are permanently blocked, can't be removed
+### ✅ COMPLETED
+- Authentication & login flow (all tests passed)
+- Extension ↔ Website sync working
+- Database schema complete
+- Backend API endpoints live
+- Server URL: `https://focustube-backend-4xah.onrender.com`
+- Core features: Channel blocking, Settings, Dashboard, Focus windows, AI classification, Journal nudge, Spiral detection, Data sync
 
----
+### ⚠️ CRITICAL BUGS TO FIX
 
-### 1.3 Dashboard (45 min)
-- [ ] Open dashboard → confirm it shows data from `video_sessions` (not legacy blob)
-- [ ] Check focus score calculates correctly
-- [ ] Verify time breakdowns (today/week) match actual watch time
-- [ ] Test empty state (new user) → shows "no data yet"
+#### Bug 1: Journal Nudge Shows for Free Users
+**File:** `extension/content/content.js` (line ~4944)  
+**Fix:** Add plan check BEFORE starting timer
 
-**Success:** Dashboard reads from `video_sessions` only, stats are accurate
+**Change this:**ascript
+journalNudgeTimer = setTimeout(async () => {**To this:**ipt
+// Only start timer if Pro/Trial plan
+const { ft_plan } = await chrome.storage.local.get(["ft_plan"]);
+if (isProExperience(ft_plan)) {
+  journalNudgeTimer = setTimeout(async () => {**And close the if block after the setTimeout:**t
+  }, 60000);
+}#### Bug 2: Settings Require Extension Reload
+**File:** `frontend/src/pages/Settings.tsx`  
+**Fix:** After saving settings, send reload message to extension
 
----
+**Add after successful save:**cript
+// Notify extension to reload settings
+try {
+  chrome?.runtime?.sendMessage?.({ type: "FT_RELOAD_SETTINGS" }, () => {});
+} catch (e) {}#### Bug 3: Blocked Channels May Not Persist
+**File:** `extension/lib/state.js`  
+**Fix:** Verify blocked channels are NOT cleared in daily reset
 
-## Phase 1.4: Spiral Detection & Nudging (30 min)
-
-### Spiral Detection Tests
-- [ ] Watch 3 videos from same channel today → expect spiral nudge on 3rd video
-- [ ] Watch 5 videos from same channel this week → expect spiral nudge on 5th video
-- [ ] Watch 2 consecutive distracting videos (within 1 hour) → expect weighted count (1.5x)
-- [ ] Watch 3+ consecutive distracting videos → expect weighted count (2.0x)
-- [ ] Wait 24+ hours → verify decay reduces week count by 1
-- [ ] Spiral nudge shows correct channel name and count
-- [ ] Spiral nudge has 10-second countdown timer
-- [ ] "Continue" button dismisses nudge
-- [ ] "Block YouTube for Today" button works
-- [ ] "Block Channel Permanently" button works and redirects
-
-**Success:** Spiral detection triggers correctly, nudges show, actions work
-
-### Journal Nudge Tests
-- [ ] Watch distracting video for 60+ seconds → expect journal nudge
-- [ ] Journal nudge shows correct video title and channel
-- [ ] "Save" button saves journal entry
-- [ ] "Dismiss" button closes nudge
-- [ ] Journal nudge doesn't show twice for same video
-
-**Success:** Journal nudges trigger at 60s, save correctly
-
-## Phase 2: AI & Classification (1.5 hours)
-
-### 2.1 AI Classifier (45 min)
-- [ ] Watch productive video → confirm classification = "productive"
-- [ ] Watch distracting video → confirm classification = "distracting"
-- [ ] Check cache works (same video twice = cache hit in logs)
-- [ ] Test fallback (if API fails) → returns "neutral"
-
-**Success:** AI classifies correctly, cache works, fallback safe
+**Check reset function - should NOT reset `ft_blocked_channels`**
 
 ---
 
-### 2.2 Pro Plan Features (45 min)
-- [ ] Test AI filtering for Pro users (distracting content gets allowance)
-- [ ] Test Free plan → no AI classification, neutral fallback
-- [ ] Confirm allowance decrements correctly
+## 🧪 TESTING CHECKLIST
 
-**Success:** Pro users get AI filtering, Free users get neutral fallback
+### Critical Tests (2 hours)
 
----
+#### Test 1: Settings Sync (3 min)
+- [ ] Settings → Toggle "Hide Recommendations" → Save
+- [ ] Go to YouTube homepage
+- [ ] **Expected:** Recommendations hidden immediately (no reload)
 
-## Phase 3: UI & Copy Polish (2 hours)
+#### Test 2: Video Titles (5 min)
+- [ ] Watch 3-4 videos (45+ sec each)
+- [ ] Check Supabase `video_sessions` table
+- [ ] **Expected:** All have proper titles
 
-### 3.1 Settings Page (30 min)
-- [ ] Blocked channels UI shows "permanently blocked" message
-- [ ] No remove button visible
-- [ ] Goals/anti-goals save correctly
-- [ ] Settings persist across sessions
+#### Test 3: Blocked Channels (5 min)
+- [ ] Block channel from video
+- [ ] Block channel from Settings
+- [ ] Block channel from Dashboard
+- [ ] **Expected:** All 3 persist after extension reload
 
-**Success:** Settings UI is clear, no broken functionality
+#### Test 4: Timer Sync (10 min)
+- [ ] Watch 30 min on Device A
+- [ ] Log in on Device B
+- [ ] **Expected:** Timer shows 30 min (merged)
 
----
+#### Test 5: Daily Limit (5 min)
+- [ ] Set limit to 1 min
+- [ ] Watch for 1:01
+- [ ] **Expected:** Overlay appears at exactly 60 seconds
 
-### 3.2 Dashboard UI (30 min)
-- [ ] All charts render without errors
-- [ ] Focus score displays correctly
-- [ ] Time breakdowns are accurate
-- [ ] Mobile responsive (quick check)
+#### Test 6: Focus Window (5 min)
+- [ ] Enable focus window (outside current time)
+- [ ] Watch video for 30 sec
+- [ ] **Expected:** Overlay appears during playback
 
-**Success:** Dashboard renders correctly, no console errors
+#### Test 7: Journal Nudge (5 min)
+- [ ] Pro/Trial: Watch distracting video 60+ sec
+- [ ] **Expected:** Nudge appears
+- [ ] Free plan: Watch distracting video 60+ sec
+- [ ] **Expected:** NO nudge
 
----
+#### Test 8: Spiral Nudge (8 min)
+- [ ] Watch 3 videos from same channel
+- [ ] **Expected:** Spiral nudge appears
+- [ ] Test all buttons work
 
-### 3.3 Copy Review (1 hour)
-- [ ] Read all user-facing text (Settings, Dashboard, Popup)
-- [ ] Fix typos/grammar
-- [ ] Ensure messaging is clear ("permanently blocked", etc.)
-- [ ] Check error messages are helpful
+#### Test 9: Sign-in Sync (3 min)
+- [ ] Log out → Check plan (should be "free")
+- [ ] Log in → Check plan (should sync from server)
 
-**Success:** All copy is clear, professional, no typos
-
----
-
-## Phase 4: Architecture Sync (1 hour)
-
-### 4.1 Extension ↔ Website Sync (30 min)
-- [ ] Login on website → extension popup shows same email
-- [ ] Logout on website → extension clears local data
-- [ ] Block channel on website → appears in extension popup
-- [ ] Watch video → dashboard updates within 60s
-
-**Success:** Extension and website stay in sync
-
----
-
-### 4.2 Cross-Device (30 min)
-- [ ] Test on second browser/device (if possible)
-- [ ] Confirm data syncs across devices
-- [ ] Timer syncs correctly
-
-**Success:** Data syncs across devices (optional if time is tight)
+#### Test 10: Dashboard Data (6 min)
+- [ ] Watch videos → Wait 60 sec
+- [ ] Refresh dashboard
+- [ ] **Expected:** New data appears
 
 ---
 
-## Phase 5: Final Checks & Deployment (4.5 hours)
+## 🛠️ DEPLOYMENT STEPS
 
-### 5.1 Pre-Deployment Checks (1 hour)
-- [ ] Remove all console.logs (or set DEBUG = false)
-- [ ] Check environment variables are set (Render, Vercel)
-- [ ] Verify Stripe keys are production (not test)
-- [ ] Confirm Supabase RLS policies are correct
-- [ ] Test with real Stripe checkout (small amount)
+### Step 1: Fix Bugs (1 hour)
+- [ ] Fix journal nudge bug
+- [ ] Fix settings reload
+- [ ] Verify blocked channels persistence
 
-**Success:** Production-ready config, no debug code
+### Step 2: Run Tests (2 hours)
+- [ ] Complete all 10 critical tests
+- [ ] Document any failures
+- [ ] Fix any blocking issues
 
----
+### Step 3: Backend Deployment (30 min)
+- [ ] Verify environment variables set:
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `OPENAI_API_KEY`
+  - `STRIPE_SECRET_KEY` (PRODUCTION)
+  - `STRIPE_WEBHOOK_SECRET`
+- [ ] Test endpoints:sh
+  curl https://focustube-backend-4xah.onrender.com/health
+  curl "https://focustube-backend-4xah.onrender.com/license/verify?email=YOUR_EMAIL"
+  ### Step 4: Frontend Deployment (30 min)
+- [ ] Verify Vercel environment variables:
+  - `VITE_SUPABASE_URL`
+  - `VITE_SUPABASE_ANON_KEY`
+  - `VITE_STRIPE_PUBLISHABLE_KEY` (PRODUCTION)
+- [ ] Test live site:
+  - [ ] Signup works
+  - [ ] Login works
+  - [ ] Dashboard loads
+  - [ ] Settings save
 
-### 5.2 Build & Test Locally (1 hour)
-- [ ] Build extension (`npm run build` in extension folder)
-- [ ] Test built extension in Chrome (unpacked)
-- [ ] Build frontend (`npm run build` in frontend folder)
-- [ ] Test production build locally
+### Step 5: Extension Build (1 hour)
+- [ ] Set `DEBUG = false` in:
+  - `extension/content/content.js` (line 13)
+  - `extension/background/background.js` (line 56)
+- [ ] Test on clean Chrome profile
+- [ ] Create zip file
 
-**Success:** Production builds work, no errors
+### Step 6: Chrome Web Store (1-2 hours)
+- [ ] Prepare listing:
+  - Short description (132 chars)
+  - Detailed description
+  - Screenshots (5 recommended)
+  - Icons (128x128, 48x48, 16x16)
+- [ ] Submit for review
+- [ ] **Note:** Review takes 1-3 days
 
----
-
-### 5.3 Deploy Backend (30 min)
-- [ ] Push to main branch (triggers Render deploy)
-- [ ] Monitor Render logs for errors
-- [ ] Test `/health` endpoint
-- [ ] Test `/license/verify` endpoint
-
-**Success:** Backend deployed, endpoints responding
-
----
-
-### 5.4 Deploy Frontend (30 min)
-- [ ] Push to main branch (triggers Vercel deploy)
-- [ ] Test live site (login, dashboard, settings)
-- [ ] Confirm all API calls work
-
-**Success:** Frontend deployed, site works in production
-
----
-
-### 5.5 Package Extension (1 hour)
-- [ ] Create production build
-- [ ] Test in fresh Chrome profile (no existing data)
-- [ ] Create zip file for Chrome Web Store
-- [ ] Write store listing (screenshots, description)
-- [ ] Submit to Chrome Web Store (or prepare for manual upload)
-
-**Success:** Extension packaged, ready for store submission
-
----
-
-## Critical Path (If Time is Tight - 6 hours)
-
-1. **Data sync works** (Phase 1.1) - 45 min
-2. **Dashboard shows data** (Phase 1.3) - 45 min
-3. **Blocked channels work** (Phase 1.2) - 30 min
-4. **AI classifier works** (Phase 2.1) - 45 min
-5. **Deploy everything** (Phase 5.3-5.4) - 1 hour
-6. **Package extension** (Phase 5.5) - 1 hour
-
-**Skip:** Cross-device testing, extensive copy polish, mobile responsive deep-dive
+### Step 7: Final Checks (1 hour)
+- [ ] End-to-end test (new user signup → install → use)
+- [ ] Test Stripe checkout (real card, small amount)
+- [ ] Check error logs
+- [ ] Verify no console errors
 
 ---
 
-## Success Criteria
+## ✅ LAUNCH DAY CHECKLIST
 
-✅ Users can sign up, log in, and see their dashboard  
-✅ Watch events sync to `video_sessions` within 60s  
-✅ Blocked channels persist and can't be removed  
-✅ AI classification works for Pro users  
-✅ No 500 errors in production logs  
-✅ Extension installs and works on fresh Chrome profile  
+### Morning
+- [ ] Run test suite one more time
+- [ ] Fix any critical bugs
+- [ ] Verify all deployments live
+- [ ] Test Stripe checkout
 
----
+### Launch
+- [ ] Publish extension (if approved)
+- [ ] Announce launch
+- [ ] Monitor error logs
+- [ ] Monitor signups/payments
 
-## When to Open New Windows
-
-- **Phase 1:** Keep current setup (Render logs + Supabase + Extension console)
-- **Phase 3:** Open new tab for copy review (read through all pages)
-- **Phase 5:** Open Chrome Web Store developer dashboard (for submission)
-
----
-
-## Known Issues / Limitations
-
-### Test 12: Race Condition in Blocked Channels
-- **Issue**: If two browser tabs save blocked channels simultaneously, the last save wins (one channel may be lost)
-- **Impact**: Low - users rarely have two Settings tabs open
-- **Status**: Documented, fix post-MVP
-- **Workaround**: Refresh Settings page after saving
-
-### Dashboard Data Mismatch
-- **Issue**: Dashboard shows different watch time totals than Supabase queries (e.g., 479s vs 211s for productive/neutral)
-- **Impact**: Medium - Focus score calculation may be inaccurate
-- **Status**: Needs investigation (possible timezone issue or data sync problem)
-- **Workaround**: None - needs backend fix
+### Post-Launch (24 hours)
+- [ ] Monitor logs hourly
+- [ ] Check user signups
+- [ ] Verify payments processing
+- [ ] Respond to issues
 
 ---
 
-## Post-MVP Features
+## 🎯 SUCCESS CRITERIA
 
-### Global Blocklist (Community Voting + Admin Curation)
-- **Goal**: Auto-block channels that are inherently distracting for all users
-- **Approach**: 
-  1. Track when users individually block channels (community votes)
-  2. If 10+ users block the same channel → Flag for admin review
-  3. Admin reviews and adds to `global_blocked_channels` table
-  4. Extension checks global list before allowing video playback
-- **Database Tables Needed**:
-  - `channel_block_votes` (track community votes)
-  - `global_blocked_channels` (admin-curated list)
-- **Implementation**: Post-MVP (requires admin dashboard, voting system, extension integration)
-- **Future Enhancement**: AI batch classification to suggest candidates for admin review
+Launch successful when:
+- ✅ Users can sign up and log in
+- ✅ Extension installs and works
+- ✅ Watch events sync to dashboard
+- ✅ Blocked channels persist
+- ✅ Stripe checkout works
+- ✅ No 500 errors
+- ✅ Extension in Chrome Web Store
 
 ---
 
-## Notes
+## ⏰ TIME ESTIMATE
 
-- Fix issues as they come up - don't move forward with broken functionality
-- If something is blocking, document it and move to next item
-- Prioritize core user flow: Sign up → Watch video → See dashboard → Block channel
+**Critical Path: 6-9 hours**
+1. Fix bugs: 1 hour
+2. Testing: 2 hours
+3. Deployment: 2-3 hours
+4. Store submission: 1-2 hours
+5. Final checks: 1 hour
 
+**If time is tight: 4 hours minimum**
+- Fix 3 bugs (1 hour)
+- Run tests 1-5 (1 hour)
+- Deploy (1 hour)
+- Submit to store (1 hour)
+
+---
+
+## 📞 QUICK REFERENCE
+
+**URLs:**
+- Backend: `https://focustube-backend-4xah.onrender.com`
+- Frontend: `https://focustube-beta.vercel.app` (verify)
+
+**Test Commands:**
+// Check timer
+chrome.storage.local.get(['ft_watch_seconds_today'], console.log)
+
+// Check plan
+chrome.storage.local.get(['ft_plan'], console.log)
+
+// Check blocked channels
+chrome.storage.local.get(['ft_blocked_channels'], console.log)sh
+# Test backend
+curl https://focustube-backend-4xah.onrender.com/health---
+
+## 🚨 PRIORITY ORDER
+
+1. **Fix 3 critical bugs** (1 hour)
+2. **Run test suite** (2 hours)
+3. **Deploy everything** (2-3 hours)
+4. **Submit to store** (1-2 hours)
+5. **Final checks** (1 hour)
+
+**Everything else can be fixed post-launch!**

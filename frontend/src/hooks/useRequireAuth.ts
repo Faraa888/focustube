@@ -17,11 +17,31 @@ export function useRequireAuth(): AuthStatus {
 
     // Kick off a session check so we update quickly if a cached session exists.
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!isMounted || status !== "loading") return;
+      if (!isMounted) return;
       if (session) {
         setStatus("authenticated");
       }
+      // Don't set unauthenticated here - wait for INITIAL_SESSION to confirm
+      // This prevents race conditions where INITIAL_SESSION hasn't fired yet
     });
+
+    // Set a timeout to handle cases where INITIAL_SESSION doesn't fire
+    // (shouldn't happen, but safety net)
+    const timeoutId = setTimeout(() => {
+      if (!isMounted) return;
+      // If still loading after 3 seconds, check session again
+      if (status === "loading") {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (!isMounted) return;
+          if (session) {
+            setStatus("authenticated");
+          } else {
+            setStatus("unauthenticated");
+            navigate("/login", { replace: true });
+          }
+        });
+      }
+    }, 3000);
 
     const {
       data: { subscription },
@@ -46,6 +66,7 @@ export function useRequireAuth(): AuthStatus {
     return () => {
       isMounted = false;
       subscription.unsubscribe();
+      clearTimeout(timeoutId);
     };
   }, [navigate, status]);
 

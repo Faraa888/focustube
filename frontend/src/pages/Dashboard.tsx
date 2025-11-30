@@ -308,14 +308,18 @@ const Dashboard = () => {
                                   });
                                   
                                   // Notify extension to reload settings immediately
-                                  try {
-                                    window.postMessage({
-                                      type: "FT_RELOAD_SETTINGS",
-                                      requestId: `dashboard_block_${Date.now()}`
-                                    }, window.location.origin);
-                                  } catch (err) {
-                                    console.log("Extension not available for immediate sync");
-                                  }
+                                  // Add small delay to ensure server has finished saving
+                                  setTimeout(() => {
+                                    try {
+                                      window.postMessage({
+                                        type: "FT_RELOAD_SETTINGS",
+                                        requestId: `dashboard_block_${Date.now()}`
+                                      }, window.location.origin);
+                                      console.log("[Dashboard] Sent FT_RELOAD_SETTINGS message to extension (block channel)");
+                                    } catch (err) {
+                                      console.log("Extension not available for immediate sync");
+                                    }
+                                  }, 500); // Wait 500ms for server to finish saving
                                 } else {
                                   throw new Error("Failed to save");
                                 }

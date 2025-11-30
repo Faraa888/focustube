@@ -350,14 +350,18 @@ const Settings = () => {
       });
       
       // Notify extension to reload settings immediately (goals affect AI classification)
-      try {
-        window.postMessage({
-          type: "FT_RELOAD_SETTINGS",
-          requestId: `goals_${Date.now()}`
-        }, window.location.origin);
-      } catch (err) {
-        console.log("Extension not available for immediate sync (will sync on next reload)");
-      }
+      // Add small delay to ensure server has finished saving
+      setTimeout(() => {
+        try {
+          window.postMessage({
+            type: "FT_RELOAD_SETTINGS",
+            requestId: `goals_${Date.now()}`
+          }, window.location.origin);
+          console.log("[Settings] Sent FT_RELOAD_SETTINGS message to extension (goals)");
+        } catch (err) {
+          console.log("Extension not available for immediate sync (will sync on next reload)");
+        }
+      }, 500); // Wait 500ms for server to finish saving
     } catch (error) {
       console.error("Error saving goals:", error);
       toast({
@@ -473,14 +477,18 @@ const Settings = () => {
         });
         
         // Notify extension to reload settings immediately (no page reload needed)
-        try {
-          window.postMessage({
-            type: "FT_RELOAD_SETTINGS",
-            requestId: `channels_${Date.now()}`
-          }, window.location.origin);
-        } catch (err) {
-          console.log("Extension not available for immediate sync (will sync on next reload)");
-        }
+        // Add small delay to ensure server has finished saving
+        setTimeout(() => {
+          try {
+            window.postMessage({
+              type: "FT_RELOAD_SETTINGS",
+              requestId: `channels_${Date.now()}`
+            }, window.location.origin);
+            console.log("[Settings] Sent FT_RELOAD_SETTINGS message to extension (channels)");
+          } catch (err) {
+            console.log("Extension not available for immediate sync (will sync on next reload)");
+          }
+        }, 500); // Wait 500ms for server to finish saving
       } else {
         throw new Error("Failed to save");
       }
@@ -584,16 +592,20 @@ const Settings = () => {
     });
         
         // Notify extension to reload settings immediately (no reload needed)
-        try {
-          // Send message to extension via postMessage (handled by website-bridge.js)
-          window.postMessage({
-            type: "FT_RELOAD_SETTINGS",
-            requestId: `settings_${Date.now()}`
-          }, window.location.origin);
-        } catch (err) {
-          // Extension might not be installed, that's okay
-          console.log("Extension not available for immediate sync (will sync on next reload)");
-        }
+        // Add small delay to ensure server has finished saving
+        setTimeout(() => {
+          try {
+            // Send message to extension via postMessage (handled by website-bridge.js)
+            window.postMessage({
+              type: "FT_RELOAD_SETTINGS",
+              requestId: `settings_${Date.now()}`
+            }, window.location.origin);
+            console.log("[Settings] Sent FT_RELOAD_SETTINGS message to extension (controls)");
+          } catch (err) {
+            // Extension might not be installed, that's okay
+            console.log("Extension not available for immediate sync (will sync on next reload)");
+          }
+        }, 500); // Wait 500ms for server to finish saving
       } else {
         throw new Error("Failed to save");
       }

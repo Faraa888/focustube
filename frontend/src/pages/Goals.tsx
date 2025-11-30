@@ -192,14 +192,18 @@ const Goals = () => {
           console.log("Channels auto-blocked:", normalizedChannels);
           
           // Notify extension to reload settings immediately
-          try {
-            window.postMessage({
-              type: "FT_RELOAD_SETTINGS",
-              requestId: `goals_autoblock_${Date.now()}`
-            }, window.location.origin);
-          } catch (err) {
-            console.log("Extension not available for immediate sync");
-          }
+          // Add small delay to ensure server has finished saving
+          setTimeout(() => {
+            try {
+              window.postMessage({
+                type: "FT_RELOAD_SETTINGS",
+                requestId: `goals_autoblock_${Date.now()}`
+              }, window.location.origin);
+              console.log("[Goals] Sent FT_RELOAD_SETTINGS message to extension (auto-block)");
+            } catch (err) {
+              console.log("Extension not available for immediate sync");
+            }
+          }, 500); // Wait 500ms for server to finish saving
         } catch (blockError) {
           console.error("Error auto-blocking channels:", blockError);
           // Don't fail the whole submission if blocking fails

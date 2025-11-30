@@ -13,6 +13,7 @@ import {
   incrementEngagedShorts,   // increment engaged Shorts counter
   getSnapshot,             // debug snapshot (optional)
   getPlanConfig,           // read plan + limits
+  getEffectivePlan,        // get effective plan (pro/free) with trial expiry check
   getTrialStatus,          // get trial status (checks expiration)
   isTemporarilyUnlocked,
   resetCounters,
@@ -141,13 +142,13 @@ async function getUserId() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// BACKGROUND SYNC: Sync plan every 6 hours
+// BACKGROUND SYNC: Sync plan every 5 minutes
 // ─────────────────────────────────────────────────────────────
 setInterval(() => {
   syncPlanFromServer().catch((err) => {
     console.warn("[FT] Background plan sync failed:", err);
   });
-}, 6 * 60 * 60 * 1000); // 6 hours
+}, 5 * 60 * 1000); // 5 minutes
 
 // ─────────────────────────────────────────────────────────────
 // WATCH EVENT BATCH SENDER
@@ -748,8 +749,10 @@ async function handleMessage(msg) {
     }
     
     const synced = await syncPlanFromServer(true); // Force sync
+    let ft_plan = null;
     if (synced) {
-      const { ft_plan } = await getLocal(["ft_plan"]);
+      const planData = await getLocal(["ft_plan"]);
+      ft_plan = planData.ft_plan;
       LOG("Plan synced from server:", ft_plan);
     }
     
@@ -1068,6 +1071,11 @@ async function classifyVideo(videoMetadata) {
  */
 async function classifyContent(input, context = "search") {
   try {
+    // Sync plan from server before AI classification to ensure fresh plan
+    await syncPlanFromServer(true).catch((err) => {
+      console.warn("[FT] Plan sync failed before AI classification:", err);
+    });
+    
     // Get user ID, plan, goals, and can_record flag
     const userId = await getUserId();
     const { ft_plan, ft_user_goals, ft_can_record } = await getLocal(["ft_plan", "ft_user_goals", "ft_can_record"]);
@@ -1617,10 +1625,32 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   await ensureDefaults();
   await maybeRotateCounters();
 
-  // 2. Sync plan from server (debounced to once per 30 seconds)
-  syncPlanFromServer().catch((err) => {
-    console.warn("[FT] Plan sync failed on navigation:", err);
-  });
+  // 2. Sync plan from server (debounced to 5 minutes, but force on video/channel switch)
+  // Force refresh if switching to a new video (check actual video ID change)
+  const currentVideoId = pageType === "WATCH" && videoMetadata?.video_id ? videoMetadata.video_id : null;
+  if (currentVideoId) {
+    // Check if this is actually a different video (not just any video)
+    const { ft_last_synced_video_id: lastSyncedVideoId } = await getLocal(["ft_last_synced_video_id"]);
+    const isNewVideo = lastSyncedVideoId !== currentVideoId;
+    
+    if (isNewVideo) {
+      // Force sync on actual video switch to ensure plan is fresh
+      await setLocal({ ft_last_synced_video_id: currentVideoId });
+      syncPlanFromServer(true).catch((err) => {
+        console.warn("[FT] Plan sync failed on video switch:", err);
+      });
+    } else {
+      // Same video, use regular debounced sync
+      syncPlanFromServer().catch((err) => {
+        console.warn("[FT] Plan sync failed on navigation:", err);
+      });
+    }
+  } else {
+    // Regular sync (debounced) for other navigation
+    syncPlanFromServer().catch((err) => {
+      console.warn("[FT] Plan sync failed on navigation:", err);
+    });
+  }
 
   // 3. Count the page view
   await countForPageType(pageType);
@@ -1671,18 +1701,22 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     "ft_blocked_channels",
     "ft_blocked_channels_today",
     "ft_spiral_detected",
-    "ft_extension_settings"
+    "ft_extension_settings",
+    "ft_can_record"
   ]);
 
   // 6. Read plan + limits (needed for block shorts check)
   const { plan, config } = await getPlanConfig();
+  // Get effective plan for response AND internal checks (handles trial expiry)
+  const effectivePlan = await getEffectivePlan();
+  // Use effectivePlan for all Pro feature checks (not raw plan)
 
   // Get effective settings (plan-aware)
   const rawSettings = state.ft_extension_settings || {};
   const effectiveSettings = getEffectiveSettings(plan, rawSettings);
 
   // 6.2. Apply block shorts setting if enabled (using effective settings)
-  if (effectiveSettings.shorts_mode === "hard" && isProExperience(plan)) {
+  if (effectiveSettings.shorts_mode === "hard" && effectivePlan === "pro") {
     // If block_shorts is enabled, set ft_pro_manual_block_shorts and ft_block_shorts_today
     if (!state.ft_pro_manual_block_shorts || !state.ft_block_shorts_today) {
       await setLocal({
@@ -1692,7 +1726,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
       state.ft_pro_manual_block_shorts = true;
       state.ft_block_shorts_today = true;
     }
-  } else if (effectiveSettings.shorts_mode !== "hard" && isProExperience(plan)) {
+  } else if (effectiveSettings.shorts_mode !== "hard" && effectivePlan === "pro") {
     // If shorts_mode is not "hard", clear the flags (allow Pro tracking/reminders)
     if (state.ft_pro_manual_block_shorts || state.ft_block_shorts_today) {
       await setLocal({
@@ -1716,7 +1750,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     "ft_focus_window_end"
   ]);
 
-  if (ft_focus_window_enabled && isProExperience(plan)) {
+  if (ft_focus_window_enabled && effectivePlan === "pro") {
     const now = new Date();
     const currentHours = now.getHours();
     const currentMinutes = now.getMinutes();
@@ -1883,13 +1917,13 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
 
   let watchTrackingInfo = null;
   if (pageType === "WATCH" && videoMetadata?.video_id) {
-    watchTrackingInfo = await ensureWatchTrackingForVideo(videoMetadata, isProExperience(plan));
+    watchTrackingInfo = await ensureWatchTrackingForVideo(videoMetadata, effectivePlan === "pro");
   }
 
   // 7. AI Classification (Pro users only)
   // Strategy: Search = logging only, Watch = primary action point (block/warn)
   let aiClassification = null;
-  if (isProExperience(plan)) {
+  if (effectivePlan === "pro") {
     if (pageType === "SEARCH" && url) {
       // Search classification: Log only (no blocking)
       // This helps with context but doesn't block search results
@@ -2084,7 +2118,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     blocked: finalBlocked,
     scope: finalScope,       // "none" | "shorts" | "search" | "global"
     reason: finalReason,      // why blocked
-    plan,
+    plan: effectivePlan,      // Effective plan (pro/free) - handles trial expiry
     counters: {
       searches: ctx.searchesToday,
       watchSeconds: ctx.watchSecondsToday,

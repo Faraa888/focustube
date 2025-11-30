@@ -826,10 +826,21 @@ app.get("/license/verify", async (req, res) => {
     const cachedPlanInfo = getCached<UserPlanInfo>(planCache, cacheKey);
     if (cachedPlanInfo !== null) {
       // For cached plan, return it with exists: true (cached plans are only for existing users)
-      const { plan, trial_expires_at } = cachedPlanInfo;
+      let { plan, trial_expires_at } = cachedPlanInfo;
       console.log(`[License Verify] Cache hit for ${email}: ${plan}`);
       
-      // Calculate days_left for trial users
+      // Auto-downgrade expired trials BEFORE calculating can_record
+      if (plan === "trial" && trial_expires_at) {
+        const expiresAt = new Date(trial_expires_at);
+        const now = new Date();
+        if (expiresAt.getTime() <= now.getTime()) {
+          // Trial expired - downgrade to free
+          plan = "free";
+          console.log(`[License Verify] Auto-downgraded expired trial for ${email} to free`);
+        }
+      }
+      
+      // Calculate days_left for trial users (only if still trial)
       let days_left: number | undefined = undefined;
       if (plan === "trial" && trial_expires_at) {
         const expiresAt = new Date(trial_expires_at);
@@ -839,7 +850,7 @@ app.get("/license/verify", async (req, res) => {
         days_left = Math.max(0, diffDays); // Don't return negative days
       }
 
-      // Calculate can_record flag
+      // Calculate can_record flag (using potentially downgraded plan)
       const can_record = plan === "pro" || (plan === "trial" && trial_expires_at && new Date(trial_expires_at).getTime() > Date.now());
 
       const response: any = {
@@ -871,11 +882,24 @@ app.get("/license/verify", async (req, res) => {
         can_record: false,
       });
     } else {
-      const { plan, trial_expires_at } = planInfo;
+      let { plan, trial_expires_at } = planInfo;
       console.log(`[License Verify] Fetched plan from Supabase for ${email}: ${plan}`);
-      setCached(planCache, cacheKey, planInfo);
+      
+      // Auto-downgrade expired trials BEFORE caching and calculating can_record
+      if (plan === "trial" && trial_expires_at) {
+        const expiresAt = new Date(trial_expires_at);
+        const now = new Date();
+        if (expiresAt.getTime() <= now.getTime()) {
+          // Trial expired - downgrade to free
+          plan = "free";
+          console.log(`[License Verify] Auto-downgraded expired trial for ${email} to free`);
+        }
+      }
+      
+      // Cache the plan info (with potentially downgraded plan)
+      setCached(planCache, cacheKey, { ...planInfo, plan });
 
-      // Calculate days_left for trial users
+      // Calculate days_left for trial users (only if still trial)
       let days_left: number | undefined = undefined;
       if (plan === "trial" && trial_expires_at) {
         const expiresAt = new Date(trial_expires_at);
@@ -885,7 +909,7 @@ app.get("/license/verify", async (req, res) => {
         days_left = Math.max(0, diffDays); // Don't return negative days
       }
 
-      // Calculate can_record flag
+      // Calculate can_record flag (using potentially downgraded plan)
       const can_record = plan === "pro" || (plan === "trial" && trial_expires_at && new Date(trial_expires_at).getTime() > Date.now());
 
       const response: any = { 
@@ -2285,6 +2309,69 @@ app.post("/webhook/stripe", bodyParser.raw({ type: "application/json" }), async 
         }
       } else {
         console.warn("[Stripe Webhook] No customer email in checkout session");
+      }
+    }
+
+    // Handle customer.subscription.deleted event (subscription cancelled)
+    if (event.type === "customer.subscription.deleted" && stripeClient) {
+      const subscription = event.data.object;
+      const customerId = subscription.customer;
+      
+      // Fetch customer email from Stripe
+      if (customerId && typeof customerId === "string") {
+        try {
+          const customer = await stripeClient.customers.retrieve(customerId);
+          if (customer && !customer.deleted && "email" in customer && customer.email) {
+            const customerEmail = customer.email;
+            
+            // Downgrade user to "free" plan
+            const updated = await updateUserPlan(customerEmail, "free");
+            
+            if (updated) {
+              // Invalidate cache for this email (plan changed)
+              const cacheKey = customerEmail.toLowerCase().trim();
+              planCache.delete(cacheKey);
+              console.log(`[Stripe Webhook] Downgraded ${customerEmail} to Free plan (subscription cancelled)`);
+            } else {
+              console.error(`[Stripe Webhook] Failed to downgrade plan for ${customerEmail}`);
+            }
+          }
+        } catch (error) {
+          console.error(`[Stripe Webhook] Error fetching customer ${customerId}:`, error);
+        }
+      }
+    }
+
+    // Handle customer.subscription.updated event (subscription status changed)
+    if (event.type === "customer.subscription.updated" && stripeClient) {
+      const subscription = event.data.object;
+      const customerId = subscription.customer;
+      const status = subscription.status;
+      
+      // If subscription is cancelled or past_due, downgrade to free
+      if (status === "canceled" || status === "unpaid" || status === "past_due") {
+        if (customerId && typeof customerId === "string") {
+          try {
+            const customer = await stripeClient.customers.retrieve(customerId);
+            if (customer && !customer.deleted && "email" in customer && customer.email) {
+              const customerEmail = customer.email;
+              
+              // Downgrade user to "free" plan
+              const updated = await updateUserPlan(customerEmail, "free");
+              
+              if (updated) {
+                // Invalidate cache for this email (plan changed)
+                const cacheKey = customerEmail.toLowerCase().trim();
+                planCache.delete(cacheKey);
+                console.log(`[Stripe Webhook] Downgraded ${customerEmail} to Free plan (subscription ${status})`);
+              } else {
+                console.error(`[Stripe Webhook] Failed to downgrade plan for ${customerEmail}`);
+              }
+            }
+          } catch (error) {
+            console.error(`[Stripe Webhook] Error fetching customer ${customerId}:`, error);
+          }
+        }
       }
     }
 

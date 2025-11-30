@@ -355,6 +355,25 @@ export async function getPlanConfig() {
   return { plan, config: CONFIG_BY_PLAN[effectivePlan] };
 }
 
+/**
+ * Get effective plan (pro or free) based on current state
+ * - Trial (active) → "pro"
+ * - Trial (expired) → "free"
+ * - Pro → "pro"
+ * - Free → "free"
+ * @returns {Promise<"pro"|"free">} Effective plan
+ */
+export async function getEffectivePlan() {
+  const { plan, config } = await getPlanConfig();
+  // If trial active → returns "pro", if expired → "free"
+  if (plan === PLAN_TRIAL) {
+    // Check if trial is expired by looking at config
+    return config === CONFIG_BY_PLAN[PLAN_PRO] ? "pro" : "free";
+  }
+  // Pro or Free - return as-is (normalize to lowercase)
+  return plan === PLAN_PRO ? "pro" : "free";
+}
+
 export async function setPlan(plan) {
   const valid =
     plan === PLAN_PRO   ? PLAN_PRO   :
@@ -468,9 +487,9 @@ export async function fetchUserPlanFromServer(email) {
 export async function syncPlanFromServer(force = false) {
   const now = Date.now();
 
-  // Debounce: only sync once per 30 seconds (unless forced)
-  // For production, sync every 6 hours (21600000 ms) instead of 30 seconds
-  const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+  // Debounce: only sync once per 5 minutes (unless forced)
+  // This ensures plan updates quickly when trial expires or user upgrades
+  const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
   if (!force && now - lastSyncTime < SYNC_INTERVAL_MS) {
     console.log("[FT] Plan sync skipped (debounced)");
     return false;
@@ -875,6 +894,7 @@ export async function saveExtensionDataToServer(data = null) {
       ft_neutral_time_global = 0,
       ft_break_lockout_until = 0,
       ft_spiral_dismissed_channels = {},
+      ft_can_record = false,
     } = await getLocal([
       "ft_blocked_channels",
       "ft_watch_history",
@@ -895,6 +915,7 @@ export async function saveExtensionDataToServer(data = null) {
       "ft_neutral_time_global",
       "ft_break_lockout_until",
       "ft_spiral_dismissed_channels",
+      "ft_can_record",
     ]);
 
     // Merge focus window settings, spiral events, and behavior loop data into settings object

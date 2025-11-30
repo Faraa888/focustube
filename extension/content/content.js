@@ -72,6 +72,38 @@ function isProExperience(plan) {
   return plan === "pro" || plan === "trial";
 }
 
+/**
+ * Get effective plan (pro or free) based on current state
+ * - Trial (active) → "pro"
+ * - Trial (expired) → "free"
+ * - Pro → "pro"
+ * - Free → "free"
+ * @returns {Promise<"pro"|"free">} Effective plan
+ */
+async function getEffectivePlan() {
+  try {
+    const { ft_plan, ft_days_left } = await chrome.storage.local.get(["ft_plan", "ft_days_left"]);
+    const plan = ft_plan || "free";
+    
+    // If trial, check if expired
+    if (plan === "trial") {
+      const daysLeft = typeof ft_days_left === "number" ? ft_days_left : null;
+      if (daysLeft !== null && daysLeft <= 0) {
+        // Trial expired → free
+        return "free";
+      }
+      // Trial active → pro
+      return "pro";
+    }
+    
+    // Pro or Free → return as-is
+    return plan === "pro" ? "pro" : "free";
+  } catch (error) {
+    console.warn("[FT] Error getting effective plan:", error);
+    return "free"; // Default to free on error
+  }
+}
+
 /* COMMENTED OUT: Generic block overlay - removed per user request
  * Simple overlay creator. Shown when user is blocked (search/global scope).
  * Uses CSS classes from overlay.css instead of inline styles.
@@ -1993,11 +2025,11 @@ function startFocusWindowCheck() {
     }
     
     // Check if focus window is enabled (Pro/Trial feature only)
-    const { ft_focus_window_enabled, ft_focus_window_start, ft_focus_window_end, ft_plan } = 
-      await chrome.storage.local.get(["ft_focus_window_enabled", "ft_focus_window_start", "ft_focus_window_end", "ft_plan"]);
+    const { ft_focus_window_enabled, ft_focus_window_start, ft_focus_window_end } = 
+      await chrome.storage.local.get(["ft_focus_window_enabled", "ft_focus_window_start", "ft_focus_window_end"]);
     
-    const plan = ft_plan || "free";
-    if (ft_focus_window_enabled && isProExperience(plan)) {
+    const plan = await getEffectivePlan();
+    if (ft_focus_window_enabled && plan === "pro") {
       const now = new Date();
       const currentHours = now.getHours();
       const currentMinutes = now.getMinutes();
@@ -2234,7 +2266,9 @@ function initBlockingButtonBootstrap() {
   console.log("[FT content] Block button bootstrap init. readyState =", document.readyState);
   const start = () => {
     console.log("[FT content] DOM ready → ensuring initial block button");
-    ensureInitialBlockButton();
+    ensureInitialBlockButton().catch((err) => {
+      console.warn("[FT content] Error ensuring initial block button:", err);
+    });
   };
   if (document.readyState === "loading") {
     document.addEventListener(
@@ -2252,8 +2286,16 @@ function initBlockingButtonBootstrap() {
 
 /**
  * Attempts to set up the block button on the current page (if watch page)
+ * Only shows for Pro users (includes active Trial)
  */
-function ensureInitialBlockButton() {
+async function ensureInitialBlockButton() {
+  // Only show block channel button for Pro users (includes active Trial)
+  const plan = await getEffectivePlan();
+  if (plan !== "pro") {
+    console.log("[FT content] Block channel button hidden (Free plan or expired Trial)");
+    return;
+  }
+  
   const pageType = detectPageType();
   console.log("[FT content] ensureInitialBlockButton pageType:", pageType);
   if (pageType !== "WATCH") {
@@ -2310,8 +2352,13 @@ async function checkBlockingAndInjectButton(channelName, channelElement) {
       }
     }
     
-    // Not blocked, inject button
-    await injectBlockChannelButton(channelName);
+    // Not blocked, inject button (only for Pro users)
+    const plan = await getEffectivePlan();
+    if (plan === "pro") {
+      await injectBlockChannelButton(channelName);
+    } else {
+      console.log("[FT] Block channel button hidden (Free plan)");
+    }
   } catch (e) {
     console.warn("[FT] Error checking blocking for button injection:", e);
   }
@@ -3000,8 +3047,8 @@ async function startGlobalTimeTracking() {
     
     // Check global time limit every second
     try {
-      // Get plan and config limits
-      const { ft_plan } = await chrome.storage.local.get(["ft_plan"]);
+      // Get effective plan (handles trial expiry)
+      const plan = await getEffectivePlan();
       if (chrome.runtime.lastError) {
         if (!isChromeContextValid()) {
           clearInterval(globalTimeTracker);
@@ -3012,7 +3059,6 @@ async function startGlobalTimeTracking() {
         }
         console.warn("[FT] Failed to get plan for limit check:", chrome.runtime.lastError.message);
       } else {
-        const plan = ft_plan || "free";
         // Get effective settings (plan-aware, handles legacy fields)
         const { ft_extension_settings = {} } = await chrome.storage.local.get(["ft_extension_settings"]);
         const effectiveSettings = computeEffectiveSettings(plan, ft_extension_settings);
@@ -3176,11 +3222,9 @@ async function saveAccumulatedGlobalTime() {
       // Get current watch time and settings
       const { 
         ft_watch_seconds_today,
-        ft_plan,
         ft_extension_settings = {}
       } = await chrome.storage.local.get([
         "ft_watch_seconds_today",
-        "ft_plan",
         "ft_extension_settings"
       ]);
       
@@ -3191,8 +3235,8 @@ async function saveAccumulatedGlobalTime() {
       
       const currentSeconds = Number(ft_watch_seconds_today || 0);
       
-      // Get daily limit from settings
-      const plan = ft_plan || "free";
+      // Get effective plan (handles trial expiry)
+      const plan = await getEffectivePlan();
       const effectiveSettings = computeEffectiveSettings(plan, ft_extension_settings);
       const dailyLimitMin = effectiveSettings.daily_limit_minutes || (plan === "free" ? 60 : 90);
       const limitSeconds = dailyLimitMin * 60;
@@ -3364,8 +3408,8 @@ function getNudgeMessage(style, type, context = {}) {
 function hideRecommendationsIfEnabled() {
   if (!isChromeContextValid()) return;
   
-  chrome.storage.local.get(["ft_extension_settings", "ft_plan"]).then(({ ft_extension_settings = {}, ft_plan = "free" }) => {
-    const plan = ft_plan || "free";
+  chrome.storage.local.get(["ft_extension_settings"]).then(async ({ ft_extension_settings = {} }) => {
+    const plan = await getEffectivePlan();
     const { hide_recommendations: hideRecs } = computeEffectiveSettings(plan, ft_extension_settings);
     
     if (!hideRecs) {
@@ -3580,7 +3624,7 @@ function checkProductiveThresholds(count, time, isVideoEnd = false) {
 
 /**
  * Updates global counters and checks thresholds
- * Called every 60 seconds during video watch
+ * Called every 45 seconds during video watch
  */
 // Track timer fire count for conditional logging
 let behaviorLoopTimerFireCount = 0;
@@ -3817,8 +3861,8 @@ async function updateBehaviorLoopCounters() {
  */
 async function startBehaviorLoopTracking(videoId, classification) {
   // Check if user can record data (Pro or active Trial only)
-  const { ft_can_record } = await chrome.storage.local.get(["ft_can_record"]);
-  if (!ft_can_record) {
+  const plan = await getEffectivePlan();
+  if (plan !== "pro") {
     // Free users don't get behavior loop awareness (Pro feature)
     return;
   }
@@ -3839,10 +3883,10 @@ async function startBehaviorLoopTracking(videoId, classification) {
   const classificationType = classification?.distraction_level || classification?.category || "unknown";
   console.log("[FT] 🎬 START tracking:", { videoId, classification: classificationType });
   
-  // Start 60-second interval timer
+  // Start 45-second interval timer
   behaviorLoopTimer = setInterval(() => {
     updateBehaviorLoopCounters();
-  }, 60000); // Every 60 seconds
+  }, 45000); // Every 45 seconds
   
   // Also check immediately (for cases where threshold is already met)
   updateBehaviorLoopCounters();
@@ -4800,6 +4844,8 @@ async function handleNavigation() {
       ]);
       
       // Show trial expiring banner if on trial with 0-1 days left
+      // Note: We check ft_plan directly here because we need to know if user WAS on trial
+      // (even if expired, we still want to show the banner)
       if (ft_plan === "trial" && typeof ft_days_left === "number") {
         if (ft_days_left === 0 || ft_days_left === 1) {
           // Check timing rules (once per day, optionally again after 6 hours)
@@ -4941,19 +4987,20 @@ async function handleNavigation() {
       journalNudgeShown = false;
       currentVideoAIClassification = null;
       
-      // Start 1-minute journal nudge timer (starts immediately when video starts)
-      // This will show nudge at 60 seconds if content is distracting
-      // Timer will be cancelled if content is not distracting when classification returns
-      journalNudgeTimer = setTimeout(async () => {
-        if (currentWatchVideoId === videoId && !journalNudgeShown) {
-          // Check if we have classification yet
-          if (currentVideoAIClassification) {
-            const distraction = currentVideoAIClassification.distraction_level || 
-                              currentVideoAIClassification.category || "neutral";
-            if (distraction === "distracting") {
-              // Check if Pro/Trial plan
-              const { ft_plan } = await chrome.storage.local.get(["ft_plan"]);
-              if (isProExperience(ft_plan)) {
+           // Only start journal nudge timer for Pro/Trial users
+      // Check plan before starting timer to avoid unnecessary timers for Free users
+      const plan = await getEffectivePlan();
+      if (plan === "pro") {
+        // Start 1-minute journal nudge timer (only for Pro/Trial)
+        // This will show nudge at 60 seconds if content is distracting
+        // Timer will be cancelled if content is not distracting when classification returns
+        journalNudgeTimer = setTimeout(async () => {
+          if (currentWatchVideoId === videoId && !journalNudgeShown) {
+            // Check if we have classification yet
+            if (currentVideoAIClassification) {
+              const distraction = currentVideoAIClassification.distraction_level || 
+                                currentVideoAIClassification.category || "neutral";
+              if (distraction === "distracting") {
                 // Extract metadata now for nudge
                 const meta = extractVideoMetadata();
                 if (meta) {
@@ -4962,20 +5009,17 @@ async function handleNavigation() {
                 }
                 showJournalNudge(meta || { title: "this video" });
               }
-            }
-          } else {
-            // Classification hasn't returned yet - wait a bit more and check again
-            // This handles case where classification is slow
-            console.log("[FT] Journal nudge timer fired but classification not ready, waiting 5 more seconds...");
-            setTimeout(async () => {
-              if (currentWatchVideoId === videoId && 
-                  currentVideoAIClassification && 
-                  !journalNudgeShown) {
-                const distraction = currentVideoAIClassification.distraction_level || 
-                                  currentVideoAIClassification.category || "neutral";
-                if (distraction === "distracting") {
-                  const { ft_plan } = await chrome.storage.local.get(["ft_plan"]);
-                  if (isProExperience(ft_plan)) {
+            } else {
+              // Classification hasn't returned yet - wait a bit more and check again
+              // This handles case where classification is slow
+              console.log("[FT] Journal nudge timer fired but classification not ready, waiting 5 more seconds...");
+              setTimeout(async () => {
+                if (currentWatchVideoId === videoId && 
+                    currentVideoAIClassification && 
+                    !journalNudgeShown) {
+                  const distraction = currentVideoAIClassification.distraction_level || 
+                                    currentVideoAIClassification.category || "neutral";
+                  if (distraction === "distracting") {
                     const meta = extractVideoMetadata();
                     if (meta) {
                       meta.video_id = videoId;
@@ -4984,11 +5028,11 @@ async function handleNavigation() {
                     showJournalNudge(meta || { title: "this video" });
                   }
                 }
-              }
-            }, 5 * 1000); // Wait 5 more seconds
+              }, 5 * 1000); // Wait 5 more seconds
+            }
           }
-        }
-      }, 60 * 1000); // 1 minute from video start
+        }, 60 * 1000); // 1 minute from video start
+      }
       
       // Start 45-second timer (non-blocking)
       // Note: videoMetadata will be extracted later in the function, so we'll extract it in the timeout
@@ -5246,9 +5290,9 @@ async function handleNavigation() {
         }
         
         // Check if content is distracting - if not, cancel the journal nudge timer
-        chrome.storage.local.get(["ft_plan"]).then(({ ft_plan }) => {
+        getEffectivePlan().then(plan => {
           const isDistracting = (distraction === "distracting" || category === "distracting");
-          const isProOrTrial = isProExperience(ft_plan);
+          const isProOrTrial = plan === "pro";
           
           // If not distracting or not Pro/Trial, cancel the nudge timer
           if (!isDistracting || !isProOrTrial) {
@@ -5329,7 +5373,7 @@ async function handleNavigation() {
   // Handle search counter badge (show on all search pages)
   if (pageType === "SEARCH") {
     // Get search limit from plan config (Free: 5, Pro: 15)
-    const searchLimit = isProExperience(resp.plan) ? 15 : 5;
+    const searchLimit = resp.plan === "pro" ? 15 : 5;
     const searchesToday = resp.counters?.searches || 0;
     
     // Show or update search counter
@@ -5348,7 +5392,7 @@ async function handleNavigation() {
   }
 
   // Handle Pro plan Shorts counter badge (only on Shorts pages, not blocked)
-  if (pageType === "SHORTS" && isProExperience(resp.plan) && !resp.blocked) {
+  if (pageType === "SHORTS" && resp.plan === "pro" && !resp.blocked) {
     // If we were already tracking, save accumulated time before updating badge
     if (shortsTimeTracker) {
       await stopShortsTimeTracking();
@@ -5553,13 +5597,19 @@ async function handleNavigation() {
   }
 
   // Inject "Block Channel" button on watch pages (if channel is not already blocked)
-  // Use observer approach for reliable injection
+  // Use observer approach for reliable injection (Pro users only)
   if (pageType === "WATCH" && videoMetadata && videoMetadata.channel) {
     try {
-      const channelName = videoMetadata.channel.trim(); // Use exact name from metadata
-      // Set up observer - it will check blocking and inject button when element appears
-      console.log("[FT] Setting up button injection observer (slow path) for:", channelName);
-      setupButtonInjectionObserver(channelName);
+      // Only show block channel button for Pro users
+      const plan = await getEffectivePlan();
+      if (plan === "pro") {
+        const channelName = videoMetadata.channel.trim(); // Use exact name from metadata
+        // Set up observer - it will check blocking and inject button when element appears
+        console.log("[FT] Setting up button injection observer (slow path) for:", channelName);
+        setupButtonInjectionObserver(channelName);
+      } else {
+        console.log("[FT] Block channel button hidden (Free plan)");
+      }
     } catch (e) {
       console.warn("[FT] Error setting up button injection observer:", e.message);
     }
@@ -6060,14 +6110,14 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     if (badge && detectPageType() === "SEARCH") {
       if (!isChromeContextValid()) return;
       
-      chrome.storage.local.get(["ft_searches_today", "ft_plan"]).then(storage => {
+      chrome.storage.local.get(["ft_searches_today", "ft_plan"]).then(async storage => {
         if (chrome.runtime.lastError) {
           console.warn("[FT] Failed to get search counter in listener:", chrome.runtime.lastError.message);
           return;
         }
         const searchesToday = Number(storage.ft_searches_today || 0);
-        const plan = storage.ft_plan || "free";
-        const searchLimit = isProExperience(plan) ? 15 : 5;
+        const plan = await getEffectivePlan();
+        const searchLimit = plan === "pro" ? 15 : 5;
         
         updateSearchCounter(searchesToday, searchLimit);
         
