@@ -76,6 +76,7 @@ make sure trial switches from proxy pro and free at the right time
 Switching between the two is key to avoid any value leak (i.e. not paying customers getting free access)
 
 
+- Also we are seeing the block channel button in free mode (should be trial / pro only)
 
 
 Actual summary of issues:
@@ -123,3 +124,22 @@ Fix:
 Verify plan checks in all feature gates
 Fix search limit logic (should be 5 for free, 15 for pro)
 Hide "Block Channel" button on free
+
+
+
+
+Nice to have:
+- Better normalisation prompt
+- Safari extension
+
+
+
+Other issues: 
+- Free mode now isnt tracking time when a videos being watched (which makes no sense) Actually also pro mode
+- Watch time nudge is just staying a <1m (so probs 0 seconds)
+
+
+Need to simulate new days and check how its working
+g
+
+
