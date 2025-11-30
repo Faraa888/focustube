@@ -1738,7 +1738,7 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     }
   }
 
-  // 6.4. Check focus window (if enabled) - BEFORE other blocking logic
+  // 6.4. hh Check focus window (if enabled) - BEFORE other blocking logic
   // Focus window is a Pro/Trial feature only
   const { 
     ft_focus_window_enabled, 
