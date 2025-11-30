@@ -941,9 +941,9 @@ const Settings = () => {
                   <Slider
                     value={dailyLimit}
                     onValueChange={setDailyLimit}
-                    min={15}
+                    min={1}
                     max={120}
-                    step={15}
+                    step={1}
                   />
                   <p className="text-xs text-muted-foreground">
                     You'll receive gentle nudges when approaching this limit
