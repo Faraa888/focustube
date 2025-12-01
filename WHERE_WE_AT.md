@@ -143,3 +143,23 @@ Need to simulate new days and check how its working
 g
 
 
+Ok so where we are 01/12
+
+
+
+
+Manual Test
+A1: Pass
+A2: Pass (Pop up updates, login page sometimes doesnt update immediately)
+A3: Works
+A4: Works (Flow isnt as describe in test - you cant log in from the pop up anymore it redirects to the page)
+A5: (AI classification isnt working - returns neutral - whats the cause it previously was, Channel blocking works - timer works)
+
+
+
+
+Errors / Question:
+- Not sure what refresh plan does?
+- Changing the daily time limit around doesn't seem to save multiple times as effectively as wanted
+- Need to make the size of the shorts badge smaller and change the wording from (+ xx skipped)
+- After 10mins shorts we only want the block shorts button for today overlay

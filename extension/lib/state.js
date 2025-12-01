@@ -467,6 +467,7 @@ export async function fetchUserPlanFromServer(email) {
         plan,
         days_left: data?.days_left ?? null,
         trial_expires_at: data?.trial_expires_at ?? null,
+        can_record: data?.can_record ?? false,
       };
     }
 
