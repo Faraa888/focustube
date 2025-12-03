@@ -66,10 +66,6 @@ async function LOG(...a) {
   );
 }
 
-function isProExperience(plan) {
-  return plan === "pro" || plan === "trial";
-}
-
 const WATCH_CLASSIFICATION_DELAY_MS = 45 * 1000;
 let watchClassificationTimer = null;
 let watchClassificationTimerVideoId = null;

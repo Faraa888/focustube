@@ -2162,3 +2162,283 @@ chrome.storage.local.get(["ft_channel_spiral_count", "ft_spiral_detected"], cons
 
 ## End of Test Plan
 
+---
+
+## Plan Logic Refactoring Tests
+
+**Purpose:** Verify that plan logic refactoring works correctly - `getEffectivePlan()` simplification, `isProExperience()` removal, and trial expiry handling
+
+**Date:** 2025-12-01  
+**Status:** Post-refactoring verification
+
+---
+
+### PL1. Trial User with Active Trial (14 days left)
+
+**Goal:** Verify trial user with active trial gets Pro features
+
+**Preconditions:**
+- User has trial plan with `ft_days_left > 0`
+- Extension is loaded
+
+**Steps:**
+1. Set up trial user in Supabase (or use existing trial account)
+2. Reload extension
+3. Open YouTube
+4. Navigate to a video page
+5. Check console for plan logs
+6. Try to block a channel
+7. Search YouTube (test search limit)
+8. Check if AI classification happens
+
+**Expected:**
+- Console shows: `plan: "pro"` or `effectivePlan: "pro"`
+- Block channel button appears on video pages
+- Search limit is 15 (not 5)
+- AI classification runs (check background console for classification logs)
+- Focus window works if enabled
+- Behavior loop tracking active
+
+**Check Plan:**script
+chrome.storage.local.get(["ft_plan", "ft_days_left", "ft_can_record"], console.log);
+// Should show: ft_plan: "trial", ft_days_left: 14 (or similar), ft_can_record: true**Result:** ✅ PASS / ❌ FAIL  
+**Notes:** 
+
+---
+
+### PL2. Trial User with Expired Trial (0 or negative days)
+
+**Goal:** Verify expired trial user loses Pro features and reverts to Free
+
+**Preconditions:**
+- User has trial plan with `ft_days_left <= 0`
+- Extension is loaded
+
+**Steps:**
+1. Set `ft_days_left` to 0 or negative in storage
+   chrome.storage.local.set({ft_days_left: 0});
+   2. Reload extension
+3. Navigate to YouTube
+4. Check console for plan logs
+5. Try to block a channel
+6. Search YouTube (test search limit)
+7. Check if AI classification happens
+
+**Expected:**
+- Console shows: `plan: "free"` or `effectivePlan: "free"`
+- Block channel button does NOT appear
+- Search limit is 5 (not 15)
+- AI classification does NOT run (check background console - should see "skipped (plan inactive)")
+- Focus window does NOT apply
+- Behavior loop tracking inactive
+
+**Check Plan:**script
+chrome.storage.local.get(["ft_plan", "ft_days_left", "ft_can_record"], console.log);
+// Should show: ft_plan: "trial", ft_days_left: 0, ft_can_record: false**Result:** ✅ PASS / ❌ FAIL  
+**Notes:** 
+
+---
+
+### PL3. Pro User Features
+
+**Goal:** Verify Pro user gets all Pro features
+
+**Preconditions:**
+- User has Pro plan
+- Extension is loaded
+
+**Steps:**
+1. Set plan to "pro" in storageavascript
+   chrome.storage.local.set({ft_plan: "pro", ft_can_record: true});
+   2. Reload extension
+3. Navigate to YouTube
+4. Check all Pro features work
+
+**Expected:**
+- Block channel button appears
+- Search limit is 15
+- AI classification runs
+- Focus window works
+- Behavior loop tracking active
+- All Pro features enabled
+
+**Result:** ✅ PASS / ❌ FAIL  
+**Notes:** 
+
+---
+
+### PL4. Free User Limitations
+
+**Goal:** Verify Free user has correct limitations
+
+**Preconditions:**
+- User has Free plan
+- Extension is loaded
+
+**Steps:**
+1. Set plan to "free" in storage
+  t
+   chrome.storage.local.set({ft_plan: "free", ft_can_record: false});
+   2. Reload extension
+3. Navigate to YouTube
+4. Check Free limitations apply
+
+**Expected:**
+- Block channel button does NOT appear
+- Search limit is 5
+- AI classification does NOT run
+- Focus window does NOT apply
+- Behavior loop tracking inactive
+- Shorts are hard blocked
+
+**Result:** ✅ PASS / ❌ FAIL  
+**Notes:** 
+
+---
+
+### PL5. Pro Manual Block Shorts Overlay
+
+**Goal:** Verify Pro/Trial users see Pro manual block overlay when redirecting from Shorts
+
+**Preconditions:**
+- User has Pro or active Trial plan
+- User manually blocked Shorts for today
+
+**Steps:**
+1. Set up Pro or Trial user
+2. Navigate to YouTube Shorts
+3. Manually block Shorts (if option available)
+4. Get redirected to home page
+5. Check overlay message
+
+**Expected:**
+- Pro manual block overlay appears (encouraging message)
+- Overlay shows Pro-specific messaging
+- Free users see different overlay
+
+**Check Storage:**ascript
+chrome.storage.local.get(["ft_pro_manual_block_shorts", "ft_plan", "ft_days_left"], console.log);**Result:** ✅ PASS / ❌ FAIL  
+**Notes:** 
+
+---
+
+### PL6. Plan Sync After Trial Expiry
+
+**Goal:** Verify plan sync correctly updates expired trial
+
+**Preconditions:**
+- User has trial plan with expired trial in Supabase
+- Extension has cached trial plan
+
+**Steps:**
+1. Set trial as expired in Supabase (or use existing expired trial)
+2. Reload extension
+3. Wait for plan sync (5 minutes or force sync)
+4. Check storage after sync
+5. Verify features match Free plan
+
+**Expected:**
+- Plan syncs from server
+- `ft_plan` stays "trial" but `ft_can_record` becomes false
+- `getEffectivePlan()` returns "free"
+- Features revert to Free limitations
+
+**Force Sync:**ript
+// In background console
+syncPlanFromServer(true);**Result:** ✅ PASS / ❌ FAIL  
+**Notes:** 
+
+---
+
+### PL7. Error Handling
+
+**Goal:** Verify error handling works when storage read fails
+
+**Preconditions:**
+- Extension is loaded
+
+**Steps:**
+1. Simulate storage error (optional - hard to test)
+2. Check console for error logs
+3. Verify extension doesn't crash
+
+**Expected:**
+- If storage read fails, `getEffectivePlan()` returns "free" (safe default)
+- Console shows warning: `[FT] Error getting effective plan:`
+- Extension continues to work (defaults to Free)
+
+**Result:** ✅ PASS / ❌ FAIL  
+**Notes:** 
+
+---
+
+### PL8. Console Error Check
+
+**Goal:** Verify no console errors after refactoring
+
+**Preconditions:**
+- Extension is loaded
+- All previous tests completed
+
+**Steps:**
+1. Open background console
+2. Open content console (YouTube page)
+3. Navigate through YouTube
+4. Check for any errors
+
+**Expected:**
+- No errors about `isProExperience is not defined`
+- No errors about `getEffectivePlan` not found
+- No errors about plan logic
+- Only expected warnings (if any)
+
+**Result:** ✅ PASS / ❌ FAIL  
+**Notes:** 
+
+---
+
+### PL9. Search Limits Verification
+
+**Goal:** Verify search limits are correct for each plan
+
+**Preconditions:**
+- Extension is loaded
+
+**Steps:**
+1. Test as Free user (search 6 times)
+2. Test as Pro/Trial user (search 16 times)
+3. Verify blocking behavior
+
+**Expected:**
+- Free: Blocked after 5 searches
+- Pro/Trial: Blocked after 15 searches
+
+**Check Search Count:**
+chrome.storage.local.get(["ft_searches_today"], console.log);**Result:** ✅ PASS / ❌ FAIL  
+**Notes:** 
+
+---
+
+### PL10. AI Classification Verification
+
+**Goal:** Verify AI classification works for Pro/Trial, not Free
+
+**Preconditions:**
+- Extension is loaded
+- User has goals set (for Pro/Trial)
+
+**Steps:**
+1. Test as Free user - watch video
+2. Test as Pro/Trial user - watch video
+3. Check background console for classification logs
+
+**Expected:**
+- Free: Background console shows "AI classification skipped (plan inactive)"
+- Pro/Trial: Background console shows classification results
+- Pro/Trial: Video gets classified (productive/distracting/neutral)
+
+**Check Classification:**
+chrome.storage.local.get(["ft_current_video_classification"], console.log);**Result:** ✅ PASS / ❌ FAIL  
+**Notes:** 
+
+---

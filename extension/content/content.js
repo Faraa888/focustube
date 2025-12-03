@@ -63,16 +63,6 @@ function detectPageType() {
 }
 
 /**
- * Returns true if the given plan should unlock the full Pro experience.
- * Trial users get the same feature set as paying Pro users.
- * @param {string} plan
- * @returns {boolean}
- */
-function isProExperience(plan) {
-  return plan === "pro" || plan === "trial";
-}
-
-/**
  * Get effective plan (pro or free) based on current state
  * - Trial (active) → "pro"
  * - Trial (expired) → "free"
@@ -1580,12 +1570,34 @@ async function showGlobalLimitOverlay(plan, counters) {
 /* COMMENTED OUT: Search block overlay - hidden per user request
  * Shows search block overlay with plan-specific buttons
  */
-/*
 async function showSearchBlockOverlay(plan) {
   removeOverlay(); // ensure no duplicates
 
   const overlay = document.createElement("div");
   overlay.id = "ft-overlay";
+
+  // Get nudge style from settings
+  const nudgeStyle = await getNudgeStyle();
+  
+  // Get message based on nudge style
+  const messages = {
+    gentle: {
+      title: "Search Limit Reached",
+      message: "You've searched enough today. Maybe take a break?"
+    },
+    direct: {
+      title: "Search Limit Reached",
+      message: "You've reached your daily search limit. Time to focus on what matters."
+    },
+    firm: {
+      title: "Search Limit Reached",
+      message: "That's enough searching for today. Your focus is worth protecting."
+    }
+  };
+  
+  const styleMessages = messages[nudgeStyle] || messages.firm;
+  const title = styleMessages.title;
+  const message = styleMessages.message;
 
   // Get button HTML based on plan
   let buttonsHTML = '';
@@ -1607,8 +1619,8 @@ async function showSearchBlockOverlay(plan) {
 
   overlay.innerHTML = `
     <div class="ft-box">
-      <h1>FocusTube Active</h1>
-      <p id="ft-overlay-message">That's enough searching for today - go and get your dreams</p>
+      <h1>${title}</h1>
+      <p id="ft-overlay-message">${message}</p>
       <div class="ft-button-container">
         ${buttonsHTML}
       </div>
@@ -1663,7 +1675,6 @@ async function showSearchBlockOverlay(plan) {
 
   document.body.appendChild(overlay);
 }
-*/
 
 /**
  * Starts tracking Shorts engagement (5-second timer)
@@ -2334,22 +2345,31 @@ async function ensureInitialBlockButton() {
  */
 async function checkBlockingAndInjectButton(channelName, channelElement) {
   try {
-    const { ft_blocked_channels = [] } = await chrome.storage.local.get(["ft_blocked_channels"]);
-    const blockedChannels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
+    // Check if user can record data (Pro or active Trial only)
+    // Free users and expired trial users should not have channels blocked
+    const { ft_blocked_channels = [], ft_can_record } = await chrome.storage.local.get(["ft_blocked_channels", "ft_can_record"]);
     
-    if (blockedChannels.length > 0) {
-      const channelLower = channelName.toLowerCase().trim();
-      const isBlocked = blockedChannels.some(blocked => {
-        const blockedLower = blocked.toLowerCase().trim();
-        return blockedLower === channelLower; // Exact match only
-      });
+    // Only check blocked channels if user can record (Pro/active Trial)
+    if (ft_can_record) {
+      const blockedChannels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
       
-      if (isBlocked) {
-        console.log("[FT] 🚫 Channel blocked (button injection check):", channelName);
-        pauseAndMuteVideo(); // Immediate pause
-        showChannelBlockedOverlay(channelName); // Show overlay instead of immediate redirect
-        return; // Don't inject button
+      if (blockedChannels.length > 0) {
+        const channelLower = channelName.toLowerCase().trim();
+        const isBlocked = blockedChannels.some(blocked => {
+          const blockedLower = blocked.toLowerCase().trim();
+          return blockedLower === channelLower; // Exact match only
+        });
+        
+        if (isBlocked) {
+          console.log("[FT] 🚫 Channel blocked (button injection check):", channelName);
+          pauseAndMuteVideo(); // Immediate pause
+          showChannelBlockedOverlay(channelName); // Show overlay instead of immediate redirect
+          return; // Don't inject button
+        }
       }
+    } else {
+      // Free/expired trial - blocked channels are ignored (preserved but not enforced)
+      console.log("[FT] Channel blocking disabled (plan inactive) - channels preserved but not enforced");
     }
     
     // Not blocked, inject button (only for Pro users)
@@ -4873,10 +4893,11 @@ async function handleNavigation() {
   // Check if we just redirected from Shorts (on home page)
   if (pageType === "HOME") {
     try {
-      const { ft_redirected_from_shorts, ft_pro_manual_block_shorts, ft_plan } = await chrome.storage.local.get([
+      const { ft_redirected_from_shorts, ft_pro_manual_block_shorts, ft_plan, ft_days_left } = await chrome.storage.local.get([
         "ft_redirected_from_shorts",
         "ft_pro_manual_block_shorts",
-        "ft_plan"
+        "ft_plan",
+        "ft_days_left"
       ]);
       if (chrome.runtime.lastError) {
         console.warn("[FT] Failed to check redirect flags:", chrome.runtime.lastError.message);
@@ -4893,7 +4914,9 @@ async function handleNavigation() {
         }
         
         // Check if this is a Pro manual block or Free plan block
-        if (ft_pro_manual_block_shorts && isProExperience(ft_plan)) {
+        // Check if user is Pro (includes active trial, excludes expired trial)
+        const isPro = ft_plan === "pro" || (ft_plan === "trial" && ft_days_left > 0);
+        if (ft_pro_manual_block_shorts && isPro) {
           // Show Pro manual block overlay (encouraging message)
           // Keep ft_pro_manual_block_shorts flag set so it persists for all redirects
           showProManualBlockOverlay();
@@ -5569,14 +5592,13 @@ async function handleNavigation() {
     }
 
     // Search blocking: show search-specific overlay with plan-specific buttons
-    // COMMENTED OUT: Search block overlay hidden per user request
-    /*
+   
     if (resp.scope === "search") {
       if (!document.getElementById("ft-overlay")) {
         await showSearchBlockOverlay(resp.plan || "free");
       }
     } 
-    */
+   
     // Watch/AI blocking: show generic overlay for AI-blocked videos
     // COMMENTED OUT: Generic overlay removed per user request
     /*

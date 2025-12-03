@@ -185,7 +185,8 @@ function resetShape() {
     ft_productive_time_global: 0,
     ft_neutral_count_global: 0,
     ft_neutral_time_global: 0,
-    ft_break_lockout_until: 0  // Clear break lockout on daily reset
+    ft_break_lockout_until: 0,  // Clear break lockout on daily reset
+    ft_last_time_milestone: 0   // Reset Shorts milestone popup tracking
   };
 }
 
@@ -364,14 +365,27 @@ export async function getPlanConfig() {
  * @returns {Promise<"pro"|"free">} Effective plan
  */
 export async function getEffectivePlan() {
-  const { plan, config } = await getPlanConfig();
-  // If trial active → returns "pro", if expired → "free"
-  if (plan === PLAN_TRIAL) {
-    // Check if trial is expired by looking at config
-    return config === CONFIG_BY_PLAN[PLAN_PRO] ? "pro" : "free";
+  try {
+    const { ft_plan, ft_days_left } = await getLocal(["ft_plan", "ft_days_left"]);
+    const plan = ft_plan || "free";
+    
+    // If trial, check if expired
+    if (plan === "trial") {
+      const daysLeft = typeof ft_days_left === "number" ? ft_days_left : null;
+      if (daysLeft !== null && daysLeft <= 0) {
+        // Trial expired → free
+        return "free";
+      }
+      // Trial active → pro
+      return "pro";
+    }
+    
+    // Pro or Free → return as-is
+    return plan === "pro" ? "pro" : "free";
+  } catch (error) {
+    console.warn("[FT] Error getting effective plan:", error);
+    return "free"; // Default to free on error
   }
-  // Pro or Free - return as-is (normalize to lowercase)
-  return plan === PLAN_PRO ? "pro" : "free";
 }
 
 export async function setPlan(plan) {

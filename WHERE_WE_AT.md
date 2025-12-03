@@ -153,7 +153,18 @@ A1: Pass
 A2: Pass (Pop up updates, login page sometimes doesnt update immediately)
 A3: Works
 A4: Works (Flow isnt as describe in test - you cant log in from the pop up anymore it redirects to the page)
-A5: (AI classification isnt working - returns neutral - whats the cause it previously was, Channel blocking works - timer works)
+A5: Works
+
+
+
+PL1: Works
+PL2: Channel blocking persists (for those that were alreayd blocked but the new button doesnt appear) also search limit block doesnt work / appear for some reason (it was appearing and then broke at 5) and AI classification didnt trigger
+PL3: broadly worked
+PL4: Same issues as trial expired
+PL5: works Blcok for today shorts button didnt appear nor did the shorts overlay at 2 mins or 5 mins (usually it does so must be to do with constant logging in and out? idk?)
+PL6: Cant test as plan always says tiral in supabase (effective plan is never stored) its failed the test to be honest cant check effective plan
+PL9: Fail - as mentioned earlier the block doesnt appear
+PL10:
 
 
 
@@ -161,5 +172,7 @@ A5: (AI classification isnt working - returns neutral - whats the cause it previ
 Errors / Question:
 - Not sure what refresh plan does?
 - Changing the daily time limit around doesn't seem to save multiple times as effectively as wanted
+- FT daily limit removes after a day but only on refresh (need to scrutinise this)  
 - Need to make the size of the shorts badge smaller and change the wording from (+ xx skipped)
 - After 10mins shorts we only want the block shorts button for today overlay
+- Video session and video classification numbers dont match in supabase (to verify why - dashboard impact)
