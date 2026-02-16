@@ -1,0 +1,383 @@
+# FOCUSTUBE — CURSOR RULES
+# Version: v2
+# Read this file before every prompt. These rules are non-negotiable.
+# When in doubt, check the docs/ folder. Do not invent. Do not drift.
+
+---
+
+## SECTION 1 — WHAT THIS PRODUCT IS
+
+FocusTube is a Chrome extension + web app that helps users use YouTube intentionally.
+It adds friction, awareness, and limits. It does NOT replace YouTube.
+It intervenes based on patterns over time — never single-video judgment.
+It nudges before it blocks. It never punishes without warning.
+
+---
+
+## SECTION 2 — ENGINEERING POSTURE
+
+- Prefer simple logic over clever logic
+- Prefer explicit state over inference
+- Prefer server truth over local state
+- Prefer shipping over perfection
+- If something feels clever, question it
+- Do not invent features or expand scope without asking
+- Do not rename fields, routes, or database columns without explicit instruction
+
+---
+
+## SECTION 3 — STACK
+
+| Layer | Technology |
+|---|---|
+| API server | Node.js + Express on Render |
+| Database + Auth | Supabase (Postgres) |
+| AI | OpenAI gpt-4o-mini |
+| Payments | Stripe Checkout + Webhooks |
+| Frontend | Web app (React/Next.js) on Vercel |
+| Extension | Chrome Extension (Manifest V3) |
+
+---
+
+## SECTION 4 — FIELD NAMES & NAMING CONVENTIONS (LOCKED)
+
+These names must be used exactly as written across database, API, extension, and UI.
+Do not create aliases. Do not use synonyms.
+
+| Concept | Correct field name | NEVER use |
+|---|---|---|
+| User distractions | `pitfalls` | `anti_goals`, `distractions`, `bad_habits` |
+| Trial start | `trial_started_at` | `trial_start_date`, `trialStart`, `started_at` |
+| Trial expiry | `trial_expires_at` | `trial_end_date`, `trialExpiry` |
+| Focus window start | `focus_window_start` | `window_start`, `focusStart` |
+| Focus window end | `focus_window_end` | `window_end`, `focusEnd` |
+| Daily watch limit | `daily_time_limit_minutes` | `daily_limit`, `time_limit`, `watch_limit` |
+| Plan value (trial) | `pro_trial` | `trial`, `pro-trial`, `ProTrial` |
+| Plan value (paid) | `pro` | `paid`, `pro_paid`, `Pro` |
+| Plan value (free) | `free` | `Free`, `basic` |
+
+---
+
+## SECTION 5 — DATABASE TABLES (MVP)
+
+### `users` table
+Auth and billing only. No preferences stored here.
+- `email`
+- `plan` (values: `free`, `pro_trial`, `pro`)
+- `trial_started_at`
+- `trial_expires_at`
+- `stripe_customer_id`
+
+### `extension_data` table
+One row per user. All persistent preferences and state.
+- `goals`
+- `pitfalls`
+- `blocked_channels`
+- `settings` (JSON — see Section 8)
+- `focus_window_start`
+- `focus_window_end`
+- `channel_spiral_count`
+- `watch_history` (short-term cache only)
+
+### `video_sessions` table
+Raw watch events. Used for aggregation and analytics.
+Retained for ~60 days then purged.
+
+### `video_classifications` table
+Cached AI results per `(user_id, video_id)`.
+Cache TTL: 24 hours.
+
+### `journal_entries` table
+Raw journaling text with video title and channel name.
+AI summaries generated only on-demand.
+
+---
+
+## SECTION 6 — API ENDPOINTS (LOCKED)
+
+Do not rename, add, or remove these endpoints without explicit instruction.
+
+### Bootstrap
+- `GET /extension/bootstrap`
+  Returns: `plan`, `trial_days_remaining`, `goals`, `pitfalls`, `blocked_channels`, `settings`
+
+- `POST /extension/state`
+  Partial updates: `blocked_channels`, `settings`, `goals`, `pitfalls`
+
+### AI
+- `POST /ai/classify`
+  Input: video metadata + user goals + pitfalls
+  Output: `distraction_level`, `category`, `confidence`
+
+- `POST /ai/parse-channels`
+  Input: raw free-text channel names from onboarding
+  Output: structured array of `{ channel_name, channel_id }`
+  Called ONCE on onboarding submit only. Never on re-login.
+
+### Events
+- `POST /events/video-session`
+- `POST /events/journal`
+
+### Billing
+- `POST /stripe/webhook`
+- `GET /billing/portal`
+
+---
+
+## SECTION 7 — NUDGE & BLOCK THRESHOLDS (LOCKED)
+
+Do not change these numbers without explicit instruction.
+
+### Distracting videos
+| Threshold | Action |
+|---|---|
+| 1-2 videos | No action |
+| 3 videos OR 20 minutes | Pause + 10s nudge |
+| 4 videos OR 40 minutes | Pause + 30s nudge |
+| 5 videos OR 60 minutes | Hard block for rest of day |
+
+### Neutral videos
+| Threshold | Action |
+|---|---|
+| First 2 videos | No action |
+| 3rd video onward | Increment distracting counters |
+
+### Productive videos
+| Threshold | Action |
+|---|---|
+| 30 min OR 3 videos | 5s "apply what you learned" nudge |
+| 60 min OR 5 videos | 30s nudge |
+| 90 min OR 7 videos | 5-minute break |
+
+Productive break resets productive counters only — not distracting counters.
+
+### Daily time limit
+- When `daily_time_limit_minutes` is reached → hard block YouTube for rest of day
+- Resets at local midnight
+
+### Focus Window
+- If `focus_window_enabled` is true, YouTube is blocked outside the defined window
+- Max window: 6 hours
+- Earliest start: 08:00
+- Latest end: 22:00
+- Outside window → redirect to YouTube home with message
+
+### Reset rules
+- All counters reset daily at local midnight
+- After a distracting hard block → all counters reset next day
+- Distracting nudges may appear mid-video
+- Productive nudges appear after video end or on navigation
+
+---
+
+## SECTION 8 — SETTINGS SCHEMA (LOCKED)
+
+The `settings` JSON object in `extension_data` must contain exactly these fields:
+
+```json
+{
+  "block_shorts": boolean,
+  "hide_recommendations": boolean,
+  "daily_time_limit_minutes": integer,
+  "focus_window_enabled": boolean,
+  "focus_window_start": "HH:MM",
+  "focus_window_end": "HH:MM"
+}
+```
+
+- `daily_time_limit_minutes`: 0 = disabled, max 120
+- `focus_window_start`: minimum value "08:00"
+- `focus_window_end`: maximum value "22:00"
+- Window duration: max 6 hours between start and end
+
+---
+
+## SECTION 9 — EXTENSION BOOT & STATE SYNC (LOCKED)
+
+### Boot sequence
+1. Fetch full user state from backend (`GET /extension/bootstrap`)
+2. Overwrite local cache with server state
+3. Start counters
+4. Register listeners (navigation, watch time, channel detection)
+
+### Sync rules
+- Server state ALWAYS wins on conflict
+- Local storage is cache only — never authoritative
+- On login → fetch immediately, overwrite cache
+- On explicit events (upgrade, settings change) → fetch immediately
+- Polling fallback → every 6 hours
+- If backend is unreachable → use cached rules, do not clear state
+
+### Authentication
+- If user is not authenticated → no blocking or nudging
+- Show "Sign in to activate FocusTube"
+- Supports: email + password AND Google Sign-In (OAuth) via Supabase Auth
+
+---
+
+## SECTION 10 — FREE vs PRO FEATURE GATES (LOCKED)
+
+### Pro Trial and Pro Paid users get
+- Hard blocks (distracting and daily time limit)
+- Focus Window enforcement
+- All nudge thresholds
+- Dashboard access (real data)
+- All settings
+
+### Free users get
+- Video classification (still runs)
+- Watch counter increments (still runs)
+- Soft nudges only (no hard blocks)
+- Blurred placeholder dashboard + upgrade prompt
+- Limited settings (Pro-only settings visible but locked)
+
+### When a free user hits a Pro-only trigger
+- Show lightweight upgrade nudge
+- Example message: "You've hit a focus limit — unlock Pro to enforce breaks."
+- Never show a broken or error state
+- Never silently skip the trigger without any response
+
+---
+
+## SECTION 11 — AI USAGE RULES (LOCKED)
+
+### AI is used for
+- Video classification: productive / neutral / distracting
+- Onboarding channel name parsing (`POST /ai/parse-channels`)
+- Journal insights (on-demand only, one call per user request)
+
+### AI is NOT used for
+- Making blocking decisions alone
+- Enforcing goals rigidly
+- Real-time analysis during playback
+
+### Classification logic
+1. Classify based on content alone (title, channel, metadata)
+2. Override only if video directly matches a user goal or pitfall
+- Cache result per `(user_id, video_id)` for 24 hours
+- Shorts: always classified as distracting
+
+### Failure behavior (non-negotiable)
+- If OpenAI is unavailable → classify as neutral
+- If channel parsing fails → save raw input, flag for review, continue onboarding
+- Never break the user flow due to AI failure
+- Never make blocking decisions based solely on AI output
+
+---
+
+## SECTION 12 — SECURITY & RELIABILITY RULES
+
+- No API keys, secrets, or credentials in client or extension code
+- All secrets via environment variables only:
+  `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`,
+  `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `APP_BASE_URL`
+- HTTPS only — all communication
+- CORS locked to site + extension origins only
+- All endpoints: rate limiting (IP-based + user-based), graceful 429 responses
+- All user inputs: validated and sanitised before storage
+- Plan enforcement is server-side only — never trust client state for plan checks
+- Stripe webhooks must be idempotent
+
+---
+
+## SECTION 13 — WHAT IS OUT OF SCOPE (DO NOT BUILD)
+
+- Safari extension
+- Mobile apps
+- Native desktop apps
+- Transcript-based video analysis
+- Real-time dashboard updates (hourly batch only)
+- Social or accountability features
+- WebSockets or real-time sync
+- Perfect AI accuracy
+- Gamification
+
+---
+
+## SECTION 14 — DETAILED REFERENCE
+
+### User journey (summary)
+1. Land on focustube.co.uk
+2. Sign up (email/password or Google OAuth)
+3. trial_started_at set, plan = pro_trial
+4. Onboarding: enter goals, pitfalls, optional channels to block
+5. AI parses channel names once (POST /ai/parse-channels)
+6. Redirect to Download page
+7. Install Chrome extension
+8. Extension boots, fetches state from backend
+9. Daily usage loop begins
+
+### Daily usage loop (per video)
+1. Detect metadata (title, channel, length) — primary channel only, ignore collaborators
+2. Check if channel is blocked → redirect if matched
+3. Check Focus Window → block if outside window
+4. Check daily time limit → hard block if reached
+5. Classify video (AI or cache)
+6. Increment counters (per-type + per-channel)
+7. Evaluate thresholds
+8. Trigger intervention if needed
+
+### Channel blocking rules
+- Only primary owning channel evaluated
+- Collaborators ignored
+- Blocked channels persist across sessions and devices
+- Stored server-side in extension_data
+
+### Trial lifecycle
+- Day 1: full Pro access, trial_started_at set
+- Day 30: auto-downgrade to Free, Pro features disabled
+- Upgrade available at any time via Stripe Checkout
+- On successful payment: webhook updates plan, extension refreshes state instantly
+
+### Dashboard
+- Trial + Pro users: real data
+- Free users: blurred placeholder + upgrade prompt (never an error state)
+- Time ranges: 7d / 30d / All time (All time = all retained data, max 60 days)
+- Data aggregated hourly
+- Raw data retained up to 60 days
+
+### Failure modes (handle gracefully)
+- AI unavailable → neutral classification
+- Backend unreachable → use cached rules
+- Stripe webhook delayed → idempotent retry
+- Partial write → server state wins on next sync
+- No crashes, no silent data loss
+
+---
+
+## SECTION 15 — COPY REFERENCE (LOCKED)
+
+All UI copy must match `docs/COPY_OVERVIEW_v2.md` exactly.
+Before writing any user-facing text, check that file first.
+
+### Hard rules
+- Trial = 30 days everywhere. Never 14. Never "two weeks".
+- No emojis anywhere in UI copy — not in overlays, buttons, titles, or messages
+- No fake stats, ratings, or user counts anywhere in the product
+- Brand name = FocusTube — one word, capital F, capital T. Never "Focustube" or "Focus Tube"
+- Dynamic variables use `${variable}` syntax — preserve exactly, never hardcode values
+- Every button must have both a default label and a loading state label
+
+### Overlay copy rules
+- Distracting nudges: direct, calm, non-punishing tone
+- Hard block messages: firm but not hostile
+- Productive nudges: encouraging, action-oriented
+- Upgrade prompts: clear value, no pressure language
+- Journal prompts: open-ended, honest, non-judgemental
+
+### Key copy (memorise these — do not invent alternatives)
+- Trial badge: "Free for 30 days. No card needed."
+- Trial CTA: "Start 30-Day Trial"
+- Hard block title: "YouTube blocked for today."
+- Focus Window block title: "Outside your focus window."
+- Daily limit block title: "Daily limit reached."
+- Upgrade prompt title: "You've hit a focus limit."
+- Unauthenticated state: "Sign in to activate FocusTube"
+- Free dashboard placeholder title: "Upgrade to see your dashboard"
+
+### What to never write
+- Never write "14 days", "14-day", or "two weeks" for trial length
+- Never write fake user counts ("10,000+ users", "4.8/5 stars")
+- Never write emojis in any UI element
+- Never write "anti_goals" in any user-facing text — the correct term is "pitfalls"
+- Never use "distractions" as a field label — use "pitfalls"
