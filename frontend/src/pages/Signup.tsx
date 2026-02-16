@@ -170,7 +170,7 @@ const Signup = () => {
           </Link>
           <CardTitle className="text-2xl text-center">Create your account</CardTitle>
           <CardDescription className="text-center">
-            Start your 14-day free trial
+            Start your free trial
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

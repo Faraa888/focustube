@@ -23,7 +23,7 @@ const Home = () => {
         <div className="container mx-auto max-w-6xl">
           <div className="text-center mb-12">
             <Badge variant="secondary" className="mb-4">
-              Free for 14 days • No card needed
+              Free for 30 days • No card needed
             </Badge>
             <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
               YouTube without the spiral.
@@ -236,7 +236,7 @@ const Home = () => {
                 </div>
               </div>
               <Button className="w-full" asChild data-evt="buy_pro">
-                <Link to="/signup">Start 14-Day Free Trial (No card needed)</Link>
+                <Link to="/signup">Start Free Trial</Link>
               </Button>
             </div>
           </div>
@@ -253,7 +253,7 @@ const Home = () => {
             <AccordionItem value="item-1">
               <AccordionTrigger>How long is the free trial?</AccordionTrigger>
               <AccordionContent>
-                14 days. No card needed. You get full access to Pro features during the trial period.
+                30 days. No card needed. You get full access to Pro features during the trial period.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-2">
@@ -294,7 +294,7 @@ const Home = () => {
             YouTube's not the problem. Losing control is. FocusTube helps you stay intentional, without blocking everything.
           </p>
           <Button size="lg" asChild data-evt="final_cta">
-            <Link to="/signup">Start 14-Day Free Trial</Link>
+            <Link to="/signup">Start Free Trial</Link>
           </Button>
           <p className="text-sm text-muted-foreground mt-4">
             No credit card required • Cancel anytime

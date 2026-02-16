@@ -30,7 +30,7 @@ const Pricing = () => {
         {/* Header */}
         <div className="text-center mb-12">
           <Badge variant="secondary" className="mb-4">
-            14-day free trial • No credit card required
+            30-day free trial • No credit card required
           </Badge>
           <h1 className="text-4xl md:text-5xl font-bold mb-4">
             Simple, transparent pricing
@@ -150,7 +150,7 @@ const Pricing = () => {
                 </li>
               </ul>
               <Button className="w-full" size="lg" asChild data-evt="pricing_pro">
-                <Link to="/signup">Start 14-Day Free Trial</Link>
+                <Link to="/signup">Start 30-Day Trial</Link>
               </Button>
               <p className="text-xs text-center text-muted-foreground">
                 No credit card required
@@ -184,7 +184,7 @@ const Pricing = () => {
             <AccordionItem value="item-1">
               <AccordionTrigger>What happens after the free trial?</AccordionTrigger>
               <AccordionContent>
-                After 14 days, you'll automatically move to the Free plan. You can upgrade to Pro anytime to keep using FocusTube features. We won't charge you automatically.
+                After 30 days, you move to the Free plan automatically. No charge. Upgrade anytime to keep Pro features.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-2">

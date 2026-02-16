@@ -87,7 +87,7 @@ if (stripeSecretKey) {
 
 // Price IDs (you'll add these after creating products in Stripe dashboard)
 const STRIPE_PRICE_MONTHLY = process.env.STRIPE_PRICE_MONTHLY || ""; // $6.99/month (7 day trial)
-const STRIPE_PRICE_ANNUAL = process.env.STRIPE_PRICE_ANNUAL || ""; // $59.99/year (14 day trial)
+const STRIPE_PRICE_ANNUAL = process.env.STRIPE_PRICE_ANNUAL || ""; // $59.99/year (30 day trial)
 const STRIPE_PRICE_LIFETIME = process.env.STRIPE_PRICE_LIFETIME || ""; // $99.00 one-time (Early Access)
 
 // ─────────────────────────────────────────────────────────────

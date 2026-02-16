@@ -270,7 +270,7 @@ function showOnboardingOverlay() {
           <strong>Click the FocusTube extension icon</strong> (top right of your browser) to:
         </p>
         <ul style="margin-top:12px;padding-left:20px;font-size:14px;line-height:1.8;color:#ffffff;">
-          <li>Start your 14-day free Pro trial</li>
+          <li>Start your 30-day free Pro trial</li>
           <li>Sign in to an existing account</li>
           <li>Continue with Free plan</li>
         </ul>
@@ -340,7 +340,7 @@ function showProManualBlockOverlay() {
 
   overlay.innerHTML = `
     <div class="ft-box">
-      <h1>🎯 Shorts Blocked!</h1>
+      <h1>Shorts Blocked</h1>
       <p id="ft-overlay-message">
         You have chosen to block Shorts for today and have chosen discipline. This decision will help you stay focused and productive.
       </p>
@@ -1107,7 +1107,7 @@ function getProductivityExamples(totalMinutes) {
   const examplesByBucket = {
     2: [
       "☕ Grab a drink and look away from your screen",
-      "💨 Step outside for a minute of fresh air",
+      "🌬️ Step outside for a minute of fresh air",
       "🧘 Take two deep breaths and stretch your body",
       "📱 Reply to that one message you've been ignoring",
       "🧠 Think about one thing you actually want to get done today",
@@ -1494,7 +1494,7 @@ async function showGlobalLimitOverlay(plan, counters) {
   // Get button HTML based on plan
   let buttonsHTML = '';
     buttonsHTML = `
-      <button id="ft-check-usage" class="ft-button ft-button-primary">Check Your Usage! 📊</button>
+      <button id="ft-check-usage" class="ft-button ft-button-primary">Check Your Usage</button>
     <button id="ft-reset" class="ft-button ft-button-secondary" style="background: #ff6b6b; color: white;">Reset</button>
   `;
 
@@ -4463,7 +4463,7 @@ function showJournalModal(distractionLevel, context) {
   
   modal.innerHTML = `
     <div class="ft-journal-box">
-      <h2>📝 Journal Entry</h2>
+      <h2>Journal Entry</h2>
       <p class="ft-journal-context">
         ${promptText}
       </p>

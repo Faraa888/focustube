@@ -51,9 +51,6 @@ const Download = () => {
                   Add to Chrome — It's Free
                 </a>
               </Button>
-              <p className="text-sm text-muted-foreground">
-                ⭐️ Rated 4.8/5 by 10,000+ users
-              </p>
             </div>
           </CardContent>
         </Card>
