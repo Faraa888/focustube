@@ -2747,20 +2747,7 @@ async function showAIDistractingPopup(classification, allowance) {
   pauseAndMuteVideo();
   
   // Format allowance display
-  const allowanceVideosLeft = allowance.allowanceVideosLeft || 0;
-  const allowanceSecondsLeft = allowance.allowanceSecondsLeft || 0;
   let allowanceText = "";
-  if (allowanceVideosLeft > 0) {
-    allowanceText = `${allowanceVideosLeft} video${allowanceVideosLeft !== 1 ? 's' : ''} left`;
-  } else if (allowanceSecondsLeft > 0) {
-    const minutesLeft = Math.floor(allowanceSecondsLeft / 60);
-    const secondsLeft = allowanceSecondsLeft % 60;
-    if (minutesLeft > 0) {
-      allowanceText = `${minutesLeft}m ${secondsLeft}s left`;
-    } else {
-      allowanceText = `${secondsLeft}s left`;
-    }
-  }
   
   // Get allowance cost from classification
   const allowanceCost = classification.allowance_cost || { type: "none", amount: 0 };
@@ -4105,15 +4092,15 @@ async function showDistractingNudge(nudgeType, counters) {
   
   if (nudgeType === "nudge1") {
     message = "Still aligned with your goals?";
-    duration = 30; // Changed from 10 to 30 seconds
+    duration = 10;
     showJournal = true; // Add journal button
   } else if (nudgeType === "nudge2") {
     message = "Still aligned with your goals?";
-    duration = 60; // Changed from 30 to 60 seconds (1 minute)
+    duration = 30;
     showJournal = true;
   } else if (nudgeType === "break") {
-    message = "You've been watching distracting content. Take a 10-minute break to reset your focus.";
-    duration = 600; // 10 minutes in seconds
+    message = "Take a 5-minute break to reset your focus.";
+    duration = 300;
     showJournal = true;
   }
   
@@ -4123,19 +4110,19 @@ async function showDistractingNudge(nudgeType, counters) {
   
   overlay.innerHTML = `
     <div class="ft-milestone-box">
-      <h2>⚠️ ${message}</h2>
+      <h2>${message}</h2>
       <p class="ft-milestone-intro">
         You've watched ${thresholdText} of distracting content today.
       </p>
       ${duration > 0 ? `
         <div class="ft-spiral-timer">
           <div class="ft-timer-circle">
-            <span id="ft-timer-count">${nudgeType === "break" ? "600" : duration}</span>
+            <span id="ft-timer-count">${nudgeType === "break" ? "300" : duration}</span>
           </div>
         </div>
         ${nudgeType === "break" ? `
           <p style="text-align: center; color: #666; font-size: 14px; margin-top: 16px;">
-            Time remaining: <span id="ft-break-time-text">10:00</span>
+            Time remaining: <span id="ft-break-time-text">5:00</span>
           </p>
         ` : ""}
       ` : ""}
@@ -4280,15 +4267,15 @@ async function showProductiveNudge(nudgeType, counters) {
   
   if (nudgeType === "nudge1") {
     message = "Let's make sure you apply what you learned.";
-    duration = 30; // Changed from 5 to 30 seconds
+    duration = 5;
     showJournal = true; // Add journal button
   } else if (nudgeType === "nudge2") {
     message = "Time to apply this – don't just stack more content.";
-    duration = 60; // Changed from 30 to 60 seconds (1 minute)
+    duration = 30;
     showJournal = true;
   } else if (nudgeType === "break") {
-    message = "You've watched 7 educational videos today. Time to rest the brain.";
-    duration = 600; // 10 minutes in seconds
+    message = "Take a 5-minute break before watching more.";
+    duration = 300;
     showJournal = true;
   }
   
@@ -4298,19 +4285,19 @@ async function showProductiveNudge(nudgeType, counters) {
   
   overlay.innerHTML = `
     <div class="ft-milestone-box">
-      <h2>💡 ${message}</h2>
+      <h2>${message}</h2>
       <p class="ft-milestone-intro">
         You've watched ${thresholdText} of productive content today.
       </p>
       ${duration > 0 ? `
         <div class="ft-spiral-timer">
           <div class="ft-timer-circle">
-            <span id="ft-timer-count">${nudgeType === "break" ? "600" : duration}</span>
+            <span id="ft-timer-count">${nudgeType === "break" ? "300" : duration}</span>
           </div>
         </div>
         ${nudgeType === "break" ? `
           <p style="text-align: center; color: #666; font-size: 14px; margin-top: 16px;">
-            Time remaining: <span id="ft-break-time-text">10:00</span>
+            Time remaining: <span id="ft-break-time-text">5:00</span>
           </p>
         ` : ""}
       ` : ""}

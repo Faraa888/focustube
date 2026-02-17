@@ -1,54 +1,41 @@
 # FocusTube — v2 Build Plan
 
 **Version:** v2  
-**Based on:** All five v2 docs (PRD, App Flow, Backend, Frontend, Transfers Context)  
-**Status:** Existing build has partial functionality. v2 requires a focused cleanup and rebuild of core logic.
+**Approach:** Targeted patch — keep the plumbing, rewrite the logic layer.  
+**One Cursor session per phase. Show diff before applying. Never combine phases.**
 
 ---
 
-## WHAT EXISTS AND WHAT TO KEEP
+## WHAT TO KEEP
 
-### Keep (working and aligned with v2)
-- Shorts blocking redirect logic (repurpose: treat Shorts as always-distracting, not a separate system)
-- Daily counter rotation at local midnight
+- Extension boot sequence (`syncPlanFromServer` + `loadExtensionDataFromServer`)
+- Daily counter rotation at local midnight (`maybeRotateCounters`)
 - Watch event batching to server
-- Extension boot sequence (syncPlanFromServer + loadExtensionDataFromServer)
 - Stripe Checkout integration
 - Supabase auth connection
-- content.js page type detection (SHORTS / SEARCH / WATCH / HOME)
+- `content.js` page type detection (SHORTS / SEARCH / WATCH / HOME)
+- `mergeBlockedChannels()` logic
+- `evaluateBlock()` in `rules.js` — do not touch
+- `constants.js` — correct and complete, do not touch
+- Channel blocking redirect logic
 
-### Replace or Fix
-- Field names: `ft_user_anti_goals` → `ft_user_pitfalls` everywhere
-- Plan sync: currently polling every 5 minutes — change to explicit events + 6-hour fallback
-- AI classification: currently allowance-based (1 video or 10 minutes) — replace with nudge/block thresholds from v2
-- Search limits (5 free / 15 pro) — remove entirely, not in v2 spec
-- Nudge and overlay logic — currently broken and misaligned, rebuild from spec
-- Focus Window — not built, build from scratch
-- Daily time limit — partially built, fix to hard block correctly
-- `/extension/bootstrap` response must return `pitfalls` not `anti_goals`
+## WHAT TO DELETE (Dead Code)
 
-### Remove
-- Search limit counters and overlays
-- Allowance system (`ft_allowance_videos_left`, `ft_allowance_seconds_left`)
-- `.cursorrules1`
-
----
-
-## SHORTS DECISION
-
-**Treat Shorts as always-distracting videos, not a separate system.**
-
-Rationale:
-- Shorts follow the same counter logic as distracting videos
-- No separate Shorts counter needed
-- Existing Shorts redirect logic is reused — just feed into distracting counter instead of a dedicated Shorts system
-- Simplifies the codebase significantly
+| Location | What | Why |
+|---|---|---|
+| `state.js` DEFAULTS | `ft_allowance_videos_left`, `ft_allowance_seconds_left` | Replaced by threshold system |
+| `state.js` resetShape | Same fields | Same |
+| `state.js` | `ft_user_anti_goals` | Rename to `ft_user_pitfalls` |
+| `state.js` | Weekly/monthly reset period logic | Daily only |
+| `background.js` ~line 1234 | Allowance decrement on distracting video | Replaced by evaluateThresholds |
+| `index.ts` | `STRIPE_PRICE_ANNUAL`, `STRIPE_PRICE_LIFETIME` | Monthly only for MVP |
+| `index.ts` | Reads `anti_goals` from DB | Rename to `pitfalls` |
 
 ---
 
-## BUILD PHASES
+## FIVE-PHASE PATCH SEQUENCE
 
----
+
 
 ### PHASE 1 — Field Name & Schema Cleanup
 **Goal:** Single consistent naming across all layers before any new code is written.
@@ -133,6 +120,14 @@ Productive counter:
 Neutral:
 - First 2 → no action
 - 3rd onward → increment distracting counter
+
+Search counter (`ft_searches_today`):
+| Plan | Warning | Action |
+|---|---|---|
+| Free | Search 3 and 4 | Small banner near search bar, auto-dismisses 5s |
+| Free | Search 5 | Hard block — redirect to YouTube home |
+| Pro | Search 13 and 14 | Small banner near search bar, auto-dismisses 5s |
+| Pro | Search 15 | Hard block — redirect to YouTube home |
 
 **Free users:** Soft nudges only. When they would hit a hard block → show upgrade prompt instead.
 
@@ -329,6 +324,50 @@ Neutral:
 
 ---
 
+---
+
+### PHASE 11 — Shorts Channel Classification (Post-Core)
+**Goal:** Classify Shorts by channel, not individual video. Build a shared channel repository that gets smarter over time.
+
+**Why channel-based:**
+- Shorts have minimal metadata — titles are unreliable for AI classification
+- Channel intent is more consistent and accurate than individual Short titles
+- One AI call per channel serves all users — shared cache across the whole user base
+- Aligns with how users think ("MrBeast = distraction, Ali Abdaal = useful")
+
+**New Supabase table: `channel_classifications`**
+- `channel_id` (YouTube channel ID)
+- `channel_name`
+- `classification` (values: `educational`, `entertainment`, `mixed`)
+- `confidence` (0-1)
+- `classified_at` (timestamp)
+- `classification_count` (how many users triggered this)
+
+**Logic:**
+- When a Short starts playing, extract channel name and ID
+- Check `channel_classifications` for existing result
+- If found and less than 7 days old → use cached result instantly, no AI call
+- If not found → call `/ai/classify` with channel name only
+- Store result in shared table for all future users
+- Apply classification to distracting counter as normal
+
+**Rules:**
+- Classification is per channel, never per individual Short
+- Cache TTL: 7 days
+- If AI fails → default to neutral, do not block
+- Blocked channels → redirect immediately, skip classification entirely
+- Do NOT attempt to block Shorts mid-feed — out of scope
+- User-blocked channels always take priority over classification result
+
+**Acceptance criteria:**
+- First Short from unknown channel triggers one AI call
+- Second Short from same channel uses cache — no AI call
+- Educational channel Shorts do not increment distracting counter
+- Entertainment channel Shorts increment distracting counter
+- All users benefit from the shared channel cache
+
+---
+
 ## WHAT IS EXPLICITLY OUT OF SCOPE
 
 Do not build during this phase:
@@ -372,4 +411,3 @@ Then propose the minimal diff. Wait for "OK" before executing.
 Do not touch files unrelated to the current phase.
 Do not rename fields, routes, or database columns not listed in the phase.
 Do not add features not in this plan or the v2 `.cursorrules`.
-

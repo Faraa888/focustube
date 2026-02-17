@@ -33,14 +33,15 @@ async function clearUserScopedData() {
     ft_channel_spiral_count: {},
     ft_extension_settings: {},
     ft_user_goals: [],
-    ft_user_anti_goals: [],
+    ft_user_pitfalls: [],
     ft_user_distraction_channels: [],
     ft_watch_event_queue: [],
     ft_data_owner_email: null,
   });
 }
 
-import { evaluateBlock } from "../lib/rules.js";
+import { evaluateBlock, evaluateThresholds } from "../lib/rules.js";
+import { detectSpiral } from "../lib/spiral.js";
 import { getServerUrlForBackground } from "../lib/config.js";
 import {
   SPIRAL_MIN_WATCH_SECONDS,
@@ -337,7 +338,6 @@ async function persistWatchClassificationResult(videoMetadata, videoId, aiClassi
       tags: aiClassification.tags,
       block_reason_code: aiClassification.block_reason_code,
       action_hint: aiClassification.action_hint,
-      allowance_cost: aiClassification.allowance_cost,
       title: videoMetadata.title,
       video_id: videoId,
       timestamp: now,
@@ -595,8 +595,7 @@ async function handleMessage(msg) {
       // - ft_short_visits_today (persists - daily limit continues)
       // - ft_shorts_engaged_today (persists - daily limit continues)
       // - ft_shorts_seconds_today (persists - daily limit continues)
-      // - ft_allowance_videos_left (persists - daily allowance continues)
-      // - ft_allowance_seconds_left (persists - daily allowance continues)
+
       // - ft_blocked_today (persists - temporary blocks continue)
       // - ft_block_shorts_today (persists - temporary blocks continue)
       // DO NOT remove user data - it's preserved in Supabase:
@@ -604,7 +603,7 @@ async function handleMessage(msg) {
       // - ft_watch_history (preserved in Supabase)
       // - ft_extension_settings (preserved in Supabase)
       // - ft_user_goals (preserved in Supabase)
-      // - ft_user_anti_goals (preserved in Supabase)
+      // - ft_user_pitfalls (preserved in Supabase)
       // - ft_channel_spiral_count (preserved in Supabase)
     ]);
     
@@ -1176,7 +1175,6 @@ async function classifyContent(input, context = "search") {
       tags: data.suggestions_summary?.dominant_themes || data.tags || [],
       block_reason_code: data.block_reason_code || "ok",
       action_hint: data.action_hint || "allow",
-      allowance_cost: data.allowance_cost || { type: "none", amount: 0 },
     };
   } catch (error) {
     console.warn("[FT] Error classifying content:", error.message || error);
@@ -1192,7 +1190,8 @@ async function classifyContent(input, context = "search") {
 /**
  * Extract video ID from YouTube URL
  * @param {string} url - YouTube URL
- * @returns {string|null} - Video ID or null
+ * @returns {string|null}
+ * - Video ID or null
  */
 function extractVideoId(url) {
   try {
@@ -1217,8 +1216,8 @@ async function finalizeVideoWatch(
   startTime, 
   distractionLevel, 
   categoryPrimary = null,
-  videoTitle = null,      // NEW: Accept title parameter (from saved tracking data)
-  channelName = null      // NEW: Accept channel parameter (from saved tracking data)
+  videoTitle = null,
+  channelName = null
 ) {
   if (!videoId || !startTime) {
     return 0;
@@ -1231,27 +1230,9 @@ async function finalizeVideoWatch(
     return 0;
   }
 
-  if (distractionLevel === "distracting") {
-    const { ft_allowance_seconds_left } = await getLocal(["ft_allowance_seconds_left"]);
-    const currentAllowance = Number(ft_allowance_seconds_left || 600);
-
-    const newAllowance = Math.max(0, currentAllowance - durationSeconds);
-
-    await setLocal({ ft_allowance_seconds_left: newAllowance });
-
-    LOG("Distracting video time tracked:", {
-      videoId: videoId.substring(0, 10),
-      duration: `${durationSeconds}s`,
-      allowanceBefore: currentAllowance,
-      allowanceAfter: newAllowance,
-    });
-  }
-
   // Use passed parameters (from saved tracking data), fallback to "Unknown" if not provided
-  // This ensures we use the metadata that was saved when tracking started, not what's currently in shared state
   const finalTitle = videoTitle || "Unknown";
   const finalChannel = channelName || "Unknown";
-  // Still get confidence from shared state (it's not passed as parameter)
   const { ft_current_video_classification } = await getLocal(["ft_current_video_classification"]);
   const confidenceDistraction = ft_current_video_classification?.confidence_distraction ?? null;
 
@@ -1263,7 +1244,6 @@ async function finalizeVideoWatch(
     return;
   }
 
-  // Create watch event object
   const finishedAtIso = new Date(endTime).toISOString();
   const startedAtIso = new Date(startTime).toISOString();
 
@@ -1279,14 +1259,12 @@ async function finalizeVideoWatch(
     confidence_distraction: confidenceDistraction,
   };
 
-  // Add to queue (will be batched and sent later)
   const { ft_watch_event_queue } = await getLocal(["ft_watch_event_queue"]);
   const queue = Array.isArray(ft_watch_event_queue) ? ft_watch_event_queue : [];
   queue.push(watchEvent);
   await setLocal({ ft_watch_event_queue: queue });
 
   scheduleWatchEventFlush(queue.length);
-
 
   LOG("Watch event queued:", {
     videoId: videoId.substring(0, 10),
@@ -1295,7 +1273,6 @@ async function finalizeVideoWatch(
     queueSize: queue.length,
   });
 
-  // Also send to legacy endpoint (for backward compatibility)
   sendWatchTimeToServer(videoId, durationSeconds, distractionLevel).catch((err) => {
     console.warn("[FT] Failed to send watch time to server:", err?.message || err);
   });
@@ -1303,273 +1280,21 @@ async function finalizeVideoWatch(
   // ─────────────────────────────────────────────────────────────
   // SPIRAL DETECTION: Track watch history and detect patterns
   // ─────────────────────────────────────────────────────────────
-  // Only count videos watched for minimum duration
   if (durationSeconds >= SPIRAL_MIN_WATCH_SECONDS && channelName && channelName !== "Unknown") {
     try {
-      // 1. Get current watch history
-      const { ft_watch_history = [] } = await getLocal(["ft_watch_history"]);
-      const history = Array.isArray(ft_watch_history) ? ft_watch_history : [];
-
-      // 2. Add new entry to history
-      const watchHistoryEntry = {
-        channel_name: channelName.trim(),
-        video_id: videoId,
-        video_title: videoTitle,
-        watched_at: finishedAtIso,
-        started_at: startedAtIso,
-        watch_seconds: durationSeconds,
-        distraction_level: distractionLevel || "neutral",
-        category_primary: categoryPrimary || "Other",
-        confidence_distraction: confidenceDistraction,
-      };
-      history.push(watchHistoryEntry);
-
-      // 3. Filter out entries older than 30 days (rolling window)
-      const thirtyDaysAgo = Date.now() - (SPIRAL_HISTORY_DAYS * 24 * 60 * 60 * 1000);
-      const recentHistory = history.filter(item => {
-        const itemTime = new Date(item.watched_at).getTime();
-        return itemTime > thirtyDaysAgo;
-      });
-
-      // 4. Calculate counts and time (today + last 7 days for spiral)
-      const today = new Date().toDateString(); // "Mon Jan 15 2025"
-      const todayHistory = recentHistory.filter(item => {
-        return new Date(item.watched_at).toDateString() === today;
-      });
-      
-      // Filter to last 7 days for spiral detection (not 30 days)
-      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-      const weekHistory = recentHistory.filter(item => {
-        const itemTime = new Date(item.watched_at).getTime();
-        return itemTime > sevenDaysAgo;
-      });
-
-      // Count videos and time from same channel
-      const todayCounts = {};
-      const todayTime = {};
-      const weekCounts = {};
-      const weekTime = {};
-
-      todayHistory.forEach(item => {
-        const ch = (item.channel_name || "Unknown").trim();
-        todayCounts[ch] = (todayCounts[ch] || 0) + 1;
-        todayTime[ch] = (todayTime[ch] || 0) + (item.watch_seconds || 0);
-      });
-
-      weekHistory.forEach(item => {
-        const ch = (item.channel_name || "Unknown").trim();
-        weekCounts[ch] = (weekCounts[ch] || 0) + 1;
-        weekTime[ch] = (weekTime[ch] || 0) + (item.watch_seconds || 0);
-      });
-
-      // 5. Update channel spiral counts
-      const { ft_channel_spiral_count = {} } = await getLocal(["ft_channel_spiral_count"]);
-      const spiralCounts = { ...ft_channel_spiral_count };
-      
-      // 5.1. Apply decay to existing counts (before updating with new data)
-      const now = Date.now();
-      const DECAY_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-      for (const [ch, data] of Object.entries(spiralCounts)) {
-        if (data && data.last_watched && data.this_week > 0) {
-          const lastWatched = new Date(data.last_watched).getTime();
-          const hoursSinceLastWatch = (now - lastWatched) / (60 * 60 * 1000);
-          const decayIntervals = Math.floor(hoursSinceLastWatch / 24); // Full 24h periods
-          if (decayIntervals > 0) {
-            const newWeekCount = Math.max(0, data.this_week - decayIntervals);
-            if (newWeekCount !== data.this_week) {
-              LOG(`[Spiral Decay] ${ch}: ${data.this_week} → ${newWeekCount} (${decayIntervals} intervals)`);
-              spiralCounts[ch].this_week = newWeekCount;
-            }
-          }
-        }
-      }
-      
-      // 5.2. Detect consecutive videos from same channel (for trend weighting)
-      const channelKey = channelName.trim();
-      let consecutiveCount = 1; // Current video counts as 1
-      const CONSECUTIVE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-      const currentTime = new Date(finishedAtIso).getTime();
-      
-      // Check recent history for consecutive videos from same channel
-      for (let i = recentHistory.length - 1; i >= 0; i--) {
-        const item = recentHistory[i];
-        if (item.channel_name && item.channel_name.trim() === channelKey && item.watched_at) {
-          const itemTime = new Date(item.watched_at).getTime();
-          const timeDiff = currentTime - itemTime;
-          if (timeDiff > 0 && timeDiff <= CONSECUTIVE_WINDOW_MS) {
-            consecutiveCount++;
-          } else if (timeDiff > CONSECUTIVE_WINDOW_MS) {
-            break; // Stop if gap is too large
-          }
-        }
-      }
-      
-      // 5.3. Check if channel was classified as distracting (for weighting eligibility)
-      const lastClassification = recentHistory
-        .filter(item => item.channel_name && item.channel_name.trim() === channelKey)
-        .sort((a, b) => new Date(b.watched_at) - new Date(a.watched_at))[0];
-      
-      const isDistractingChannel = lastClassification && 
-        lastClassification.distraction_level === "distracting" &&
-        (lastClassification.confidence_distraction || 0) > 0.7;
-      
-      // 5.4. Apply trend weighting multipliers (only for distracting channels)
-      let todayWeight = 1.0;
-      let weekWeight = 1.0;
-      if (isDistractingChannel && consecutiveCount > 1) {
-        if (consecutiveCount === 2) {
-          todayWeight = 1.5;
-          weekWeight = 1.5;
-        } else if (consecutiveCount >= 3) {
-          todayWeight = 2.0;
-          weekWeight = 2.0;
-        }
-        LOG(`[Spiral Weight] ${channelKey}: ${consecutiveCount} consecutive, weights: today=${todayWeight}, week=${weekWeight}`);
-      }
-      
-      // 5.5. Calculate base counts and apply weighting
-      // Note: todayCounts/weekCounts already include the current video (added to history at line 1287)
-      // So we need to count excluding current video, then add it back with weight
-      const baseTodayCount = todayCounts[channelKey] || 0;
-      const baseWeekCount = weekCounts[channelKey] || 0;
-      const baseWeekTime = weekTime[channelKey] || 0;
-      
-      // Count neutral videos the same as distracting for spiral detection
-      // Check if current video is neutral or distracting
-      const isNeutralOrDistracting = (distractionLevel === "neutral" || distractionLevel === "distracting");
-      
-      // If weighting applies, the current video contributes (weight - 1) extra
-      // So: baseCount already has +1 for current video, we add (weight - 1) more
-      const todayExtra = (todayWeight > 1.0) ? (todayWeight - 1.0) : 0;
-      const weekExtra = (weekWeight > 1.0) ? (weekWeight - 1.0) : 0;
-      
-      const weightedToday = baseTodayCount + todayExtra;
-      const weightedWeek = baseWeekCount + weekExtra;
-      
-      // Update time tracking (add current video's watch time)
-      const updatedWeekTime = baseWeekTime + durationSeconds;
-      
-      spiralCounts[channelKey] = {
-        today: Math.round(weightedToday * 10) / 10, // Round to 1 decimal
-        this_week: Math.round(weightedWeek * 10) / 10,
-        time_this_week: updatedWeekTime, // Total seconds watched this week
-        last_watched: new Date().toISOString()
-      };
-
-      // 6. Check thresholds and set spiral flag (whichever hits first: count OR time)
-      const currentChannelCount = spiralCounts[channelKey];
-      let spiralDetected = null;
-      
-      // Check dismissal cooldown (7 days)
-      const { ft_spiral_dismissed_channels = {} } = await getLocal(["ft_spiral_dismissed_channels"]);
-      const dismissedData = ft_spiral_dismissed_channels[channelKey];
-      const isOnCooldown = dismissedData && 
-        (Date.now() - dismissedData.last_shown) < SPIRAL_DISMISSAL_COOLDOWN_MS;
-      
-      if (isOnCooldown) {
-        const cooldownRemaining = Math.ceil((SPIRAL_DISMISSAL_COOLDOWN_MS - (Date.now() - dismissedData.last_shown)) / (24 * 60 * 60 * 1000));
-        console.log("[FT] 🚨 SPIRAL COOLDOWN: Active", { channel: channelKey, daysRemaining: cooldownRemaining });
-      }
-
-      // New thresholds: 6 videos this week OR 90 minutes this week (neutral counts same as distracting)
-      const weekCount = currentChannelCount.this_week || 0;
-      const weekTimeSeconds = currentChannelCount.time_this_week || 0;
-      const weekTimeMinutes = weekTimeSeconds / 60;
-      
-      if (!isOnCooldown && (weekCount >= SPIRAL_THRESHOLD_WEEK || weekTimeSeconds >= SPIRAL_THRESHOLD_WEEK_TIME)) {
-        // 6+ videos OR 90+ minutes this week - awareness nudge
-        console.log("[FT] 🚨 SPIRAL DETECTED:", { 
-          channel: channelKey, 
-          count: weekCount, 
-          timeMinutes: Math.round(weekTimeMinutes * 10) / 10,
-          threshold: weekCount >= SPIRAL_THRESHOLD_WEEK ? "count" : "time"
-        });
-        spiralDetected = {
-          channel: channelKey,
-          count: weekCount,
-          time_minutes: Math.round(weekTimeMinutes * 10) / 10,
-          type: "week",
-          message: "You've watched a lot of this channel this week. Are you still able to progress towards your goals?",
-          detected_at: Date.now()
-        };
-        LOG("⚠️ Spiral detected (week):", spiralDetected);
-      } else if (isOnCooldown) {
-        LOG(`[Spiral] Channel ${channelKey} is on cooldown (dismissed ${Math.floor((Date.now() - dismissedData.last_shown) / (24 * 60 * 60 * 1000))} days ago)`);
-      }
-
-      // 7. Update lifetime stats
-      const { ft_channel_lifetime_stats = {} } = await getLocal(["ft_channel_lifetime_stats"]);
-      const lifetimeStats = { ...ft_channel_lifetime_stats };
-
-      if (!lifetimeStats[channelKey]) {
-        lifetimeStats[channelKey] = {
-          total_videos: 0,
-          total_seconds: 0,
-          first_watched: new Date().toISOString(),
-          last_watched: new Date().toISOString()
-        };
-      }
-
-      lifetimeStats[channelKey].total_videos += 1;
-      lifetimeStats[channelKey].total_seconds += durationSeconds;
-      lifetimeStats[channelKey].last_watched = new Date().toISOString();
-
-      // 8. Persist spiral event to history (if detected)
-      let spiralEvents = [];
-      if (spiralDetected) {
-        const { ft_spiral_events = [] } = await getLocal(["ft_spiral_events"]);
-        const events = Array.isArray(ft_spiral_events) ? ft_spiral_events : [];
-        
-        // Add new event
-        events.push({
-          channel: spiralDetected.channel,
-          count: spiralDetected.count,
-          type: spiralDetected.type,  // "today" or "week"
-          detected_at: new Date().toISOString(),
-          message: spiralDetected.message
-        });
-        
-        // Keep last 30 days
-        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-        spiralEvents = events.filter(e => {
-          const eventTime = new Date(e.detected_at).getTime();
-          return eventTime > thirtyDaysAgo;
-        });
-        
-        LOG("Spiral event added to history:", { totalEvents: spiralEvents.length });
-      } else {
-        // No new spiral, but still need to clean up old events
-        const { ft_spiral_events = [] } = await getLocal(["ft_spiral_events"]);
-        const events = Array.isArray(ft_spiral_events) ? ft_spiral_events : [];
-        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-        spiralEvents = events.filter(e => {
-          const eventTime = new Date(e.detected_at).getTime();
-          return eventTime > thirtyDaysAgo;
-        });
-      }
-
-      // 9. Save all updates
-      await setLocal({
-        ft_watch_history: recentHistory,
-        ft_channel_spiral_count: spiralCounts,
-        ft_channel_lifetime_stats: lifetimeStats,
-        ft_spiral_events: spiralEvents,
-        ...(spiralDetected ? { ft_spiral_detected: spiralDetected } : {})
-      });
-
-      // 10. Sync to server immediately (fire-and-forget, don't block)
-      // This ensures data is saved quickly and not lost if extension closes
-      saveExtensionDataToServer(null).catch((err) => {
-        console.warn("[FT] Failed to sync watch history after video (non-blocking):", err?.message || err);
-      });
-
-      // 11. Spiral detection note
-      if (spiralDetected) {
-        LOG("Spiral flag set, will trigger nudge on next video from this channel");
-      }
+      await detectSpiral(
+        channelName,
+        durationSeconds,
+        distractionLevel,
+        videoId,
+        finishedAtIso,
+        startedAtIso,
+        videoTitle,
+        categoryPrimary,
+        confidenceDistraction
+      );
     } catch (error) {
       console.warn("[FT] Error in spiral detection:", error);
-      // Don't fail the entire function if spiral detection fails
     }
   } else if (durationSeconds < SPIRAL_MIN_WATCH_SECONDS) {
     LOG("Video watch too short for spiral tracking:", {
@@ -1578,9 +1303,6 @@ async function finalizeVideoWatch(
       minRequired: SPIRAL_MIN_WATCH_SECONDS
     });
   }
-
-  return durationSeconds;
-}
 
 /**
  * Send watch time analytics to server (best-effort)
@@ -1622,27 +1344,21 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   await maybeRotateCounters();
 
   // 2. Sync plan from server (debounced to 5 minutes, but force on video/channel switch)
-  // Force refresh if switching to a new video (check actual video ID change)
   const currentVideoId = pageType === "WATCH" && videoMetadata?.video_id ? videoMetadata.video_id : null;
   if (currentVideoId) {
-    // Check if this is actually a different video (not just any video)
     const { ft_last_synced_video_id: lastSyncedVideoId } = await getLocal(["ft_last_synced_video_id"]);
     const isNewVideo = lastSyncedVideoId !== currentVideoId;
-    
     if (isNewVideo) {
-      // Force sync on actual video switch to ensure plan is fresh
       await setLocal({ ft_last_synced_video_id: currentVideoId });
       syncPlanFromServer(true).catch((err) => {
         console.warn("[FT] Plan sync failed on video switch:", err);
       });
     } else {
-      // Same video, use regular debounced sync
       syncPlanFromServer().catch((err) => {
         console.warn("[FT] Plan sync failed on navigation:", err);
       });
     }
   } else {
-    // Regular sync (debounced) for other navigation
     syncPlanFromServer().catch((err) => {
       console.warn("[FT] Plan sync failed on navigation:", err);
     });
@@ -1652,30 +1368,22 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   await countForPageType(pageType);
 
   // 4. Handle video time tracking (finalize previous video if any)
-  // This happens when:
-  // - User leaves a WATCH page (navigates to non-WATCH page)
-  // - User enters a new WATCH page (need to finalize previous video first)
   const { ft_current_video_classification: prevVideo } = await getLocal(["ft_current_video_classification"]);
   if (prevVideo && prevVideo.startTime) {
     const { videoId, distraction_level, category_primary, startTime, video_title, channel_name } = prevVideo;
-    // Only finalize if:
-    // - We're leaving WATCH page (going to different page type)
-    // - OR we're entering a new WATCH page (different video ID)
     const currentVideoId = pageType === "WATCH" ? extractVideoId(url) : null;
     const isNewVideo = pageType === "WATCH" && currentVideoId && currentVideoId !== videoId;
     const isLeavingWatchPage = pageType !== "WATCH";
-    
     if (isLeavingWatchPage || isNewVideo) {
       clearWatchClassificationTimer();
       await finalizeVideoWatch(
-        videoId, 
-        startTime, 
-        distraction_level, 
+        videoId,
+        startTime,
+        distraction_level,
         category_primary,
-        video_title || "Unknown",  // Pass saved title
-        channel_name || "Unknown"   // Pass saved channel
+        video_title || "Unknown",
+        channel_name || "Unknown"
       );
-      // Clear previous video tracking
       await setLocal({ ft_current_video_classification: null });
     }
   }
@@ -1692,8 +1400,6 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     "ft_block_shorts_today",
     "ft_pro_manual_block_shorts",
     "ft_unlock_until_epoch",
-    "ft_allowance_videos_left",
-    "ft_allowance_seconds_left",
     "ft_blocked_channels",
     "ft_blocked_channels_today",
     "ft_spiral_detected",
@@ -1701,46 +1407,29 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     "ft_can_record"
   ]);
 
-  // 6. Read plan + limits (needed for block shorts check)
+  // 6. Read plan + limits
   const { plan, config } = await getPlanConfig();
-  // Get effective plan for response AND internal checks (handles trial expiry)
   const effectivePlan = await getEffectivePlan();
-  // Use effectivePlan for all Pro feature checks (not raw plan)
-
-  // Get effective settings (plan-aware)
   const rawSettings = state.ft_extension_settings || {};
   const effectiveSettings = getEffectiveSettings(plan, rawSettings);
 
-  // 6.2. Apply block shorts setting if enabled (using effective settings)
+  // 6.2. Apply block shorts setting if enabled
   if (effectiveSettings.shorts_mode === "hard" && effectivePlan === "pro") {
-    // If block_shorts is enabled, set ft_pro_manual_block_shorts and ft_block_shorts_today
     if (!state.ft_pro_manual_block_shorts || !state.ft_block_shorts_today) {
-      await setLocal({
-        ft_pro_manual_block_shorts: true,
-        ft_block_shorts_today: true
-      });
+      await setLocal({ ft_pro_manual_block_shorts: true, ft_block_shorts_today: true });
       state.ft_pro_manual_block_shorts = true;
       state.ft_block_shorts_today = true;
     }
   } else if (effectiveSettings.shorts_mode !== "hard" && effectivePlan === "pro") {
-    // If shorts_mode is not "hard", clear the flags (allow Pro tracking/reminders)
     if (state.ft_pro_manual_block_shorts || state.ft_block_shorts_today) {
-      await setLocal({
-        ft_pro_manual_block_shorts: false,
-        ft_block_shorts_today: false
-      });
+      await setLocal({ ft_pro_manual_block_shorts: false, ft_block_shorts_today: false });
       state.ft_pro_manual_block_shorts = false;
       state.ft_block_shorts_today = false;
     }
   }
 
-  // 6.4. hh Check focus window (if enabled) - BEFORE other blocking logic
-  // Focus window is a Pro/Trial feature only
-  const { 
-    ft_focus_window_enabled, 
-    ft_focus_window_start, 
-    ft_focus_window_end 
-  } = await getLocal([
+  // 6.4. Check focus window (Pro/Trial only)
+  const { ft_focus_window_enabled, ft_focus_window_start, ft_focus_window_end } = await getLocal([
     "ft_focus_window_enabled",
     "ft_focus_window_start",
     "ft_focus_window_end"
@@ -1748,15 +1437,10 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
 
   if (ft_focus_window_enabled && effectivePlan === "pro") {
     const now = new Date();
-    const currentHours = now.getHours();
-    const currentMinutes = now.getMinutes();
-    const currentTime = `${currentHours.toString().padStart(2, '0')}:${currentMinutes.toString().padStart(2, '0')}`;
-    
+    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     const startTime = ft_focus_window_start || "13:00";
     const endTime = ft_focus_window_end || "18:00";
-    
     const isWithinWindow = currentTime >= startTime && currentTime <= endTime;
-    
     if (!isWithinWindow) {
       LOG("Outside focus window:", { currentTime, startTime, endTime, blocked: true });
       return {
@@ -1773,53 +1457,29 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
           shortsVisits: Number(state.ft_short_visits_today || 0),
           shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
           shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
-          allowanceVideosLeft: Number(state.ft_allowance_videos_left || 1),
-          allowanceSecondsLeft: Number(state.ft_allowance_seconds_left || 600)
         },
         unlocked: await isTemporarilyUnlocked(Date.now()),
         aiClassification: null,
-        focusWindowInfo: {
-          start: startTime,
-          end: endTime,
-          current: currentTime
-        }
+        focusWindowInfo: { start: startTime, end: endTime, current: currentTime }
       };
     }
   }
 
-  // 6.5. Check channel blocking BEFORE AI classification (early exit)
-  // Extract channel from metadata or URL if needed
+  // 6.5. Check channel blocking (early exit)
   let channelToCheck = null;
   if (pageType === "WATCH") {
-    if (videoMetadata && videoMetadata.channel) {
-      channelToCheck = videoMetadata.channel.trim();
-    } else if (url) {
-      // Fallback: try to extract channel from URL or use a placeholder
-      // Content script should have sent it, but if missing, we'll check on next navigation
-      // For now, skip this check if metadata is incomplete
-      channelToCheck = null;
-    }
+    channelToCheck = videoMetadata?.channel?.trim() || null;
   }
 
   if (pageType === "WATCH" && channelToCheck) {
     const blockedChannels = state.ft_blocked_channels || [];
     if (Array.isArray(blockedChannels) && blockedChannels.length > 0) {
       const channelLower = channelToCheck.toLowerCase().trim();
-      // Exact case-insensitive matching (normalization ensures saved names match YouTube format)
-      const isBlocked = blockedChannels.some(blocked => {
-        const blockedLower = blocked.toLowerCase().trim();
-        return blockedLower === channelLower; // Exact match only
-      });
+      const isBlocked = blockedChannels.some(b => b.toLowerCase().trim() === channelLower);
       if (isBlocked) {
-        // Channel is blocked - return early, skip AI classification
-        LOG("Channel blocked:", { channel: channelToCheck, blockedChannels, matched: true });
+        LOG("Channel blocked:", { channel: channelToCheck });
         return {
-          ok: true,
-          pageType,
-          blocked: true,
-          scope: "watch",
-          reason: "channel_blocked",
-          plan,
+          ok: true, pageType, blocked: true, scope: "watch", reason: "channel_blocked", plan,
           counters: {
             searches: Number(state.ft_searches_today || 0),
             watchSeconds: Number(state.ft_watch_seconds_today || 0),
@@ -1827,8 +1487,6 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
             shortsVisits: Number(state.ft_short_visits_today || 0),
             shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
             shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
-            allowanceVideosLeft: Number(state.ft_allowance_videos_left || 1),
-            allowanceSecondsLeft: Number(state.ft_allowance_seconds_left || 600)
           },
           unlocked: await isTemporarilyUnlocked(Date.now()),
           aiClassification: null
@@ -1836,23 +1494,15 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
       }
     }
 
-    // 6.6. Check temporary blocks (blocked for today)
+    // 6.6. Check temporary blocks
     const blockedChannelsToday = state.ft_blocked_channels_today || [];
     if (Array.isArray(blockedChannelsToday) && blockedChannelsToday.length > 0) {
       const channelLower = channelToCheck.toLowerCase().trim();
-      const isBlockedToday = blockedChannelsToday.some(blocked => {
-        const blockedLower = blocked.toLowerCase().trim();
-        return blockedLower === channelLower; // Exact match only
-      });
+      const isBlockedToday = blockedChannelsToday.some(b => b.toLowerCase().trim() === channelLower);
       if (isBlockedToday) {
-        LOG("Channel blocked for today:", { channel, blockedChannelsToday, matched: true });
+        LOG("Channel blocked for today:", { channel: channelToCheck });
         return {
-          ok: true,
-          pageType,
-          blocked: true,
-          scope: "watch",
-          reason: "channel_blocked_today",
-          plan,
+          ok: true, pageType, blocked: true, scope: "watch", reason: "channel_blocked_today", plan,
           counters: {
             searches: Number(state.ft_searches_today || 0),
             watchSeconds: Number(state.ft_watch_seconds_today || 0),
@@ -1860,8 +1510,6 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
             shortsVisits: Number(state.ft_short_visits_today || 0),
             shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
             shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
-            allowanceVideosLeft: Number(state.ft_allowance_videos_left || 1),
-            allowanceSecondsLeft: Number(state.ft_allowance_seconds_left || 600)
           },
           unlocked: await isTemporarilyUnlocked(Date.now()),
           aiClassification: null
@@ -1869,24 +1517,17 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
       }
     }
 
-    // 6.7. Check spiral detection flag (before AI classification to save API calls)
+    // 6.7. Check spiral detection flag
     const spiralDetected = state.ft_spiral_detected;
-    if (spiralDetected && spiralDetected.channel && videoMetadata.channel) {
-      const channel = videoMetadata.channel.trim();
-      const channelLower = channel.toLowerCase();
+    if (spiralDetected?.channel && videoMetadata?.channel) {
+      const channelLower = videoMetadata.channel.trim().toLowerCase();
       const spiralChannelLower = spiralDetected.channel.toLowerCase().trim();
-      
-      // Check if current channel matches spiral-detected channel
-      if (channelLower === spiralChannelLower || 
-          channelLower.includes(spiralChannelLower) || 
+      if (channelLower === spiralChannelLower ||
+          channelLower.includes(spiralChannelLower) ||
           spiralChannelLower.includes(channelLower)) {
         LOG("🚨 Spiral detected for current channel:", spiralDetected);
         return {
-          ok: true,
-          pageType,
-          blocked: false,  // Don't block, but show nudge
-          scope: "none",
-          reason: "spiral_detected",
+          ok: true, pageType, blocked: false, scope: "none", reason: "spiral_detected",
           spiralInfo: {
             channel: spiralDetected.channel,
             count: spiralDetected.count,
@@ -1901,11 +1542,9 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
             shortsVisits: Number(state.ft_short_visits_today || 0),
             shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
             shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
-            allowanceVideosLeft: Number(state.ft_allowance_videos_left || 1),
-            allowanceSecondsLeft: Number(state.ft_allowance_seconds_left || 600)
           },
           unlocked: await isTemporarilyUnlocked(Date.now()),
-          aiClassification: null  // Skip AI classification
+          aiClassification: null
         };
       }
     }
@@ -1917,23 +1556,17 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
   }
 
   // 7. AI Classification (Pro users only)
-  // Strategy: Search = logging only, Watch = primary action point (block/warn)
   let aiClassification = null;
   if (effectivePlan === "pro") {
     if (pageType === "SEARCH" && url) {
-      // Search classification: Log only (no blocking)
-      // This helps with context but doesn't block search results
       try {
         const urlObj = new URL(url);
         const searchQuery = urlObj.searchParams.get("search_query");
         if (searchQuery) {
-          // Classify search query for logging/context only
           const searchClassification = await classifyContent(decodeURIComponent(searchQuery), "search");
           if (searchClassification) {
-            // Store classification result for dev panel/logging only (with new schema)
             await setLocal({
               ft_last_search_classification: {
-                // New schema fields (full)
                 category_primary: searchClassification.category_primary,
                 category_secondary: searchClassification.category_secondary,
                 distraction_level: searchClassification.distraction_level,
@@ -1943,7 +1576,6 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
                 reasons: searchClassification.reasons,
                 suggestions_summary: searchClassification.suggestions_summary,
                 flags: searchClassification.flags,
-                // Old schema fields (for compatibility)
                 category: searchClassification.category,
                 allowed: searchClassification.allowed,
                 confidence: searchClassification.confidence,
@@ -1951,50 +1583,35 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
                 tags: searchClassification.tags,
                 block_reason_code: searchClassification.block_reason_code,
                 action_hint: searchClassification.action_hint,
-                allowance_cost: searchClassification.allowance_cost,
-                // Metadata
                 query: searchQuery,
                 timestamp: Date.now(),
               },
             });
-            LOG("AI Search Classification (logging only):", { query: searchQuery.substring(0, 30), ...searchClassification });
-            // Don't set aiClassification - search doesn't trigger blocking
+            LOG("AI Search Classification (logging only):", { query: searchQuery.substring(0, 30) });
           }
         }
       } catch (e) {
         console.warn("[FT] Error extracting search query:", e.message || e);
       }
-    } else if (pageType === "WATCH" && videoMetadata && videoMetadata.title) {
+    } else if (pageType === "WATCH" && videoMetadata?.title) {
       const videoId = videoMetadata.video_id || extractVideoId(url);
       if (videoId) {
         const startTime = watchTrackingInfo?.startTime || Date.now();
         const classificationReady = watchTrackingInfo?.classification_ready === true;
         const elapsed = Date.now() - startTime;
-
         if (classificationReady || elapsed >= WATCH_CLASSIFICATION_DELAY_MS) {
           const requestTimestamp = Date.now();
           lastClassificationRequest = { videoId, timestamp: requestTimestamp };
-
           aiClassification = await classifyContent(videoMetadata, "watch");
-
           if (aiClassification && lastClassificationRequest.timestamp === requestTimestamp) {
             await persistWatchClassificationResult(videoMetadata, videoId, aiClassification);
-            LOG("AI Watch Classification:", { title: videoMetadata.title?.substring(0, 50) || "unknown", ...aiClassification });
+            LOG("AI Watch Classification:", { title: videoMetadata.title?.substring(0, 50) });
           } else if (aiClassification) {
-            LOG("AI Classification ignored (video changed during classification):", {
-              requestVideoId: videoId?.substring(0, 10),
-              currentVideoId: lastClassificationRequest.videoId?.substring(0, 10),
-              requestTime: requestTimestamp,
-              currentTime: lastClassificationRequest.timestamp,
-            });
+            LOG("AI Classification ignored (video changed during classification)");
             aiClassification = null;
           }
         } else {
-          LOG("Watch classification deferred (under threshold)", {
-            videoId: videoId.substring(0, 10),
-            elapsedMs: elapsed,
-            thresholdMs: WATCH_CLASSIFICATION_DELAY_MS,
-          });
+          LOG("Watch classification deferred", { elapsed, threshold: WATCH_CLASSIFICATION_DELAY_MS });
         }
       }
     }
@@ -2006,13 +1623,9 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
 
   // 9. Build context for evaluateBlock()
   const channel = (pageType === "WATCH" && videoMetadata) ? videoMetadata.channel : null;
-  // Disable channel blocking for free users (Pro feature)
-  const canRecord = state.ft_can_record !== false; // Default to true if not set (backward compat)
+  const canRecord = state.ft_can_record !== false;
   const blockedChannels = canRecord ? (state.ft_blocked_channels || []) : [];
-  if (!canRecord && state.ft_blocked_channels && state.ft_blocked_channels.length > 0) {
-    console.log("[FT] Channel blocking disabled (plan inactive)");
-  }
-  
+
   const ctx = {
     plan,
     config,
@@ -2025,81 +1638,26 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     now,
     channel,
     blockedChannels,
-    aiClassification, // Add AI classification to context
-    ft_extension_settings: rawSettings, // Keep raw settings for backward compatibility
-    effectiveSettings, // Plan-aware effective settings (used by rules.js)
+    ft_extension_settings: rawSettings,
+    effectiveSettings,
   };
 
-  // 10. Check AI classification and allowance (Pro users only)
+  // 10. Evaluate block + AI hard-block override
   let finalBlocked = false;
   let finalScope = "none";
   let finalReason = "ok";
 
-  // If AI classified content, use action_hint and allowance_cost from response
-  if (aiClassification) {
-    const actionHint = aiClassification.action_hint || "allow";
-    const allowanceCost = aiClassification.allowance_cost || { type: "none", amount: 0 };
-    const category = aiClassification.category;
+  const blockResult = evaluateBlock(ctx);
+  finalBlocked = blockResult.blocked;
+  finalScope = blockResult.scope;
+  finalReason = blockResult.reason;
 
-    // Use action_hint to determine blocking
-    if (actionHint === "block") {
-      finalBlocked = true;
-      // Set scope based on actual page type, not always "search"
-      if (pageType === "SEARCH") {
-        finalScope = "search";
-      } else if (pageType === "WATCH") {
-        finalScope = "watch"; // AI-blocked video
-      } else {
-        finalScope = "global"; // Fallback for other page types
-      }
-      finalReason = aiClassification.block_reason_code || "ai_distracting_blocked";
-      LOG("AI Content Blocked:", { category, reason: aiClassification.reason, actionHint, scope: finalScope });
-    } else if (actionHint === "soft-warn" || category === "distracting") {
-      // Check allowance for distracting content
-      const allowanceVideosLeft = Number(state.ft_allowance_videos_left || 1);
-      const allowanceSecondsLeft = Number(state.ft_allowance_seconds_left || 600);
-
-      if (pageType === "WATCH") {
-        // For watch pages: check video allowance
-        if (allowanceCost.type === "video" && allowanceVideosLeft >= allowanceCost.amount) {
-          // Allow but will decrement allowance when video ends (tracked separately)
-          finalBlocked = false;
-          finalScope = "none";
-          finalReason = "ai_allowance_used";
-          LOG("AI Distracting Video Allowed (will use allowance):", { remaining: allowanceVideosLeft, cost: allowanceCost.amount });
-        } else if (allowanceVideosLeft > 0) {
-          // Legacy support: if no allowance_cost specified, use old logic
-          finalBlocked = false;
-          finalScope = "none";
-          finalReason = "ai_allowance_used";
-        } else {
-          // Block - no allowance left
-          finalBlocked = true;
-          finalScope = "watch"; // Blocked video, not search
-          finalReason = "ai_distracting_no_allowance";
-          LOG("AI Distracting Video Blocked (no allowance):", { remaining: 0 });
-        }
-      } else if (pageType === "SEARCH") {
-        // Search pages: Don't block based on AI classification
-        // Search classification is for logging/context only
-        // Blocking happens on watch pages when user actually clicks a video
-        finalBlocked = false;
-        finalScope = "none";
-        finalReason = "ok";
-        LOG("AI Search Classification (no blocking):", { category, reason: aiClassification.reason });
-      }
-    } else {
-      // Allow - not distracting or action_hint is "allow"
-      finalBlocked = false;
-      finalScope = "none";
-      finalReason = "ok";
-    }
-  } else {
-    // Not distracting or no AI classification - use normal block logic
-    const blockResult = evaluateBlock(ctx);
-    finalBlocked = blockResult.blocked;
-    finalScope = blockResult.scope;
-    finalReason = blockResult.reason;
+  // AI hard-block overrides evaluateBlock if not already blocked
+  if (!finalBlocked && aiClassification?.action_hint === "block") {
+    finalBlocked = true;
+    finalScope = pageType === "SEARCH" ? "search" : pageType === "WATCH" ? "watch" : "global";
+    finalReason = aiClassification.block_reason_code || "ai_distracting_blocked";
+    LOG("AI Content Blocked:", { reason: finalReason, scope: finalScope });
   }
 
   // 11. If global block triggered, mark it
@@ -2107,14 +1665,41 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
     await setLocal({ ft_blocked_today: true });
   }
 
+  // 11.5. Evaluate thresholds (only if not blocked)
+  let thresholdAction = "none";
+  if (!finalBlocked) {
+    const {
+      ft_distracting_count_global = 0,
+      ft_distracting_time_global = 0,
+      ft_productive_count_global = 0,
+      ft_productive_time_global = 0,
+      ft_neutral_count_global = 0
+    } = await getLocal([
+      "ft_distracting_count_global",
+      "ft_distracting_time_global",
+      "ft_productive_count_global",
+      "ft_productive_time_global",
+      "ft_neutral_count_global"
+    ]);
+
+    thresholdAction = evaluateThresholds({
+      distracting_count: Number(ft_distracting_count_global || 0),
+      distracting_seconds: Number(ft_distracting_time_global || 0),
+      productive_count: Number(ft_productive_count_global || 0),
+      productive_seconds: Number(ft_productive_time_global || 0),
+      neutral_count: Number(ft_neutral_count_global || 0)
+    }, effectivePlan);
+  }
+
   // 12. Respond to content.js
   const resp = {
     ok: true,
     pageType,
     blocked: finalBlocked,
-    scope: finalScope,       // "none" | "shorts" | "search" | "global"
-    reason: finalReason,      // why blocked
-    plan: effectivePlan,      // Effective plan (pro/free) - handles trial expiry
+    scope: finalScope,
+    reason: finalReason,
+    plan: effectivePlan,
+    threshold_action: thresholdAction,
     counters: {
       searches: ctx.searchesToday,
       watchSeconds: ctx.watchSecondsToday,
@@ -2122,14 +1707,10 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
       shortsVisits: Number(state.ft_short_visits_today || 0),
       shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
       shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
-      allowanceVideosLeft: Number(state.ft_allowance_videos_left || 1),
-      allowanceSecondsLeft: Number(state.ft_allowance_seconds_left || 600)
     },
     unlocked,
     aiClassification: aiClassification ? {
-      // Include video_id for client-side validation
       video_id: lastClassificationRequest.videoId,
-      // New schema fields (full)
       category_primary: aiClassification.category_primary,
       category_secondary: aiClassification.category_secondary,
       distraction_level: aiClassification.distraction_level,
@@ -2139,7 +1720,6 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
       reasons: aiClassification.reasons,
       suggestions_summary: aiClassification.suggestions_summary,
       flags: aiClassification.flags,
-      // Old schema fields (for compatibility)
       category: aiClassification.category,
       allowed: aiClassification.allowed,
       confidence: aiClassification.confidence,
@@ -2147,10 +1727,9 @@ async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = n
       tags: aiClassification.tags,
       block_reason_code: aiClassification.block_reason_code,
       action_hint: aiClassification.action_hint,
-      allowance_cost: aiClassification.allowance_cost
     } : null
   };
 
   LOG("NAV:", { url, ...resp });
   return resp;
-}
+}}

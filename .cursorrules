@@ -53,6 +53,7 @@ Do not create aliases. Do not use synonyms.
 | Focus window end | `focus_window_end` | `window_end`, `focusEnd` |
 | Daily watch limit | `daily_time_limit_minutes` | `daily_limit`, `time_limit`, `watch_limit` |
 | Plan value (trial) | `pro_trial` | `trial`, `pro-trial`, `ProTrial` |
+| Extension storage key (trial plan) | `"trial"` | `"pro_trial"` — extension uses `"trial"`, DB uses `"pro_trial"` |
 | Plan value (paid) | `pro` | `paid`, `pro_paid`, `Pro` |
 | Plan value (free) | `free` | `Free`, `basic` |
 
@@ -162,7 +163,27 @@ Productive break resets productive counters only — not distracting counters.
 - Latest end: 22:00
 - Outside window → redirect to YouTube home with message
 
-### Reset rules
+### Search limits
+| Plan | Warning | Hard block |
+|---|---|---|
+| Free | Search 3 and 4 | Search 5 → redirect to YouTube home |
+| Pro | Search 13 and 14 | Search 15 → redirect to YouTube home |
+
+- Warning: small banner near the search bar, auto-dismisses after 5 seconds
+- Hard block: redirect to YouTube home with message
+- Resets daily at local midnight
+
+### Shorts behaviour
+- If `block_shorts = true` → immediate redirect to YouTube home on any Shorts page (takes priority over everything)
+- If `block_shorts = false` → Shorts feed into the distracting counter (always distracting, no AI call needed)
+- `ft_block_shorts_today` (Pro only) → manual block for rest of day, resets at midnight
+- Phase 11 (post-core): channel-based classification for Shorts via `channel_classifications` table
+
+### Recommendations toggle
+- `hide_recommendations = true` → hides sidebar and homepage feed via DOM
+- No counter logic. Simple on/off.
+
+
 - All counters reset daily at local midnight
 - After a distracting hard block → all counters reset next day
 - Distracting nudges may appear mid-video
@@ -342,6 +363,56 @@ The `settings` JSON object in `extension_data` must contain exactly these fields
 - Stripe webhook delayed → idempotent retry
 - Partial write → server state wins on next sync
 - No crashes, no silent data loss
+
+---
+
+---
+
+## SECTION 16 — DEAD CODE (DELETE, DO NOT TOUCH)
+
+These exist in the codebase and must be removed. Do not refactor. Do not repurpose. Delete.
+
+| Location | Dead code | Reason |
+|---|---|---|
+| `state.js` DEFAULTS | `ft_allowance_videos_left`, `ft_allowance_seconds_left` | Replaced by threshold system |
+| `state.js` resetShape | `ft_allowance_videos_left`, `ft_allowance_seconds_left` | Same |
+| `state.js` | `ft_reset_period` weekly/monthly logic | Daily reset only |
+| `state.js` | `ft_user_anti_goals` | Renamed to `ft_user_pitfalls` |
+| `background.js` | Allowance decrement on distracting video (~line 1234) | Replaced by evaluateThresholds |
+| `index.ts` | `STRIPE_PRICE_ANNUAL`, `STRIPE_PRICE_LIFETIME` | MVP monthly only |
+| `index.ts` | Reads `anti_goals` from DB | Rename to `pitfalls` |
+
+---
+
+## SECTION 17 — PATCH SEQUENCE (EXECUTE IN ORDER)
+
+One phase per Cursor session. Show diff before applying. Never combine phases.
+
+**Phase 1 — `rules.js`**
+Add `evaluateThresholds(counters, plan)` using existing constants from `constants.js`.
+Returns action codes: `none`, `nudge_10s`, `nudge_30s`, `hard_block`, `upgrade_prompt`, `productive_nudge_5s`, `productive_nudge_30s`, `productive_break`.
+Do not change `evaluateBlock()`. Do not change `CONFIG_BY_PLAN`.
+
+**Phase 2 — `state.js`**
+- Delete `ft_allowance_videos_left` and `ft_allowance_seconds_left` from DEFAULTS and resetShape
+- Delete `ft_user_anti_goals` from DEFAULTS, rename to `ft_user_pitfalls`
+- Delete weekly/monthly reset period logic — daily only
+- Rename `daily_limit_minutes` → `daily_time_limit_minutes` throughout
+
+**Phase 3 — `background.js`**
+- Delete allowance decrement logic (~line 1234)
+- Wire `evaluateThresholds()` into `handleNavigated()`
+- Update any reference to `ft_user_anti_goals` → `ft_user_pitfalls`
+
+**Phase 4 — `index.ts`**
+- Rename all `anti_goals` reads → `pitfalls`
+- Remove `STRIPE_PRICE_ANNUAL` and `STRIPE_PRICE_LIFETIME` references
+- Correct plan value handling: DB stores `pro_trial`, extension uses `trial`
+
+**Phase 5 — Database + coordinated push**
+- Rename column `anti_goals` → `pitfalls` in Supabase
+- Deploy Phase 4 server changes simultaneously
+- Verify with bootstrap endpoint after deploy
 
 ---
 

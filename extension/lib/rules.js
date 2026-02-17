@@ -5,7 +5,25 @@
 // ─────────────────────────────────────────────────────────────
 // IMPORTS
 // ─────────────────────────────────────────────────────────────
-import { PLAN_FREE, PLAN_PRO, PLAN_TRIAL, PLAN_TEST } from "./constants.js";
+import { 
+  PLAN_FREE, 
+  PLAN_PRO, 
+  PLAN_TRIAL, 
+  PLAN_TEST,
+  NEUTRAL_FREE_COUNT,
+  DISTRACTING_NUDGE_1_COUNT,
+  DISTRACTING_NUDGE_1_TIME,
+  DISTRACTING_NUDGE_2_COUNT,
+  DISTRACTING_NUDGE_2_TIME,
+  DISTRACTING_BREAK_COUNT,
+  DISTRACTING_BREAK_TIME,
+  PRODUCTIVE_NUDGE_1_COUNT,
+  PRODUCTIVE_NUDGE_1_TIME,
+  PRODUCTIVE_NUDGE_2_COUNT,
+  PRODUCTIVE_NUDGE_2_TIME,
+  PRODUCTIVE_BREAK_COUNT,
+  PRODUCTIVE_BREAK_TIME
+} from "./constants.js";
 
 // ─────────────────────────────────────────────────────────────
 // PLAN CONFIG (single source of truth for limits/flags)
@@ -98,11 +116,11 @@ export function evaluateBlock(ctx) {
 
   // Global daily time limit - read from effective settings (plan-aware)
   // Note: effectiveSettings should be computed by caller using getEffectiveSettings()
-  const dailyLimitMin = ctx.effectiveSettings?.daily_limit_minutes !== undefined
-    ? Number(ctx.effectiveSettings.daily_limit_minutes)
-    : (ctx.ft_extension_settings?.daily_limit_minutes !== undefined
-      ? Number(ctx.ft_extension_settings.daily_limit_minutes)
-      : (plan === "free" ? 60 : 90)); // Fallback defaults
+const dailyLimitMin = ctx.effectiveSettings?.daily_time_limit_minutes !== undefined
+    ? Number(ctx.effectiveSettings.daily_time_limit_minutes)
+    : (ctx.ft_extension_settings?.daily_time_limit_minutes !== undefined
+      ? Number(ctx.ft_extension_settings.daily_time_limit_minutes)
+      : (plan === "free" ? 60 : 90));
   if (dailyLimitMin > 0) {
     const limitSeconds = dailyLimitMin * 60;
     if (watchSecondsToday >= limitSeconds) {
@@ -136,4 +154,93 @@ export function evaluateBlock(ctx) {
 
   // Otherwise allow
   return { blocked: false, scope: "none", reason: REASONS.OK };
+}
+
+// ─────────────────────────────────────────────────────────────
+// evaluateThresholds(counters, plan)
+// Evaluates nudge and block thresholds based on video counters.
+// 
+// @param {Object} counters - Counter values
+// @param {number} counters.distracting_count - Distracting videos watched today
+// @param {number} counters.distracting_seconds - Distracting watch time today (seconds)
+// @param {number} counters.productive_count - Productive videos watched today
+// @param {number} counters.productive_seconds - Productive watch time today (seconds)
+// @param {number} counters.neutral_count - Neutral videos watched today
+// @param {string} plan - User plan: "free" | "trial" | "pro" | "test"
+// @returns {string} Action code: "none" | "nudge_10s" | "nudge_30s" | "hard_block" | "upgrade_prompt" | "productive_nudge_5s" | "productive_nudge_30s" | "productive_break"
+// ─────────────────────────────────────────────────────────────
+export function evaluateThresholds(counters, plan) {
+  const {
+    distracting_count = 0,
+    distracting_seconds = 0,
+    productive_count = 0,
+    productive_seconds = 0,
+    neutral_count = 0
+  } = counters || {};
+
+  // 1. TEST plan → always return "none"
+  if (plan === PLAN_TEST) {
+    return "none";
+  }
+
+  // 2. Neutral overflow: if neutral_count > NEUTRAL_FREE_COUNT, excess neutral videos
+  //    are added to effective distracting count
+  const excessNeutral = Math.max(0, neutral_count - NEUTRAL_FREE_COUNT);
+
+  // 3. Effective distracting count = distracting_count + excess neutral count
+  const effectiveDistractingCount = distracting_count + excessNeutral;
+
+  // 4. Distracting thresholds (count OR time, whichever hits first)
+  //    Check highest threshold first (hard block), then work down
+  
+  // Hard block threshold (5 videos OR 60 minutes)
+  if (effectiveDistractingCount >= DISTRACTING_BREAK_COUNT || 
+      distracting_seconds >= DISTRACTING_BREAK_TIME) {
+    if (plan === PLAN_FREE) {
+      return "upgrade_prompt";
+    }
+    // Trial or Pro
+    return "hard_block";
+  }
+
+  // 30s nudge threshold (4 videos OR 40 minutes)
+  if (effectiveDistractingCount >= DISTRACTING_NUDGE_2_COUNT || 
+      distracting_seconds >= DISTRACTING_NUDGE_2_TIME) {
+    if (plan === PLAN_FREE) {
+      return "upgrade_prompt";
+    }
+    // Trial or Pro
+    return "nudge_30s";
+  }
+
+  // 10s nudge threshold (3 videos OR 20 minutes)
+  if (effectiveDistractingCount >= DISTRACTING_NUDGE_1_COUNT || 
+      distracting_seconds >= DISTRACTING_NUDGE_1_TIME) {
+    // All plans get this nudge
+    return "nudge_10s";
+  }
+
+  // 5. Productive thresholds (count OR time, whichever hits first)
+  //    Only evaluated if distracting thresholds didn't trigger
+  
+  // 5-minute break threshold (7 videos OR 90 minutes)
+  if (productive_count >= PRODUCTIVE_BREAK_COUNT || 
+      productive_seconds >= PRODUCTIVE_BREAK_TIME) {
+    return "productive_break";
+  }
+
+  // 30s productive nudge threshold (5 videos OR 60 minutes)
+  if (productive_count >= PRODUCTIVE_NUDGE_2_COUNT || 
+      productive_seconds >= PRODUCTIVE_NUDGE_2_TIME) {
+    return "productive_nudge_30s";
+  }
+
+  // 5s productive nudge threshold (3 videos OR 30 minutes)
+  if (productive_count >= PRODUCTIVE_NUDGE_1_COUNT || 
+      productive_seconds >= PRODUCTIVE_NUDGE_1_TIME) {
+    return "productive_nudge_5s";
+  }
+
+  // 6. Default → "none"
+  return "none";
 }

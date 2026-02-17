@@ -130,7 +130,7 @@ const Login = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Google OAuth - Disabled for MVP, will enable later */}
-          {/* <Button
+          <Button
             variant="outline"
             className="w-full"
             onClick={handleGoogleLogin}
@@ -148,7 +148,7 @@ const Login = () => {
             <div className="relative flex justify-center text-xs uppercase">
               <span className="bg-card px-2 text-muted-foreground">Or continue with email</span>
             </div>
-          </div> */}
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (

@@ -9,7 +9,7 @@
 // {
 //   hide_recommendations: boolean,           // Hide sidebar/homepage recommendations
 //   shorts_mode: "hard" | "timed" | "off",  // Shorts blocking mode
-//   daily_limit_minutes: number,             // Daily watch time limit in minutes
+//   daily_time_limit_minutes: number,             // Daily watch time limit in minutes
 //   nudge_style: "gentle" | "assertive" | "firm", // Nudge message style
 //   focus_window_enabled: boolean,           // Enable focus window time restriction
 //   focus_window_start: string,              // Start time in HH:MM format (24h)
@@ -23,8 +23,6 @@
 // ─────────────────────────────────────────────────────────────
 import {
   PERIOD_DAILY,
-  PERIOD_WEEKLY,
-  PERIOD_MONTHLY,
   PLAN_FREE,
   PLAN_PRO,
   PLAN_TRIAL,
@@ -44,11 +42,10 @@ const DEFAULTS = {
   ft_trial_expires_at: null,      // ISO timestamp when trial expires (null if not trial)
   ft_days_left: null,             // number of days left in trial (null if not trial)
   ft_user_goals: [],              // user goals array (for AI classification)
-  ft_user_anti_goals: [],         // user anti-goals array (what distracts them)
+  ft_user_pitfalls: [],         // user pitfalls array (what distracts them)
   ft_user_distraction_channels: [], // user distraction channels array (channels that derail them)
   ft_onboarding_completed: false, // true = user has completed onboarding
   ft_data_owner_email: null,      // normalized email that owns the cached data
-  ft_reset_period: "daily",       // daily | weekly | monthly
   ft_last_reset_key: "",          // stores last date/week/month key
 
   // Activity counters
@@ -65,10 +62,6 @@ const DEFAULTS = {
   // Unlock feature (used for "pay to unlock")
   ft_unlock_until_epoch: 0,        // timestamp when temporary unlock expires
 
-  // AI Allowance (Pro users only - daily allowance for distracting content)
-  ft_allowance_videos_left: 1,     // daily allowance for distracting videos (default: 1)
-  ft_allowance_seconds_left: 600,  // daily allowance for distracting content in seconds (default: 10 minutes = 600 seconds)
-  
   // Current video tracking (for allowance decrement)
   ft_current_video_classification: null,  // { videoId, category, startTime, title } or null
   
@@ -143,22 +136,6 @@ function buildDailyKey(date = new Date()) {
   return `${y}-${m}-${d}`; // example: 2025-10-31
 }
 
-function buildWeeklyKey(date = new Date()) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7; // 1..7 (Mon..Sun)
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum); // move to Thursday
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  const w = String(weekNo).padStart(2, "0");
-  return `${d.getUTCFullYear()}-W${w}`; // example: 2025-W44
-}
-
-function buildMonthlyKey(date = new Date()) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`; // example: 2025-11
-}
-
 // ─────────────────────────────────────────────────────────────
 // RESET SHAPE
 // ─────────────────────────────────────────────────────────────
@@ -175,8 +152,6 @@ function resetShape() {
     ft_block_shorts_today: false,
     ft_pro_manual_block_shorts: false,
     ft_unlock_until_epoch: 0,
-    ft_allowance_videos_left: 1,      // Reset to default: 1 video
-    ft_allowance_seconds_left: 600,   // Reset to default: 10 minutes (600 seconds)
     ft_current_video_classification: null,  // Clear current video tracking
     // Behavior loop awareness - reset daily
     ft_distracting_count_global: 0,
@@ -196,24 +171,15 @@ function resetShape() {
 // Called often to check if the date/week/month changed.
 // If it has, resets all counters to zero.
 export async function maybeRotateCounters(now = new Date()) {
-  const { ft_reset_period, ft_last_reset_key } = await getLocal([
-    "ft_reset_period",
+  const { ft_last_reset_key } = await getLocal([
     "ft_last_reset_key"
   ]);
 
-  const period =
-    ft_reset_period === PERIOD_WEEKLY  ? PERIOD_WEEKLY  :
-    ft_reset_period === PERIOD_MONTHLY ? PERIOD_MONTHLY :
-    PERIOD_DAILY;
-
-  const currentKey =
-    period === PERIOD_WEEKLY  ? buildWeeklyKey(now)  :
-    period === PERIOD_MONTHLY ? buildMonthlyKey(now) :
-    buildDailyKey(now);
+  const currentKey = buildDailyKey(now);
 
   if (!ft_last_reset_key || ft_last_reset_key !== currentKey) {
-    // Save daily totals before reset (only for daily period)
-    if (period === PERIOD_DAILY && ft_last_reset_key) {
+    // Save daily totals before reset
+    if (ft_last_reset_key) {
       // Get current counters before reset
       const current = await getLocal([
         "ft_watch_seconds_today",
@@ -287,16 +253,6 @@ export async function incrementShortsSeconds(seconds = 1) {
   const next = current + seconds;
   await setLocal({ ft_shorts_seconds_today: next });
   return next;
-}
-
-// ─────────────────────────────────────────────────────────────
-// GET AND RESET PERIOD
-// ─────────────────────────────────────────────────────────────
-export async function getResetPeriod() {
-  const { ft_reset_period } = await getLocal(["ft_reset_period"]);
-  if (ft_reset_period === PERIOD_WEEKLY)  return PERIOD_WEEKLY;
-  if (ft_reset_period === PERIOD_MONTHLY) return PERIOD_MONTHLY;
-  return PERIOD_DAILY;
 }
 
 export async function resetCounters() {
@@ -433,7 +389,7 @@ async function ensureLocalOwnerEmail(expectedEmail) {
     ft_channel_spiral_count: {},
     ft_extension_settings: {},
     ft_user_goals: [],
-    ft_user_anti_goals: [],
+    ft_user_pitfalls: [],
     ft_user_distraction_channels: [],
     ft_watch_event_queue: [],
     ft_data_owner_email: normalized,
@@ -1047,9 +1003,13 @@ export function getEffectiveSettings(plan, rawSettings = {}) {
     effective.shorts_mode = rawSettings.block_shorts ? "hard" : "timed";
   }
   
-  // Convert daily_limit to daily_limit_minutes if needed
-  if (rawSettings.daily_limit !== undefined && rawSettings.daily_limit_minutes === undefined) {
-    effective.daily_limit_minutes = rawSettings.daily_limit;
+  // Convert daily_limit to daily_time_limit_minutes if needed (backward compatibility)
+  if (rawSettings.daily_limit !== undefined && rawSettings.daily_time_limit_minutes === undefined) {
+    effective.daily_time_limit_minutes = rawSettings.daily_limit;
+  }
+  // Also handle old daily_limit_minutes name for backward compatibility
+  if (rawSettings.daily_limit_minutes !== undefined && rawSettings.daily_time_limit_minutes === undefined) {
+    effective.daily_time_limit_minutes = rawSettings.daily_limit_minutes;
   }
   
   // Ensure shorts_mode exists (default to "timed" if not set)
@@ -1061,18 +1021,20 @@ export function getEffectiveSettings(plan, rawSettings = {}) {
     // Free plan: Force Free defaults, ignore Pro settings
     effective.shorts_mode = "hard";
     effective.hide_recommendations = true;
-    // Support both daily_limit and daily_limit_minutes for backward compatibility
-    effective.daily_limit_minutes = 60;
+    // Support both daily_limit and daily_time_limit_minutes for backward compatibility
+    effective.daily_time_limit_minutes = 60;
     effective.daily_limit = 60; // Legacy field name
+    effective.daily_limit_minutes = 60; // Legacy field name
     // Other settings can use defaults or be undefined
   } else if (plan === "trial" || plan === "pro") {
     // Pro/Trial: Use stored settings with sensible defaults
     effective.shorts_mode = effective.shorts_mode || "hard";
     effective.hide_recommendations = rawSettings.hide_recommendations ?? true;
-    // Support both daily_limit and daily_limit_minutes for backward compatibility
-    const dailyLimit = effective.daily_limit_minutes || rawSettings.daily_limit || 60;
-    effective.daily_limit_minutes = dailyLimit;
+    // Support both daily_limit and daily_time_limit_minutes for backward compatibility
+    const dailyLimit = effective.daily_time_limit_minutes || rawSettings.daily_limit_minutes || rawSettings.daily_limit || 60;
+    effective.daily_time_limit_minutes = dailyLimit;
     effective.daily_limit = dailyLimit; // Legacy field name
+    effective.daily_limit_minutes = dailyLimit; // Legacy field name
     // Apply all other settings from rawSettings
     effective.nudge_style = rawSettings.nudge_style || "firm";
     effective.focus_window_enabled = rawSettings.focus_window_enabled ?? true;
