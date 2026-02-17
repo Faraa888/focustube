@@ -23,6 +23,42 @@ const Login = () => {
       if (session?.user?.email) {
         // User is logged in (OAuth callback)
         await storeEmailForExtension(session.user.email);
+
+        // Ensure OAuth users exist in users table
+        let isNewOAuthUser = false;
+        let userPlan = "free";
+        const { data: existingUsers, error: existingUserError } = await supabase
+          .from("users")
+          .select("email, plan")
+          .eq("email", session.user.email)
+          .limit(1);
+
+        if (existingUserError) {
+          console.error("Error checking users row after OAuth login:", existingUserError);
+        } else if (!existingUsers || existingUsers.length === 0) {
+          const { error: insertUserError } = await supabase.from("users").insert({
+            email: session.user.email,
+            plan: "pro_trial",
+            trial_started_at: new Date().toISOString(),
+          });
+
+          if (insertUserError) {
+            console.error("Error creating users row after OAuth login:", insertUserError);
+          } else {
+            isNewOAuthUser = true;
+            userPlan = "pro_trial";
+          }
+        } else {
+          userPlan = existingUsers[0]?.plan || "free";
+        }
+
+        // Sync owner email + plan to extension storage when available
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+          chrome.storage.local.set({
+            ft_data_owner_email: session.user.email,
+            ft_plan: userPlan,
+          });
+        }
         
         // If coming from extension, close tab after delay
         if (returnToExtension) {
@@ -30,7 +66,7 @@ const Login = () => {
             window.close();
           }, 2000);
         } else {
-          navigate("/app/dashboard");
+          navigate(isNewOAuthUser ? "/goals" : "/app/dashboard");
         }
       }
     };
@@ -85,10 +121,29 @@ const Login = () => {
         return;
       }
 
-      // Get user email and store in chrome.storage for extension
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.email) {
-        await storeEmailForExtension(user.email);
+      // Get session user email and store for extension sync
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email) {
+        await storeEmailForExtension(session.user.email);
+
+        const { data: userRows, error: userRowsError } = await supabase
+          .from("users")
+          .select("plan")
+          .eq("email", session.user.email)
+          .limit(1);
+
+        if (userRowsError) {
+          console.error("Error fetching user plan after email login:", userRowsError);
+        }
+
+        const userPlan = userRows?.[0]?.plan || "free";
+
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+          chrome.storage.local.set({
+            ft_data_owner_email: session.user.email,
+            ft_plan: userPlan,
+          });
+        }
       }
 
       // If coming from extension, show success message and try to close

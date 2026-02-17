@@ -1,596 +1,556 @@
-# FocusTube Copy Overview
+# FocusTube Copy Overview v3
+**Focus:** Pain → Solution → Conversion  
+**Landing page tone:** Clear, direct, conversion-focused  
+**Extension tone:** Accountability through questions, not commands
 
-Complete copy reference for all frontend pages and extension overlays.
-Edit this file first, then apply changes to the codebase.
-
-**Rules for Cursor:**
-- All trial references = 30 days. Never 14.
-- No emojis anywhere in UI copy.
-- No fake social proof stats.
-- Brand name = FocusTube (one word, capital F, capital T).
-- Dynamic variables use `${variable}` syntax — preserve exactly.
-- Button loading states must match their default label (e.g. "Sign In" -> "Signing in...").
-
----
-
-## PART 1: EXTENSION POPUP
-**Files:** `extension/popup.html`, `extension/popup.js`
-
-### Header
-- **Title:** `FocusTube`
-- **Subtitle (dynamic):**
-  - Default: `Connect your account`
-  - Onboarding view: `Get started`
-  - Login view: `Sign in`
-  - Status view: `Account`
-
-### Onboarding View (shown when no account connected)
-- **Welcome text:** `Welcome to FocusTube. Start with full access — no card required. Try Pro free for 30 days. No pressure. Just focus.`
-- **Feature grid items:**
-  - `AI Filtering`
-  - `Channel Blocking`
-  - `30-Day Free Trial`
-  - `Insight Dashboard`
-  - `Custom Focus Goals`
-  - `Time Limits`
-  - `Shorts Control`
-  - `Focus Window`
-  - `Private Journal`
-- **Buttons:**
-  - `Start 30-Day Trial`
-  - `Sign In`
-  - `Continue with Free`
-
-### Login Form
-- **Label:** `Email address`
-- **Input placeholder:** `you@example.com`
-- **Button:** `Connect Account`
-- **Button loading state:** `Connecting...`
-- **Helper text:** `Don't have an account? Sign up` (links to signup page)
-- **Back button:** `Back`
-
-### Status View (logged in)
-- **Status indicator:** checkmark
-- **Email display:** Shows user's email
-- **Plan display:** `Plan: ${PLAN}` (values: FREE, PRO, TRIAL)
-- **Trial banner (shown when plan = TRIAL):**
-  - Title: `Pro trial: ${daysLeft} day(s) left`
-  - Subtitle: `Keep AI filtering, channel blocking, and insights by upgrading.`
-  - Button: `Upgrade`
-- **Button:** `Manage Account`
-
-### Validation and Error Messages
-- `Please enter your email address`
-- `Please enter a valid email address`
-- `Connecting...`
-- `Connected! Welcome, ${email}`
-- `Cannot connect to server. Please check your internet connection.`
-- `Email not found. Please sign up first.`
-- `Error opening website. Please visit the website to manage your account.`
+**Rules:**
+- Every line earns its place — cut fluff
+- Trial = 30 days, always
+- No emojis
+- Brand = FocusTube (one word, F and T capitalised)
+- Extension copy asks questions, doesn't lecture
 
 ---
 
-## PART 2: EXTENSION OVERLAYS
-**File:** `extension/content/content.js`
+## PART 1: LANDING PAGE (Home.tsx)
 
-### 1. Shorts Block Overlay (Free plan)
-Shown when a Free user visits a Shorts page and Block Shorts toggle is on.
-- **Title:** `FocusTube Active`
-- **Message:** `Shorts are blocked on the Free plan. Upgrade to Pro to unlock Shorts with smart filters and focus tracking.`
-- **Buttons:**
-  - `Back to Home`
-  - `Upgrade to Pro`
+### Hero Section
+- **Badge:** `Try free for 30 days. No card.`
+- **Headline:** `You don't lack willpower. You lack guardrails.`
+- **Subheadline:** `FocusTube adds friction where you spiral and clarity when you drift — so YouTube stops wasting your time.`
+- **Primary CTA:** `Start Free Trial`
+- **Secondary CTA:** `See How It Works`
 
-### 2. Onboarding Overlay (first-time users, not signed in)
-Shown once when extension is installed and no account is connected.
-- **Title:** `Welcome to FocusTube`
-- **Intro:** `Sign in to unlock Pro features and take control of your YouTube habits.`
-- **Instructions:**
-  - Header: `Click the FocusTube icon in your browser toolbar to:`
-  - Items:
-    - `Start your 30-day free Pro trial`
-    - `Sign in to an existing account`
-    - `Continue with the Free plan`
-- **Button:** `Got it`
+### Problem Section
+- **Headline:** `You've tried everything.`
+- **Body:** `Deleted the app. Blocked Shorts. Unsubscribed. Logged out. And yet — 40 minutes gone on a Tuesday night watching something you didn't plan to watch. The problem isn't you. It's that YouTube is built to pull you in. FocusTube adds the friction YouTube won't.`
 
-### 3. Distracting Content — 10s Nudge
-Shown mid-video at 3 distracting videos OR 20 minutes. Video pauses. Auto-dismisses after 10 seconds.
-- **Title:** `Still on track?`
-- **Message:** `You've watched ${count} distracting videos today.`
-- **Countdown:** `${seconds}s`
-- **Buttons:**
-  - `Continue`
-  - `Add Note`
+### How It Works
+- **Headline:** `Three steps. One minute.`
+- **Step 1 Title:** `Install the extension`
+- **Step 1 Body:** `One click. Works on Chrome, Edge, Brave.`
+- **Step 2 Title:** `Set your focus goals`
+- **Step 2 Body:** `Tell FocusTube what you're working on and what pulls you off track. Takes 30 seconds.`
+- **Step 3 Title:** `Browse with limits`
+- **Step 3 Body:** `FocusTube tracks patterns, blocks distractions, and nudges you back when you drift.`
 
-### 4. Distracting Content — 30s Nudge
-Shown mid-video at 4 distracting videos OR 40 minutes. Video pauses. Auto-dismisses after 30 seconds.
-- **Title:** `Check in with yourself.`
-- **Message:** `You've watched ${count} distracting videos today. Is this what you planned to do?`
-- **Countdown:** `${seconds}s`
-- **Buttons:**
-  - `Continue`
-  - `Add Note`
+### What It Does
+- **Headline:** `Smart limits. Not blanket blocks.`
+- **Subheadline:** `You stay in control until the pattern becomes a problem.`
 
-### 5. Distracting Content — Hard Block
-Shown at 5 distracting videos OR 60 minutes. Full screen. No dismiss. Resets next day.
-- **Title:** `YouTube blocked for today.`
-- **Message:** `You've hit your focus limit. Come back tomorrow.`
-- **Stats:**
-  - `Distracting videos today: ${count}`
-  - `Time watched today: ${timeText}`
-- **Button:** `Check Your Dashboard`
+**Feature 1:**
+- Title: `AI filters every video`
+- Body: `Classifies content as productive, neutral, or distracting based on your goals. No guessing.`
 
-### 6. Daily Time Limit — Hard Block
-Shown when daily_time_limit_minutes is reached. Full screen. No dismiss. Resets at midnight.
-- **Title:** `Daily limit reached.`
-- **Message:** `You've used your ${limitText} YouTube allowance for today. Come back tomorrow.`
-- **Stats:**
-  - `Time watched today: ${timeText}`
-  - `Videos watched: ${videoCount}`
-- **Button:** `Check Your Dashboard`
+**Feature 2:**
+- Title: `Graduated nudges`
+- Body: `Gentle warnings before hard blocks. You get 3 chances before YouTube locks for the day.`
 
-### 7. Focus Window Block
-Shown when user visits YouTube outside their defined Focus Window. Full screen. No dismiss.
-- **Title:** `Outside your focus window.`
-- **Message:** `Your YouTube window is ${startDisplay} to ${endDisplay}.`
-- **Note:** No buttons. Hard block until window opens.
+**Feature 3:**
+- Title: `Block channels permanently`
+- Body: `One click to block the channels that always pull you in. Syncs across devices.`
 
-### 8. Productive Content — 5s Nudge
-Shown after video ends or on navigation at 3 productive videos OR 30 minutes.
-- **Title:** `Good progress.`
-- **Message:** `You've watched ${count} productive videos. What will you apply?`
-- **Countdown:** `${seconds}s`
-- **Button:** `Add Note`
+**Feature 4:**
+- Title: `Set a focus window`
+- Body: `YouTube only opens during hours you choose. Outside that window — blocked.`
 
-### 9. Productive Content — 30s Nudge
-Shown after video ends or on navigation at 5 productive videos OR 60 minutes.
-- **Title:** `Time to apply what you learned.`
-- **Message:** `You've been watching productive content for a while. What's your next action?`
-- **Countdown:** `${seconds}s`
-- **Buttons:**
-  - `Continue`
-  - `Add Note`
+**Feature 5:**
+- Title: `Daily time limit`
+- Body: `Set your max watch time. When you hit it, YouTube locks until tomorrow.`
 
-### 10. Productive Content — 5-Minute Break
-Shown after video ends or on navigation at 7 productive videos OR 90 minutes. Non-dismissible until timer expires.
-- **Title:** `Take a 5-minute break.`
-- **Message:** `You've been learning for a while. Step away, reflect, then come back.`
-- **Countdown:** `${minutes}:${seconds}`
+**Feature 6:**
+- Title: `Track your patterns`
+- Body: `See your watch time, distraction trends, and focus score over time.`
 
-### 11. Channel Spiral Nudge — Daily (3 watches)
-Shown mid-video after 3 watches of the same channel in a day. Auto-dismisses after 10 seconds.
-- **Title:** `You keep coming back.`
-- **Message:** `You've watched ${count} videos from ${channel} today.`
-- **Countdown:** `${seconds}s`
-- **Buttons:**
-  - `Continue`
-  - `Block Channel`
-  - `Add Note`
+**Feature 7:**
+- Title: `Private journal`
+- Body: `Note what pulled you off track. No AI reads it unless you ask.`
 
-### 12. Channel Spiral Nudge — Weekly (5+ watches)
-Shown mid-video after 5+ watches of the same channel in the last 7 days. Full screen nudge.
-- **Title:** `Pattern detected.`
-- **Message:** `You've watched ${count} videos from ${channel} in the last 7 days.`
-- **Buttons:**
-  - `Continue`
-  - `Block Channel`
-  - `Add Note`
+**Feature 8:**
+- Title: `Control Shorts`
+- Body: `Block them outright or count them toward your daily distraction limit.`
 
-### 13. Channel Block Confirmation
-Shown when user clicks Block Channel.
-- **Title:** `Block channel?`
-- **Message:** `Blocking a distraction is a decision, not a failure.`
-- **Confirmation:** `Block "${channelName}"?`
-- **Buttons:**
-  - `Cancel`
-  - `Block Channel`
-
-### 14. Upgrade Prompt (Free users at Pro threshold)
-Shown instead of hard block when a Free user hits a Pro-only trigger.
-- **Title:** `You've hit a focus limit.`
-- **Message:** `Upgrade to Pro to enforce breaks, hard blocks, and daily limits.`
-- **Buttons:**
-  - `Upgrade to Pro`
-  - `Dismiss`
-
-### 15. Journal Entry
-Shown when user clicks Add Note from any nudge overlay.
-- **Title:** `What pulled you off track?`
-- **Subtitle:** `Watching ${videoTitle} from ${videoChannel}.`
-- **Textarea placeholder:** `What made you click on this? What were you hoping to find?`
-- **Buttons:**
-  - `Save`
-  - `Dismiss`
-- **Close:** `x`
-
----
-
-## PART 3: FRONTEND PAGES
-
-### PAGE 1: Home
-**File:** `frontend/src/pages/Home.tsx`
-
-#### Hero Section
-- **Badge:** `Free for 30 days. No card needed.`
-- **Headline:** `YouTube without the spiral.`
-- **Subheadline:** `FocusTube filters distractions, sets smart limits, and nudges you back to your goals — so you stop spiralling and start doing.`
-- **Buttons:**
-  - `Start Free Trial`
-  - `Install Extension`
-
-#### Problem Statement
-- **Headline:** `You don't need more willpower.`
-- **Body:** `You've deleted the app. You've blocked Shorts. You've unsubscribed from channels. And yet, you still fall down the rabbit hole. FocusTube helps you break the cycle — with smarter limits and real accountability.`
-
-#### How It Works
-- **Section title:** `How it works`
-- **Step 1:**
-  - Title: `Install`
-  - Description: `Add the extension to Chrome in one click. Setup takes 30 seconds.`
-- **Step 2:**
-  - Title: `Set your goals`
-  - Description: `Tell FocusTube what you're working on and what tends to pull you off track.`
-- **Step 3:**
-  - Title: `Browse with guardrails`
-  - Description: `FocusTube tracks your habits, filters distractions, and nudges you back when you drift.`
-
-#### Features
-- **Section title:** `What it does`
-- **Subtitle:** `Built for people who know better — but still spiral.`
-- **Feature cards:**
-  - Title: `Distraction Detection` / Description: `AI classifies every video as productive, neutral, or distracting — based on your goals.`
-  - Title: `Graduated Nudges` / Description: `Warnings before blocks. You stay in control until the pattern becomes a problem.`
-  - Title: `Channel Blocking` / Description: `Block the channels that pull you in. They stay blocked across all your devices.`
-  - Title: `Focus Window` / Description: `Set a time window for YouTube. Outside it, the site is blocked.`
-  - Title: `Daily Limits` / Description: `Set a daily watch limit. When you hit it, YouTube locks for the rest of the day.`
-  - Title: `Usage Insights` / Description: `See your watch patterns, focus score, and distraction trends over time.`
-  - Title: `Private Journal` / Description: `Capture what pulled you off track. No AI reads it unless you ask.`
-  - Title: `Shorts Control` / Description: `Block Shorts outright or let them feed into your distraction counter.`
-
-#### Closing CTA
-- **Title:** `Start watching YouTube intentionally.`
-- **Subtitle:** `30 days free. No card required.`
+### Final CTA
+- **Headline:** `Stop spiralling. Start shipping.`
+- **Subheadline:** `30 days free. No card required. Cancel anytime.`
 - **Button:** `Start Free Trial`
 
 ---
 
-### PAGE 2: Pricing
-**File:** `frontend/src/pages/Pricing.tsx`
+## PART 2: PRICING PAGE (Pricing.tsx)
 
-#### Header
-- **Title:** `Simple pricing.`
-- **Subtitle:** `Start free. Upgrade when you're ready.`
+### Header
+- **Headline:** `One plan. Simple pricing.`
+- **Subheadline:** `Try Pro free for 30 days. Downgrade anytime.`
 
-#### Free Plan
+### Free Plan Card
 - **Name:** `Free`
-- **Price:** `£0`
-- **Description:** `The basics, always free.`
+- **Price:** `£0 / month`
+- **Tagline:** `The basics.`
 - **Features:**
-  - `Shorts blocking toggle`
-  - `Hide recommendations toggle`
+  - `Block Shorts toggle`
+  - `Hide recommendations`
   - `Soft nudges`
-  - `Basic extension access`
-- **Button:** `Install Extension`
+- **Button:** `Get Started`
 
-#### Pro Plan
+### Pro Plan Card
 - **Name:** `Pro`
 - **Price:** `£4.99 / month`
-- **Description:** `For people serious about their focus.`
 - **Badge:** `30-day free trial`
+- **Tagline:** `For people serious about focus.`
 - **Features:**
-  - `Everything in Free`
+  - `Everything in Free, plus:`
   - `AI video classification`
-  - `Hard blocks and graduated nudges`
-  - `Daily time limit enforcement`
+  - `Hard blocks after 3 warnings`
+  - `Daily time limit`
   - `Focus Window`
-  - `Channel blocking (synced across devices)`
+  - `Block channels (synced)`
   - `Usage dashboard`
   - `Private journal`
-- **Button:** `Start 30-Day Trial`
-- **Note:** `No card required. Cancel anytime.`
+- **Button:** `Start Free Trial`
+- **Note:** `No card required.`
 
-#### FAQ
-- **Q:** `What happens after the free trial?`
-  **A:** `After 30 days, you move to the Free plan automatically. No charge. Upgrade anytime to keep Pro features.`
-- **Q:** `Can I switch plans?`
-  **A:** `Yes. Upgrade or downgrade at any time.`
-- **Q:** `Do you offer refunds?`
-  **A:** `Yes. Contact us within 30 days of your first charge and we will sort it.`
-- **Q:** `What payment methods do you accept?`
-  **A:** `Stripe handles all payments — Visa, Mastercard, Amex. Secure and encrypted.`
-- **Q:** `Does my subscription work across devices?`
-  **A:** `Yes. Your Pro subscription syncs across all devices where you are signed into Chrome.`
+### FAQ
+**Q:** `What happens after 30 days?`  
+**A:** `You downgrade to Free automatically. No charge. Upgrade anytime.`
 
-#### Closing CTA
-- **Title:** `Questions?`
-- **Message:** `We are here to help.`
-- **Button:** `Contact Support` (links to `mailto:support@focustube.co.uk`)
+**Q:** `Can I cancel?`  
+**A:** `Yes. Cancel anytime from settings.`
 
----
+**Q:** `Do you offer refunds?`  
+**A:** `Yes. Email us within 30 days of your first charge.`
 
-### PAGE 3: Signup
-**File:** `frontend/src/pages/Signup.tsx`
+**Q:** `What payment methods?`  
+**A:** `Visa, Mastercard, Amex via Stripe.`
 
-#### Header
-- **Title:** `Start your free trial`
-- **Subtitle:** `30 days of Pro. No card required.`
+**Q:** `Does it work on mobile or Safari?`  
+**A:** `Not yet. Chrome desktop only. Mobile and Safari are planned.`
 
-#### Form
-- **Email label:** `Email address`
-- **Email placeholder:** `you@example.com`
-- **Password label:** `Password`
-- **Password placeholder:** `Choose a password`
-- **Button:** `Create Account`
-- **Button loading:** `Creating account...`
-- **OAuth button:** `Continue with Google`
-- **Divider:** `or`
-- **Helper:** `Already have an account? Sign in`
+**Q:** `Does my subscription sync across devices?`  
+**A:** `Yes. Sign in on any Chrome device and your Pro features follow.`
 
-#### Errors
-- `Please enter your email address`
-- `Please enter a valid email address`
-- `Password must be at least 8 characters`
-- `An account with this email already exists`
-- `Something went wrong. Please try again.`
+### Support CTA
+- **Text:** `Questions?`
+- **Link:** `Email support@focustube.co.uk`
 
 ---
 
-### PAGE 4: Login
-**File:** `frontend/src/pages/Login.tsx`
+## PART 3: EXTENSION OVERLAYS
 
-#### Header
-- **Title:** `Welcome back`
-- **Subtitle:** `Sign in to your account`
-
-#### Form
-- **Email label:** `Email address`
-- **Email placeholder:** `you@example.com`
-- **Password label:** `Password`
-- **Password placeholder:** `Your password`
-- **Button:** `Sign In`
-- **Button loading:** `Signing in...`
-- **OAuth button:** `Continue with Google`
-- **Divider:** `or`
-- **Helper:** `Don't have an account? Start your free trial`
-
-#### Errors
-- `Please enter your email address`
-- `Please enter your password`
-- `Incorrect email or password`
-- `Something went wrong. Please try again.`
+### Principle
+Extension copy is **accountability-focused**. Ask questions, don't command. Make the user aware, don't lecture them.
 
 ---
 
-### PAGE 5: Goals (Onboarding)
-**File:** `frontend/src/pages/Goals.tsx`
+### 1. Distracting Nudge — 10s (3 videos / 20 min)
+Video pauses. Timer counts down from 10. Auto-dismisses.
 
-#### Header
-- **Title:** `Set your focus goals`
-- **Subtitle:** `This takes 60 seconds. It helps FocusTube work better for you.`
+- **Headline:** `Still on track?`
+- **Body:** `You've watched ${count} distracting videos today.`
+- **Timer:** `${seconds}s`
+- **Buttons:** `Continue` / `Add Note`
 
-#### Form Fields
-- **Goals label:** `What do you want to use YouTube for?`
-- **Goals placeholder:** `e.g. Learn coding, watch business content, study for exams`
-- **Goals helper:** `What should YouTube help you with?`
+---
+
+### 2. Distracting Nudge — 30s (4 videos / 40 min)
+Video pauses. Timer counts down from 30. Auto-dismisses.
+
+- **Headline:** `Is this what you planned to do?`
+- **Body:** `You've watched ${count} distracting videos. One more and YouTube locks for the day.`
+- **Timer:** `${seconds}s`
+- **Buttons:** `Continue` / `Add Note`
+
+---
+
+### 3. Hard Block (5 videos / 60 min)
+Full screen. No dismiss. Resets tomorrow.
+
+- **Headline:** `YouTube is locked for today.`
+- **Body:** `You hit your limit. Use the time on something that moves you forward.`
+- **Stats:**
+  - `${count} distracting videos today`
+  - `${timeText} watched`
+- **Button:** `View Dashboard`
+
+---
+
+### 4. Daily Time Limit Block
+Full screen. No dismiss. Resets at midnight.
+
+- **Headline:** `Daily limit reached.`
+- **Body:** `You've used your ${limitText}. Tomorrow is a fresh start.`
+- **Stats:**
+  - `Time watched: ${timeText}`
+  - `Videos watched: ${count}`
+- **Button:** `View Dashboard`
+
+---
+
+### 5. Focus Window Block
+Full screen. No dismiss. Shows when YouTube accessible again.
+
+- **Headline:** `Outside your focus window.`
+- **Body:** `YouTube opens again at ${endTime}.`
+- **No buttons**
+
+---
+
+### 6. Productive Nudge — 5s (3 videos / 30 min)
+Appears after video ends. Auto-dismisses after 5s.
+
+- **Headline:** `What will you apply?`
+- **Body:** `You've watched ${count} productive videos. Time to use what you learned.`
+- **Timer:** `${seconds}s`
+- **Button:** `Add Note`
+
+---
+
+### 7. Productive Nudge — 30s (5 videos / 60 min)
+Appears after video ends. Auto-dismisses after 30s.
+
+- **Headline:** `Time to build something.`
+- **Body:** `You've been learning for a while. What's your next action?`
+- **Timer:** `${seconds}s`
+- **Buttons:** `Continue` / `Add Note`
+
+---
+
+### 8. Productive Break (7 videos / 90 min)
+Full screen. Non-dismissible. 5-minute timer.
+
+- **Headline:** `Take 5 minutes.`
+- **Body:** `You've been watching for ${timeText}. Step away. Reflect. Then come back.`
+- **Timer:** `${minutes}:${seconds}`
+- **No buttons until timer ends**
+
+---
+
+### 9. Channel Spiral — Daily (3 watches same channel)
+Video pauses. Auto-dismisses after 10s.
+
+- **Headline:** `You keep coming back here.`
+- **Body:** `${count} videos from ${channel} today. Still intentional?`
+- **Timer:** `${seconds}s`
+- **Buttons:** `Continue` / `Block Channel` / `Add Note`
+
+---
+
+### 10. Channel Spiral — Weekly (5+ watches same channel)
+Full screen. Requires action.
+
+- **Headline:** `Pattern detected.`
+- **Body:** `${count} videos from ${channel} this week. Is this aligned with your goals?`
+- **Buttons:** `Continue` / `Block Channel` / `Add Note`
+
+---
+
+### 11. Block Channel Confirmation
+Appears when user clicks Block Channel.
+
+- **Headline:** `Block ${channelName}?`
+- **Body:** `Blocking a distraction is discipline, not failure.`
+- **Buttons:** `Cancel` / `Block Channel`
+
+---
+
+### 12. Shorts Block (Free plan, toggle on)
+Full screen redirect.
+
+- **Headline:** `Shorts blocked.`
+- **Body:** `Upgrade to Pro to track Shorts as part of your focus limits instead.`
+- **Buttons:** `Back to Home` / `Upgrade to Pro`
+
+---
+
+### 13. Search Warning Banner (Free: 3-4 searches, Pro: 13-14 searches)
+Small banner near search bar. Auto-dismisses after 5s.
+
+Free:
+- Search 3: `2 searches left today.`
+- Search 4: `1 search left today.`
+
+Pro:
+- Search 13: `2 searches left today.`
+- Search 14: `1 search left today.`
+
+---
+
+### 14. Search Block
+Redirect to YouTube home.
+
+Free:
+- **Headline:** `Search limit reached.`
+- **Body:** `You've used all 5 searches today. Upgrade to Pro for 15 daily searches.`
+- **Button:** `Upgrade to Pro`
+
+Pro:
+- **Headline:** `Search limit reached.`
+- **Body:** `You've used all 15 searches today. Tomorrow resets.`
+- **No button — just redirect**
+
+---
+
+### 15. Upgrade Prompt (Free user hits Pro threshold)
+Full screen. Shown instead of hard block.
+
+- **Headline:** `You've hit a Pro limit.`
+- **Body:** `Upgrade to enforce blocks, set time limits, and track your patterns.`
+- **Buttons:** `Upgrade to Pro` / `Dismiss`
+
+---
+
+### 16. Journal Entry
+Appears when user clicks Add Note.
+
+- **Headline:** `What pulled you off track?`
+- **Context:** `Watching: ${videoTitle} from ${channel}`
+- **Textarea placeholder:** `What made you click? What were you hoping to find?`
+- **Buttons:** `Save` / `Dismiss`
+- **Close:** `×`
+
+---
+
+## PART 4: EXTENSION POPUP
+
+### Logged Out / Onboarding View
+- **Welcome:** `Start with full access. Try Pro free for 30 days. No card required.`
+- **Feature grid:** (icons only, no text in grid)
+  - AI Filtering
+  - Channel Blocking
+  - 30-Day Trial
+  - Dashboard
+  - Focus Goals
+  - Time Limits
+  - Shorts Control
+  - Focus Window
+  - Journal
+- **Buttons:** `Start Trial` / `Sign In` / `Continue Free`
+
+### Logged In View
+- **Status:** Checkmark + email
+- **Plan:** `Plan: ${PLAN}`
+- **Trial banner (if trial):** `${daysLeft} days left in trial. Upgrade to keep Pro features.`
+- **Button:** `Manage Account`
+
+### Validation Messages
+- `Enter your email address`
+- `Enter a valid email`
+- `Connecting...`
+- `Connected.`
+- `Cannot connect. Check your internet.`
+- `Email not found. Sign up first.`
+
+---
+
+## PART 5: ONBOARDING (Goals.tsx)
+
+### Header
+- **Headline:** `What do you want from YouTube?`
+- **Subheadline:** `This takes 60 seconds. Helps FocusTube work better.`
+
+### Form
+- **Goals label:** `What should YouTube help you with?`
+- **Goals placeholder:** `e.g. Learn coding, study for exams, watch business content`
 - **Pitfalls label:** `What usually pulls you off track?`
 - **Pitfalls placeholder:** `e.g. Gaming videos, reaction content, vlogs`
 - **Pitfalls helper:** `Be honest — this is just for you.`
-- **Channels label:** `Any channels you want to block? (optional)`
+- **Channels label:** `Channels to block? (optional)`
 - **Channels placeholder:** `e.g. MrBeast, KSI, Sidemen`
-- **Channels helper:** `We will parse these and block them. You can add more later.`
+- **Channels helper:** `You can add more later.`
 
-#### Buttons
-- **Submit:** `Save and Install FocusTube`
-- **Submit loading:** `Saving...`
+### Buttons
+- **Submit:** `Save Goals`
+- **Loading:** `Saving...`
 - **Skip:** `Skip for now`
 
 ---
 
-### PAGE 6: Download
-**File:** `frontend/src/pages/Download.tsx`
+## PART 6: SIGNUP & LOGIN
 
-#### Header
-- **Badge:** `Free. Takes 30 seconds.`
-- **Title:** `Install FocusTube`
-- **Subtitle:** `Start using YouTube with intention in under a minute.`
+### Signup (Signup.tsx)
+- **Headline:** `Start your free trial`
+- **Subheadline:** `30 days of Pro. No card required.`
+- **Email label:** `Email`
+- **Email placeholder:** `you@example.com`
+- **Password label:** `Password`
+- **Password placeholder:** `Choose a password`
+- **Button:** `Create Account`
+- **Loading:** `Creating account...`
+- **OAuth:** `Continue with Google`
+- **Divider:** `or`
+- **Helper:** `Already have an account? Sign in`
 
-#### Install Card
-- **Title:** `Chrome Extension`
-- **Description:** `Works on Chrome, Edge, Brave, and other Chromium browsers.`
-- **Button:** `Add to Chrome`
-
-#### Setup Steps
-- **Title:** `Quick setup (3 steps)`
-- **Step 1:**
-  - Title: `Install the extension`
-  - Description: `Click "Add to Chrome" above, then confirm in the browser popup.`
-- **Step 2:**
-  - Title: `Set your goals`
-  - Description: `Tell FocusTube what you want from YouTube and what usually distracts you. Takes 60 seconds.`
-- **Step 3:**
-  - Title: `Start browsing YouTube`
-  - Description: `FocusTube runs automatically. Visit YouTube and it will start working.`
-
-#### Post-Install Tips
-- **Title:** `After installing`
-- **Tip 1:** `Pin the extension: Click the puzzle icon in Chrome, find FocusTube, and click the pin icon.`
-- **Tip 2:** `Create an account to sync your settings and access the dashboard.`
-- **Tip 3:** `Adjust settings anytime by clicking the extension icon.`
-
-#### Next Steps
-- **Text:** `Already installed?`
-- **Buttons:**
-  - `Create Account`
-  - `Open Dashboard`
-
-#### Support
-- **Text:** `Need help?`
-- **Link:** `Contact Support` (links to `mailto:support@focustube.co.uk`)
+### Login (Login.tsx)
+- **Headline:** `Welcome back`
+- **Subheadline:** `Sign in to continue`
+- **Email label:** `Email`
+- **Email placeholder:** `you@example.com`
+- **Password label:** `Password`
+- **Password placeholder:** `Your password`
+- **Button:** `Sign In`
+- **Loading:** `Signing in...`
+- **OAuth:** `Continue with Google`
+- **Divider:** `or`
+- **Helper:** `Don't have an account? Start free trial`
 
 ---
 
-### PAGE 7: Dashboard
-**File:** `frontend/src/pages/Dashboard.tsx`
+## PART 7: SETTINGS (Settings.tsx)
 
-#### Header
-- **Title:** `Your Focus Dashboard`
-- **Subtitle:** `Here is how your YouTube usage looks.`
-
-#### Time Range Controls
-- `Last 7 days`
-- `Last 30 days`
-- `All time`
-
-#### Metrics
-- **Focus Score label:** `Focus Score`
-- **Focus Score tooltip:** `Productive time minus distracting time, divided by total time.`
-- **Watch time label:** `Watch time by type`
-- **Channels label:** `Most watched channels`
-- **Themes label:** `Common distraction themes`
-- **Peak label:** `Peak distraction times`
-
-#### Free User Placeholder
-- **Title:** `Upgrade to see your dashboard`
-- **Message:** `Your usage data is being tracked. Upgrade to Pro to see your focus score, watch patterns, and distraction insights.`
-- **Button:** `Upgrade to Pro`
-
-#### Empty State
-- **Message:** `No data yet. Start watching YouTube and your stats will appear here.`
-
----
-
-### PAGE 8: Settings
-**File:** `frontend/src/pages/Settings.tsx`
-
-#### Header
-- **Title:** `Settings`
-- **Subtitle:** `Control how FocusTube works for you.`
-
-#### Goals Section
-- **Title:** `Your goals`
+### Goals Section
+- **Headline:** `Your goals`
 - **Goals label:** `What do you use YouTube for?`
-- **Pitfalls label:** `What usually pulls you off track?`
-- **Save button:** `Save Goals`
-- **Save loading:** `Saving...`
+- **Pitfalls label:** `What pulls you off track?`
+- **Button:** `Save Goals`
+- **Loading:** `Saving...`
 
-#### Blocked Channels Section
-- **Title:** `Blocked channels`
-- **Empty state:** `No channels blocked yet.`
-- **Add label:** `Block a channel`
+### Blocked Channels
+- **Headline:** `Blocked channels`
+- **Empty:** `No channels blocked yet.`
 - **Add placeholder:** `Channel name`
 - **Add button:** `Block`
 - **Remove button:** `Unblock`
 
-#### Toggles Section
-- **Title:** `Behaviour settings`
-- **Block Shorts label:** `Block Shorts`
-- **Block Shorts description:** `Redirect all Shorts to YouTube home.`
-- **Hide recommendations label:** `Hide recommendations`
-- **Hide recommendations description:** `Remove the recommended video sidebar.`
+### Toggles
+- **Headline:** `Behaviour`
+- **Block Shorts:** `Block Shorts` / `Redirect all Shorts to home.`
+- **Hide recs:** `Hide recommendations` / `Remove sidebar suggestions.`
 
-#### Time Settings Section
-- **Title:** `Time limits`
-- **Daily limit label:** `Daily watch limit`
-- **Daily limit description:** `Hard block YouTube when you hit this limit. 0 = disabled.`
-- **Daily limit unit:** `minutes (max 120)`
-- **Focus Window label:** `Focus Window`
-- **Focus Window description:** `YouTube is blocked outside this window.`
-- **Focus Window start label:** `From`
-- **Focus Window end label:** `To`
-- **Focus Window note:** `Max 6-hour window. Between 08:00 and 22:00 only.`
-- **Save button:** `Save Settings`
-- **Save loading:** `Saving...`
+### Time Limits
+- **Headline:** `Time limits`
+- **Daily limit:** `Daily watch limit` / `Hard block when reached. 0 = disabled.` / `minutes (max 120)`
+- **Focus Window:** `Focus Window` / `YouTube blocked outside this window.`
+- **Window start:** `From`
+- **Window end:** `To`
+- **Window note:** `Max 6 hours. Between 08:00 and 22:00 only.`
+- **Button:** `Save Settings`
+- **Loading:** `Saving...`
 
-#### Plan Section
-- **Title:** `Your plan`
-- **Free label:** `Free plan`
-- **Trial label:** `Pro trial — ${daysLeft} day(s) remaining`
-- **Pro label:** `Pro`
+### Plan
+- **Headline:** `Your plan`
+- **Free:** `Free plan`
+- **Trial:** `Pro trial — ${daysLeft} days left`
+- **Pro:** `Pro`
 - **Upgrade button:** `Upgrade to Pro`
-- **Upgrade note:** `£4.99 per month. Cancel anytime.`
+- **Note:** `£4.99/month. Cancel anytime.`
 
-#### Pro-locked setting message
-- **Message:** `This setting is available on Pro.`
+### Pro-Locked Setting
+- **Message:** `Available on Pro.`
 - **Button:** `Upgrade to Pro`
 
 ---
 
-### PAGE 9: Privacy Policy
-**File:** `frontend/src/pages/Privacy.tsx`
-
-- **Title:** `Privacy Policy`
-- **Data collection:** `FocusTube collects only what is necessary to help you stay intentional on YouTube. Most data is processed locally. Data is only sent to our servers for features like AI classification.`
-- **What we collect:**
-  - `Video titles and channel names (for AI classification)`
-  - `Time spent watching videos`
-  - `Your goals, pitfalls, and settings`
-  - `Email address for login and account management`
-- **How we use it:** `Your data powers nudges, spiral detection, and distraction tracking. It is never sold or used for ads.`
-- **Data security:** `All communication is encrypted over HTTPS. We follow industry-standard security practices.`
-- **Your rights:** `You can access, edit, or delete your data at any time. Contact us at support@focustube.co.uk.`
-- **Footer:** `Last updated: ${new Date().toLocaleDateString()}`
-
----
-
-### PAGE 10: Terms of Service
-**File:** `frontend/src/pages/Terms.tsx`
-
-- **Title:** `Terms of Service`
-- **Acceptance:** `By using FocusTube, you agree to these terms.`
-- **Service description:** `FocusTube is a browser extension that helps you use YouTube more intentionally. Some features use AI classification.`
-- **User responsibilities:**
-  - `You must be at least 13 years old to use FocusTube`
-  - `Keep your account credentials secure`
-  - `Do not tamper with or reverse engineer the extension`
-  - `Use the product ethically`
-- **Payments:** `Pro plans are billed monthly through Stripe. Cancel anytime. Refunds available within 30 days of your first charge.`
-- **Liability:** `FocusTube is provided as-is. We are not liable for indirect losses or side effects of content blocking.`
-- **Changes:** `We may update these terms. Continued use means you accept any updates.`
-- **Contact:** `Questions? Email support@focustube.co.uk`
-- **Footer:** `Last updated: ${new Date().toLocaleDateString()}`
-
----
-
-### PAGE 11: 404 Not Found
-**File:** `frontend/src/pages/NotFound.tsx`
-
-- **Title:** `404`
-- **Message:** `Page not found.`
-- **Link:** `Back to Home`
-
----
-
-## PART 4: SHARED COMPONENTS
+## PART 8: DOWNLOAD PAGE (Download.tsx)
 
 ### Header
-**File:** `frontend/src/components/Header.tsx`
+- **Badge:** `Takes 30 seconds.`
+- **Headline:** `Install FocusTube`
+- **Subheadline:** `Start using YouTube with intention in under a minute.`
 
-- **Logo:** `FocusTube`
-- **Nav links:** `Home`, `Pricing`, `Download`, `Dashboard` (authenticated), `Settings` (authenticated)
-- **Auth links:** `Sign In` (unauthenticated), `Sign Out` (authenticated)
-- **CTA button (unauthenticated):** `Start Free Trial`
-- **Sign out success:** `Signed out successfully.`
-- **Sign out error:** `Failed to sign out. Please try again.`
+### Install Card
+- **Headline:** `Chrome Extension`
+- **Body:** `Works on Chrome, Edge, Brave, and other Chromium browsers.`
+- **Button:** `Add to Chrome`
+
+### Setup
+- **Headline:** `3 steps`
+- **Step 1:** `Install` / `Click Add to Chrome, then confirm.`
+- **Step 2:** `Set goals` / `Tell FocusTube what you want from YouTube. 60 seconds.`
+- **Step 3:** `Browse` / `FocusTube runs automatically. Visit YouTube.`
+
+### Tips
+- **Headline:** `After installing`
+- **Tip 1:** `Pin the extension: Click the puzzle icon, find FocusTube, pin it.`
+- **Tip 2:** `Create account to sync settings and access dashboard.`
+- **Tip 3:** `Adjust settings anytime via extension icon.`
+
+### Next
+- **Text:** `Already installed?`
+- **Buttons:** `Create Account` / `Dashboard`
+
+### Support
+- **Text:** `Need help?`
+- **Link:** `support@focustube.co.uk`
+
+---
+
+## PART 9: PRIVACY POLICY (Privacy.tsx)
+
+### Header
+- **Headline:** `Privacy Policy`
+
+### What We Collect
+- Video titles and channel names (for AI classification)
+- Time spent watching
+- Your goals, pitfalls, and settings
+- Email for login
+
+### How We Use It
+Your data powers nudges, spiral detection, and distraction tracking. Never sold. Never used for ads.
+
+### Data Security
+All communication encrypted over HTTPS. Industry-standard security.
+
+### Your Rights
+Access, edit, or delete your data anytime. Email support@focustube.co.uk.
+
+### Data Retention
+Watch history: 60 days. Account data: until deletion.
+
+### Sub-processors
+We use Supabase (database), OpenAI (AI classification), Render (hosting), and Stripe (payments).
+
+### Legal Basis (GDPR)
+We process your data under legitimate interest to provide the service you signed up for.
+
+### Right to Erasure
+Email support@focustube.co.uk to delete your account and all data.
 
 ### Footer
-**File:** `frontend/src/components/Footer.tsx`
+Last updated: ${date}
 
-- **Logo:** `FocusTube`
-- **Tagline:** `Stop getting lost on YouTube. Focus on what matters.`
-- **Product links:** `Download`, `Pricing`
-- **Legal links:** `Privacy Policy`, `Terms of Service`
-- **Support:** `Questions? Email support@focustube.co.uk`
-- **Copyright:** `© ${new Date().getFullYear()} FocusTube. All rights reserved.`
+---
+
+## PART 10: TERMS OF SERVICE (Terms.tsx)
+
+### Header
+- **Headline:** `Terms of Service`
+
+### Acceptance
+By using FocusTube, you agree to these terms.
+
+### Service Description
+FocusTube is a Chrome extension that helps you use YouTube intentionally. Some features use AI.
+
+### User Responsibilities
+- Must be 13+ to use FocusTube
+- Keep credentials secure
+- Do not reverse engineer
+- Use ethically
+
+### Payments
+Pro plans billed monthly via Stripe. Cancel anytime. Refunds within 30 days of first charge.
+
+### Liability
+FocusTube provided as-is. Not liable for indirect losses.
+
+### Changes
+We may update terms. Continued use = acceptance.
+
+### Contact
+support@focustube.co.uk
+
+### Footer
+Last updated: ${date}
 
 ---
 
 ## CURSOR INSTRUCTIONS
 
-When applying copy changes from this file:
-- Match the exact string shown — do not paraphrase
-- Preserve all `${variable}` syntax exactly as written
-- Update both default and loading states for buttons
-- Do not add emojis to any copy
-- Do not add fake stats, ratings, or user counts
-- Trial is always 30 days — never 14
-- If a section is marked as removed, delete it from the code entirely
+When applying copy from this file:
+- Match strings exactly
+- Preserve ${variable} syntax
+- Trial = 30 days always
+- No emojis
+- Extension copy = questions, not commands
+- Landing page copy = pain → solution → action

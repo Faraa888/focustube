@@ -16,6 +16,7 @@ import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
 import { supabase } from "@/lib/supabase";
+import { removeEmailFromExtension } from "@/lib/extensionStorage";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,9 @@ const AppRoutes = () => {
             console.error('Error signing out:', error);
             return;
           }
+
+          // Clear extension auth keys
+          await removeEmailFromExtension();
 
           // Redirect to login
           navigate('/login');

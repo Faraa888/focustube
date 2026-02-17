@@ -120,6 +120,48 @@ function showStatus() {
   headerSubtitle.textContent = "Account";
 }
 
+const TRIAL_TOTAL_DAYS = 30;
+
+function calculateTrialDaysLeft(trialStartedAt) {
+  if (!trialStartedAt) return null;
+  const startedAt = new Date(trialStartedAt);
+  if (Number.isNaN(startedAt.getTime())) return null;
+
+  const now = new Date();
+  const elapsedMs = now.getTime() - startedAt.getTime();
+  const elapsedDays = Math.floor(elapsedMs / (1000 * 60 * 60 * 24));
+  return Math.max(0, TRIAL_TOTAL_DAYS - elapsedDays);
+}
+
+async function verifyBootstrapSession(email) {
+  try {
+    const response = await fetch(`${SERVER_URL}/extension/bootstrap?email=${encodeURIComponent(email)}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (response.status === 401) {
+      return { valid: false, reason: "unauthorized" };
+    }
+
+    if (!response.ok) {
+      throw new Error(`Bootstrap check failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data || data.exists === false || data.user === null) {
+      return { valid: false, reason: "no_user" };
+    }
+
+    return { valid: true, data };
+  } catch (error) {
+    console.warn("⚠️ [POPUP] Bootstrap session validation failed:", error);
+    return { valid: null, reason: "network_error" };
+  }
+}
+
 function renderTrialBanner(plan, daysLeft) {
   if (!trialBanner) return;
 
@@ -134,7 +176,7 @@ function renderTrialBanner(plan, daysLeft) {
 
   if (trialBannerTitle) {
     trialBannerTitle.textContent = hasValidDays
-      ? `Pro trial: ${numericDays} day${numericDays === 1 ? "" : "s"} left`
+      ? `Pro trial: ${numericDays} day(s) left`
       : "Pro trial active";
   }
 
@@ -149,9 +191,40 @@ function renderTrialBanner(plan, daysLeft) {
 async function loadCurrentEmail() {
   try {
     console.log("🔍 [POPUP] Checking for email in chrome.storage...");
-    const result = await chrome.storage.local.get(["ft_user_email", "ft_plan"]);
-    const email = result.ft_user_email;
-    const plan = result.ft_plan || "free";
+    let result = await chrome.storage.local.get([
+      "ft_user_email",
+      "ft_plan",
+      "ft_data_owner_email",
+      "ft_trial_started_at",
+      "ft_days_left",
+    ]);
+    const ownerEmail = result.ft_data_owner_email;
+    const plan = result.ft_plan;
+    const email = result.ft_user_email || ownerEmail;
+
+    // Popup-open gate: logged-in state requires BOTH owner email and plan.
+    if (!ownerEmail || !plan) {
+      showOnboarding();
+      return null;
+    }
+
+    // Validate owner session on popup open when owner email exists.
+    if (ownerEmail && ownerEmail.trim() !== "") {
+      const bootstrapSession = await verifyBootstrapSession(ownerEmail);
+      if (bootstrapSession.valid === false) {
+        await chrome.storage.local.remove(["ft_data_owner_email", "ft_plan"]);
+        showOnboarding();
+        return null;
+      }
+
+      if (bootstrapSession.valid === true && bootstrapSession.data?.trial_started_at) {
+        await chrome.storage.local.set({ ft_trial_started_at: bootstrapSession.data.trial_started_at });
+        result = {
+          ...result,
+          ft_trial_started_at: bootstrapSession.data.trial_started_at,
+        };
+      }
+    }
     
     console.log("🔍 [POPUP] Storage result:", { 
       hasEmail: !!email, 
@@ -174,10 +247,16 @@ async function loadCurrentEmail() {
           // User exists in database - show logged-in status
           console.log("✅ [POPUP] User verified, showing status screen");
           const currentPlan = planData.plan || plan;
-          const daysLeft =
-            typeof planData.days_left === "number"
-              ? planData.days_left
-              : (result.ft_days_left ?? null);
+          const trialStartedAt = planData.trial_started_at || result.ft_trial_started_at || null;
+          const calculatedDaysLeft = calculateTrialDaysLeft(trialStartedAt);
+          const daysLeft = currentPlan.toLowerCase() === "trial"
+            ? (
+                calculatedDaysLeft ??
+                (typeof planData.days_left === "number"
+                  ? planData.days_left
+                  : (result.ft_days_left ?? null))
+              )
+            : null;
           const canRecord = planData.can_record !== undefined ? planData.can_record : true;
           
           statusEmail.textContent = email;
@@ -200,9 +279,14 @@ async function loadCurrentEmail() {
           const updates = {};
           if (typeof planData.days_left === "number") {
             updates.ft_days_left = planData.days_left;
+          } else if (typeof daysLeft === "number") {
+            updates.ft_days_left = daysLeft;
           }
           if (planData.can_record !== undefined) {
             updates.ft_can_record = planData.can_record;
+          }
+          if (planData.trial_started_at) {
+            updates.ft_trial_started_at = planData.trial_started_at;
           }
           if (Object.keys(updates).length > 0) {
             await chrome.storage.local.set(updates);
@@ -229,7 +313,13 @@ async function loadCurrentEmail() {
         statusIcon.className = "status-icon connected";
         statusIcon.textContent = "✓";
         showStatus();
-        renderTrialBanner(plan, result.ft_days_left ?? null);
+        const fallbackDaysLeft = plan.toLowerCase() === "trial"
+          ? (
+              calculateTrialDaysLeft(result.ft_trial_started_at) ??
+              (result.ft_days_left ?? null)
+            )
+          : null;
+        renderTrialBanner(plan, fallbackDaysLeft);
         return email;
       }
     }
@@ -280,9 +370,11 @@ async function saveEmailAndSync(email) {
     if (planData && planData.exists !== false && planData.plan) {
       // Save plan
       await chrome.storage.local.set({ 
+        ft_data_owner_email: email.trim(),
         ft_plan: planData.plan.toLowerCase(),
         ft_days_left: planData.days_left || null,
         ft_trial_expires_at: planData.trial_expires_at || null,
+        ft_trial_started_at: planData.trial_started_at || null,
       });
       
       // Trigger background sync
