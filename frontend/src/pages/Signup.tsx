@@ -108,7 +108,7 @@ const Signup = () => {
       // Create user record in users table with trial plan
       const trialStart = new Date();
       const trialEnd = new Date();
-      trialEnd.setDate(trialEnd.getDate() + 14);
+      trialEnd.setDate(trialEnd.getDate() + 30);
 
       console.log("🚀 [SIGNUP] Creating user in database...");
       const { data: userData, error: dbError } = await supabase.from("users").upsert({

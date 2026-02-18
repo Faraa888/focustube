@@ -36,10 +36,15 @@ const Login = () => {
         if (existingUserError) {
           console.error("Error checking users row after OAuth login:", existingUserError);
         } else if (!existingUsers || existingUsers.length === 0) {
+          const trialStart = new Date();
+          const trialExpires = new Date(trialStart);
+          trialExpires.setDate(trialExpires.getDate() + 30);
+
           const { error: insertUserError } = await supabase.from("users").insert({
             email: session.user.email,
             plan: "pro_trial",
-            trial_started_at: new Date().toISOString(),
+            trial_started_at: trialStart.toISOString(),
+            trial_expires_at: trialExpires.toISOString(),
           });
 
           if (insertUserError) {
@@ -53,8 +58,8 @@ const Login = () => {
         }
 
         // Sync owner email + plan to extension storage when available
-        if (typeof chrome !== 'undefined' && chrome.storage) {
-          chrome.storage.local.set({
+        if (typeof Chrome !== 'undefined' && (Chrome as any).storage) {
+          (Chrome as any).storage.local.set({
             ft_data_owner_email: session.user.email,
             ft_plan: userPlan,
           });
@@ -104,66 +109,66 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
     setError("");
-
+  
     const formData = new FormData(e.currentTarget);
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
-
+  
     try {
       const { error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-
+  
       if (authError) {
         setError(authError.message);
         setLoading(false);
         return;
       }
-
-      // Get session user email and store for extension sync
+      
+      // Get session and fetch user plan BEFORE navigating
       const { data: { session } } = await supabase.auth.getSession();
+      let userPlan = "free";
+      
       if (session?.user?.email) {
+        // Store email for extension helper
         await storeEmailForExtension(session.user.email);
-
+        
         const { data: userRows, error: userRowsError } = await supabase
           .from("users")
           .select("plan")
           .eq("email", session.user.email)
           .limit(1);
-
-        if (userRowsError) {
-          console.error("Error fetching user plan after email login:", userRowsError);
-        }
-
-        const userPlan = userRows?.[0]?.plan || "free";
-
-        if (typeof chrome !== 'undefined' && chrome.storage) {
-          chrome.storage.local.set({
-            ft_data_owner_email: session.user.email,
-            ft_plan: userPlan,
-          });
+  
+        if (!userRowsError && userRows?.[0]) {
+          userPlan = userRows[0].plan;
         }
       }
-
-      // If coming from extension, show success message and try to close
+      
+      // Store in extension storage with correct plan
+      if (typeof Chrome !== 'undefined' && (Chrome as any).storage) {
+        (Chrome as any).storage.local.set({
+          ft_data_owner_email: session?.user?.email || email,
+          ft_plan: userPlan,
+        });
+      }
+  
+      // If coming from extension, show success and close
       if (returnToExtension) {
-        setError(""); // Clear any errors
-        // Show success - extension will detect email automatically
-        // Try to close window (only works if opened by extension)
+        setError("");
         setTimeout(() => {
           try {
             window.close();
           } catch (e) {
-            // Window might not close if not opened by extension - that's okay
             console.log("Could not close window (not opened by extension)");
           }
         }, 1500);
         return;
       }
-
-      // Normal login - redirect to dashboard
+  
+      // Navigate to dashboard AFTER everything is set up
       navigate("/app/dashboard");
+      
     } catch (err) {
       console.error("Login error:", err);
       setError("Something went wrong. Please try again.");

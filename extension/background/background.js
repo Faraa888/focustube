@@ -485,6 +485,404 @@ async function countForPageType(pageType) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// HANDLE NAVIGATION (main logic)
+// ─────────────────────────────────────────────────────────────
+async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = null }) {
+  // 1. Always make sure defaults + rotation are up-to-date
+  await ensureDefaults();
+  await maybeRotateCounters();
+
+  // 2. Sync plan from server (debounced to 5 minutes, but force on video/channel switch)
+  const currentVideoId = pageType === "WATCH" && videoMetadata?.video_id ? videoMetadata.video_id : null;
+  if (currentVideoId) {
+    const { ft_last_synced_video_id: lastSyncedVideoId } = await getLocal(["ft_last_synced_video_id"]);
+    const isNewVideo = lastSyncedVideoId !== currentVideoId;
+    if (isNewVideo) {
+      await setLocal({ ft_last_synced_video_id: currentVideoId });
+      syncPlanFromServer(true).catch((err) => {
+        console.warn("[FT] Plan sync failed on video switch:", err);
+      });
+    } else {
+      syncPlanFromServer().catch((err) => {
+        console.warn("[FT] Plan sync failed on navigation:", err);
+      });
+    }
+  } else {
+    syncPlanFromServer().catch((err) => {
+      console.warn("[FT] Plan sync failed on navigation:", err);
+    });
+  }
+
+  // 3. Count the page view
+  await countForPageType(pageType);
+
+  // 4. Handle video time tracking (finalize previous video if any)
+  const { ft_current_video_classification: prevVideo } = await getLocal(["ft_current_video_classification"]);
+  if (prevVideo && prevVideo.startTime) {
+    const { videoId, distraction_level, category_primary, startTime, video_title, channel_name } = prevVideo;
+    const currentVideoId = pageType === "WATCH" ? extractVideoId(url) : null;
+    const isNewVideo = pageType === "WATCH" && currentVideoId && currentVideoId !== videoId;
+    const isLeavingWatchPage = pageType !== "WATCH";
+    if (isLeavingWatchPage || isNewVideo) {
+      clearWatchClassificationTimer();
+      await finalizeVideoWatch(
+        videoId,
+        startTime,
+        distraction_level,
+        category_primary,
+        video_title || "Unknown",
+        channel_name || "Unknown"
+      );
+      await setLocal({ ft_current_video_classification: null });
+    }
+  }
+
+  // 5. Get current counters and unlock info
+  const state = await getLocal([
+    "ft_searches_today",
+    "ft_short_visits_today",
+    "ft_shorts_engaged_today",
+    "ft_watch_visits_today",
+    "ft_watch_seconds_today",
+    "ft_shorts_seconds_today",
+    "ft_blocked_today",
+    "ft_block_shorts_today",
+    "ft_pro_manual_block_shorts",
+    "ft_unlock_until_epoch",
+    "ft_blocked_channels",
+    "ft_blocked_channels_today",
+    "ft_spiral_detected",
+    "ft_extension_settings",
+    "ft_can_record"
+  ]);
+
+  // 6. Read plan + limits
+  const { plan, config } = await getPlanConfig();
+  const effectivePlan = await getEffectivePlan();
+  const rawSettings = state.ft_extension_settings || {};
+  const effectiveSettings = getEffectiveSettings(plan, rawSettings);
+
+  // 6.2. Apply block shorts setting if enabled
+  if (effectiveSettings.shorts_mode === "hard" && effectivePlan === "pro") {
+    if (!state.ft_pro_manual_block_shorts || !state.ft_block_shorts_today) {
+      await setLocal({ ft_pro_manual_block_shorts: true, ft_block_shorts_today: true });
+      state.ft_pro_manual_block_shorts = true;
+      state.ft_block_shorts_today = true;
+    }
+  } else if (effectiveSettings.shorts_mode !== "hard" && effectivePlan === "pro") {
+    if (state.ft_pro_manual_block_shorts || state.ft_block_shorts_today) {
+      await setLocal({ ft_pro_manual_block_shorts: false, ft_block_shorts_today: false });
+      state.ft_pro_manual_block_shorts = false;
+      state.ft_block_shorts_today = false;
+    }
+  }
+
+  // 6.4. Check focus window (Pro/Trial only)
+  const { ft_focus_window_enabled, ft_focus_window_start, ft_focus_window_end } = await getLocal([
+    "ft_focus_window_enabled",
+    "ft_focus_window_start",
+    "ft_focus_window_end"
+  ]);
+
+  if (ft_focus_window_enabled && effectivePlan === "pro") {
+    const now = new Date();
+    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const startTime = ft_focus_window_start || "13:00";
+    const endTime = ft_focus_window_end || "18:00";
+    const isWithinWindow = currentTime >= startTime && currentTime <= endTime;
+    if (!isWithinWindow) {
+      LOG("Outside focus window:", { currentTime, startTime, endTime, blocked: true });
+      return {
+        ok: true,
+        pageType,
+        blocked: true,
+        scope: "focus_window",
+        reason: "outside_focus_window",
+        plan,
+        counters: {
+          searches: Number(state.ft_searches_today || 0),
+          watchSeconds: Number(state.ft_watch_seconds_today || 0),
+          watchVisits: Number(state.ft_watch_visits_today || 0),
+          shortsVisits: Number(state.ft_short_visits_today || 0),
+          shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
+          shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
+        },
+        unlocked: await isTemporarilyUnlocked(Date.now()),
+        aiClassification: null,
+        focusWindowInfo: { start: startTime, end: endTime, current: currentTime }
+      };
+    }
+  }
+
+  // 6.5. Check channel blocking (early exit)
+  let channelToCheck = null;
+  if (pageType === "WATCH") {
+    channelToCheck = videoMetadata?.channel?.trim() || null;
+  }
+
+  if (pageType === "WATCH" && channelToCheck) {
+    const blockedChannels = state.ft_blocked_channels || [];
+    if (Array.isArray(blockedChannels) && blockedChannels.length > 0) {
+      const channelLower = channelToCheck.toLowerCase().trim();
+      const isBlocked = blockedChannels.some(b => b.toLowerCase().trim() === channelLower);
+      if (isBlocked) {
+        LOG("Channel blocked:", { channel: channelToCheck });
+        return {
+          ok: true, pageType, blocked: true, scope: "watch", reason: "channel_blocked", plan,
+          counters: {
+            searches: Number(state.ft_searches_today || 0),
+            watchSeconds: Number(state.ft_watch_seconds_today || 0),
+            watchVisits: Number(state.ft_watch_visits_today || 0),
+            shortsVisits: Number(state.ft_short_visits_today || 0),
+            shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
+            shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
+          },
+          unlocked: await isTemporarilyUnlocked(Date.now()),
+          aiClassification: null
+        };
+      }
+    }
+
+    // 6.6. Check temporary blocks
+    const blockedChannelsToday = state.ft_blocked_channels_today || [];
+    if (Array.isArray(blockedChannelsToday) && blockedChannelsToday.length > 0) {
+      const channelLower = channelToCheck.toLowerCase().trim();
+      const isBlockedToday = blockedChannelsToday.some(b => b.toLowerCase().trim() === channelLower);
+      if (isBlockedToday) {
+        LOG("Channel blocked for today:", { channel: channelToCheck });
+        return {
+          ok: true, pageType, blocked: true, scope: "watch", reason: "channel_blocked_today", plan,
+          counters: {
+            searches: Number(state.ft_searches_today || 0),
+            watchSeconds: Number(state.ft_watch_seconds_today || 0),
+            watchVisits: Number(state.ft_watch_visits_today || 0),
+            shortsVisits: Number(state.ft_short_visits_today || 0),
+            shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
+            shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
+          },
+          unlocked: await isTemporarilyUnlocked(Date.now()),
+          aiClassification: null
+        };
+      }
+    }
+
+    // 6.7. Check spiral detection flag
+    const spiralDetected = state.ft_spiral_detected;
+    if (spiralDetected?.channel && videoMetadata?.channel) {
+      const channelLower = videoMetadata.channel.trim().toLowerCase();
+      const spiralChannelLower = spiralDetected.channel.toLowerCase().trim();
+      if (channelLower === spiralChannelLower ||
+          channelLower.includes(spiralChannelLower) ||
+          spiralChannelLower.includes(channelLower)) {
+        LOG("🚨 Spiral detected for current channel:", spiralDetected);
+        return {
+          ok: true, pageType, blocked: false, scope: "none", reason: "spiral_detected",
+          spiralInfo: {
+            channel: spiralDetected.channel,
+            count: spiralDetected.count,
+            type: spiralDetected.type,
+            message: spiralDetected.message
+          },
+          plan,
+          counters: {
+            searches: Number(state.ft_searches_today || 0),
+            watchSeconds: Number(state.ft_watch_seconds_today || 0),
+            watchVisits: Number(state.ft_watch_visits_today || 0),
+            shortsVisits: Number(state.ft_short_visits_today || 0),
+            shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
+            shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
+          },
+          unlocked: await isTemporarilyUnlocked(Date.now()),
+          aiClassification: null
+        };
+      }
+    }
+  }
+
+  let watchTrackingInfo = null;
+  if (pageType === "WATCH" && videoMetadata?.video_id) {
+    watchTrackingInfo = await ensureWatchTrackingForVideo(videoMetadata, effectivePlan === "pro");
+  }
+
+  // 7. AI Classification (Pro users only)
+  let aiClassification = null;
+  if (effectivePlan === "pro") {
+    if (pageType === "SEARCH" && url) {
+      try {
+        const urlObj = new URL(url);
+        const searchQuery = urlObj.searchParams.get("search_query");
+        if (searchQuery) {
+          const searchClassification = await classifyContent(decodeURIComponent(searchQuery), "search");
+          if (searchClassification) {
+            await setLocal({
+              ft_last_search_classification: {
+                category_primary: searchClassification.category_primary,
+                category_secondary: searchClassification.category_secondary,
+                distraction_level: searchClassification.distraction_level,
+                confidence_category: searchClassification.confidence_category,
+                confidence_distraction: searchClassification.confidence_distraction,
+                goals_alignment: searchClassification.goals_alignment,
+                reasons: searchClassification.reasons,
+                suggestions_summary: searchClassification.suggestions_summary,
+                flags: searchClassification.flags,
+                category: searchClassification.category,
+                allowed: searchClassification.allowed,
+                confidence: searchClassification.confidence,
+                reason: searchClassification.reason,
+                tags: searchClassification.tags,
+                block_reason_code: searchClassification.block_reason_code,
+                action_hint: searchClassification.action_hint,
+                query: searchQuery,
+                timestamp: Date.now(),
+              },
+            });
+            LOG("AI Search Classification (logging only):", { query: searchQuery.substring(0, 30) });
+          }
+        }
+      } catch (e) {
+        console.warn("[FT] Error extracting search query:", e.message || e);
+      }
+    } else if (pageType === "WATCH" && videoMetadata?.title) {
+      const videoId = videoMetadata.video_id || extractVideoId(url);
+      if (videoId) {
+        const startTime = watchTrackingInfo?.startTime || Date.now();
+        const classificationReady = watchTrackingInfo?.classification_ready === true;
+        const elapsed = Date.now() - startTime;
+        if (classificationReady || elapsed >= WATCH_CLASSIFICATION_DELAY_MS) {
+          const requestTimestamp = Date.now();
+          lastClassificationRequest = { videoId, timestamp: requestTimestamp };
+          aiClassification = await classifyContent(videoMetadata, "watch");
+          if (aiClassification && lastClassificationRequest.timestamp === requestTimestamp) {
+            await persistWatchClassificationResult(videoMetadata, videoId, aiClassification);
+            LOG("AI Watch Classification:", { title: videoMetadata.title?.substring(0, 50) });
+          } else if (aiClassification) {
+            LOG("AI Classification ignored (video changed during classification)");
+            aiClassification = null;
+          }
+        } else {
+          LOG("Watch classification deferred", { elapsed, threshold: WATCH_CLASSIFICATION_DELAY_MS });
+        }
+      }
+    }
+  }
+
+  // 8. Check unlock status
+  const now = Date.now();
+  const unlocked = await isTemporarilyUnlocked(now);
+
+  // 9. Build context for evaluateBlock()
+  const channel = (pageType === "WATCH" && videoMetadata) ? videoMetadata.channel : null;
+  const canRecord = state.ft_can_record !== false;
+  const blockedChannels = canRecord ? (state.ft_blocked_channels || []) : [];
+
+  const ctx = {
+    plan,
+    config,
+    pageType,
+    searchesToday: Number(state.ft_searches_today || 0),
+    watchSecondsToday: Number(state.ft_watch_seconds_today || 0),
+    ft_blocked_today: state.ft_blocked_today || false,
+    ft_block_shorts_today: state.ft_block_shorts_today || false,
+    unlocked,
+    now,
+    channel,
+    blockedChannels,
+    ft_extension_settings: rawSettings,
+    effectiveSettings,
+  };
+
+  // 10. Evaluate block + AI hard-block override
+  let finalBlocked = false;
+  let finalScope = "none";
+  let finalReason = "ok";
+
+  const blockResult = evaluateBlock(ctx);
+  finalBlocked = blockResult.blocked;
+  finalScope = blockResult.scope;
+  finalReason = blockResult.reason;
+
+  // AI hard-block overrides evaluateBlock if not already blocked
+  if (!finalBlocked && aiClassification?.action_hint === "block") {
+    finalBlocked = true;
+    finalScope = pageType === "SEARCH" ? "search" : pageType === "WATCH" ? "watch" : "global";
+    finalReason = aiClassification.block_reason_code || "ai_distracting_blocked";
+    LOG("AI Content Blocked:", { reason: finalReason, scope: finalScope });
+  }
+
+  // 11. If global block triggered, mark it
+  if (finalBlocked && finalScope === "global" && !state.ft_blocked_today) {
+    await setLocal({ ft_blocked_today: true });
+  }
+
+  // 11.5. Evaluate thresholds (only if not blocked)
+  let thresholdAction = "none";
+  if (!finalBlocked) {
+    const {
+      ft_distracting_count_global = 0,
+      ft_distracting_time_global = 0,
+      ft_productive_count_global = 0,
+      ft_productive_time_global = 0,
+      ft_neutral_count_global = 0
+    } = await getLocal([
+      "ft_distracting_count_global",
+      "ft_distracting_time_global",
+      "ft_productive_count_global",
+      "ft_productive_time_global",
+      "ft_neutral_count_global"
+    ]);
+
+    thresholdAction = evaluateThresholds({
+      distracting_count: Number(ft_distracting_count_global || 0),
+      distracting_seconds: Number(ft_distracting_time_global || 0),
+      productive_count: Number(ft_productive_count_global || 0),
+      productive_seconds: Number(ft_productive_time_global || 0),
+      neutral_count: Number(ft_neutral_count_global || 0)
+    }, effectivePlan);
+  }
+
+  // 12. Respond to content.js
+  const resp = {
+    ok: true,
+    pageType,
+    blocked: finalBlocked,
+    scope: finalScope,
+    reason: finalReason,
+    plan: effectivePlan,
+    threshold_action: thresholdAction,
+    counters: {
+      searches: ctx.searchesToday,
+      watchSeconds: ctx.watchSecondsToday,
+      watchVisits: Number(state.ft_watch_visits_today || 0),
+      shortsVisits: Number(state.ft_short_visits_today || 0),
+      shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
+      shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
+    },
+    unlocked,
+    aiClassification: aiClassification ? {
+      video_id: lastClassificationRequest.videoId,
+      category_primary: aiClassification.category_primary,
+      category_secondary: aiClassification.category_secondary,
+      distraction_level: aiClassification.distraction_level,
+      confidence_category: aiClassification.confidence_category,
+      confidence_distraction: aiClassification.confidence_distraction,
+      goals_alignment: aiClassification.goals_alignment,
+      reasons: aiClassification.reasons,
+      suggestions_summary: aiClassification.suggestions_summary,
+      flags: aiClassification.flags,
+      category: aiClassification.category,
+      allowed: aiClassification.allowed,
+      confidence: aiClassification.confidence,
+      reason: aiClassification.reason,
+      tags: aiClassification.tags,
+      block_reason_code: aiClassification.block_reason_code,
+      action_hint: aiClassification.action_hint,
+    } : null
+  };
+
+  LOG("NAV:", { url, ...resp });
+  return resp;
+}
+// ─────────────────────────────────────────────────────────────
 // MESSAGE HANDLER: listens to content.js messages
 // ─────────────────────────────────────────────────────────────
 // Message handler function
@@ -1333,403 +1731,4 @@ async function sendWatchTimeToServer(videoId, durationSeconds, category) {
   } catch (error) {
     console.warn("[FT] Error sending watch time to server:", error?.message || error);
   }
-}
-
-// ─────────────────────────────────────────────────────────────
-// HANDLE NAVIGATION (main logic)
-// ─────────────────────────────────────────────────────────────
-async function handleNavigated({ pageType = "OTHER", url = "", videoMetadata = null }) {
-  // 1. Always make sure defaults + rotation are up-to-date
-  await ensureDefaults();
-  await maybeRotateCounters();
-
-  // 2. Sync plan from server (debounced to 5 minutes, but force on video/channel switch)
-  const currentVideoId = pageType === "WATCH" && videoMetadata?.video_id ? videoMetadata.video_id : null;
-  if (currentVideoId) {
-    const { ft_last_synced_video_id: lastSyncedVideoId } = await getLocal(["ft_last_synced_video_id"]);
-    const isNewVideo = lastSyncedVideoId !== currentVideoId;
-    if (isNewVideo) {
-      await setLocal({ ft_last_synced_video_id: currentVideoId });
-      syncPlanFromServer(true).catch((err) => {
-        console.warn("[FT] Plan sync failed on video switch:", err);
-      });
-    } else {
-      syncPlanFromServer().catch((err) => {
-        console.warn("[FT] Plan sync failed on navigation:", err);
-      });
-    }
-  } else {
-    syncPlanFromServer().catch((err) => {
-      console.warn("[FT] Plan sync failed on navigation:", err);
-    });
-  }
-
-  // 3. Count the page view
-  await countForPageType(pageType);
-
-  // 4. Handle video time tracking (finalize previous video if any)
-  const { ft_current_video_classification: prevVideo } = await getLocal(["ft_current_video_classification"]);
-  if (prevVideo && prevVideo.startTime) {
-    const { videoId, distraction_level, category_primary, startTime, video_title, channel_name } = prevVideo;
-    const currentVideoId = pageType === "WATCH" ? extractVideoId(url) : null;
-    const isNewVideo = pageType === "WATCH" && currentVideoId && currentVideoId !== videoId;
-    const isLeavingWatchPage = pageType !== "WATCH";
-    if (isLeavingWatchPage || isNewVideo) {
-      clearWatchClassificationTimer();
-      await finalizeVideoWatch(
-        videoId,
-        startTime,
-        distraction_level,
-        category_primary,
-        video_title || "Unknown",
-        channel_name || "Unknown"
-      );
-      await setLocal({ ft_current_video_classification: null });
-    }
-  }
-
-  // 5. Get current counters and unlock info
-  const state = await getLocal([
-    "ft_searches_today",
-    "ft_short_visits_today",
-    "ft_shorts_engaged_today",
-    "ft_watch_visits_today",
-    "ft_watch_seconds_today",
-    "ft_shorts_seconds_today",
-    "ft_blocked_today",
-    "ft_block_shorts_today",
-    "ft_pro_manual_block_shorts",
-    "ft_unlock_until_epoch",
-    "ft_blocked_channels",
-    "ft_blocked_channels_today",
-    "ft_spiral_detected",
-    "ft_extension_settings",
-    "ft_can_record"
-  ]);
-
-  // 6. Read plan + limits
-  const { plan, config } = await getPlanConfig();
-  const effectivePlan = await getEffectivePlan();
-  const rawSettings = state.ft_extension_settings || {};
-  const effectiveSettings = getEffectiveSettings(plan, rawSettings);
-
-  // 6.2. Apply block shorts setting if enabled
-  if (effectiveSettings.shorts_mode === "hard" && effectivePlan === "pro") {
-    if (!state.ft_pro_manual_block_shorts || !state.ft_block_shorts_today) {
-      await setLocal({ ft_pro_manual_block_shorts: true, ft_block_shorts_today: true });
-      state.ft_pro_manual_block_shorts = true;
-      state.ft_block_shorts_today = true;
-    }
-  } else if (effectiveSettings.shorts_mode !== "hard" && effectivePlan === "pro") {
-    if (state.ft_pro_manual_block_shorts || state.ft_block_shorts_today) {
-      await setLocal({ ft_pro_manual_block_shorts: false, ft_block_shorts_today: false });
-      state.ft_pro_manual_block_shorts = false;
-      state.ft_block_shorts_today = false;
-    }
-  }
-
-  // 6.4. Check focus window (Pro/Trial only)
-  const { ft_focus_window_enabled, ft_focus_window_start, ft_focus_window_end } = await getLocal([
-    "ft_focus_window_enabled",
-    "ft_focus_window_start",
-    "ft_focus_window_end"
-  ]);
-
-  if (ft_focus_window_enabled && effectivePlan === "pro") {
-    const now = new Date();
-    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    const startTime = ft_focus_window_start || "13:00";
-    const endTime = ft_focus_window_end || "18:00";
-    const isWithinWindow = currentTime >= startTime && currentTime <= endTime;
-    if (!isWithinWindow) {
-      LOG("Outside focus window:", { currentTime, startTime, endTime, blocked: true });
-      return {
-        ok: true,
-        pageType,
-        blocked: true,
-        scope: "focus_window",
-        reason: "outside_focus_window",
-        plan,
-        counters: {
-          searches: Number(state.ft_searches_today || 0),
-          watchSeconds: Number(state.ft_watch_seconds_today || 0),
-          watchVisits: Number(state.ft_watch_visits_today || 0),
-          shortsVisits: Number(state.ft_short_visits_today || 0),
-          shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
-          shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
-        },
-        unlocked: await isTemporarilyUnlocked(Date.now()),
-        aiClassification: null,
-        focusWindowInfo: { start: startTime, end: endTime, current: currentTime }
-      };
-    }
-  }
-
-  // 6.5. Check channel blocking (early exit)
-  let channelToCheck = null;
-  if (pageType === "WATCH") {
-    channelToCheck = videoMetadata?.channel?.trim() || null;
-  }
-
-  if (pageType === "WATCH" && channelToCheck) {
-    const blockedChannels = state.ft_blocked_channels || [];
-    if (Array.isArray(blockedChannels) && blockedChannels.length > 0) {
-      const channelLower = channelToCheck.toLowerCase().trim();
-      const isBlocked = blockedChannels.some(b => b.toLowerCase().trim() === channelLower);
-      if (isBlocked) {
-        LOG("Channel blocked:", { channel: channelToCheck });
-        return {
-          ok: true, pageType, blocked: true, scope: "watch", reason: "channel_blocked", plan,
-          counters: {
-            searches: Number(state.ft_searches_today || 0),
-            watchSeconds: Number(state.ft_watch_seconds_today || 0),
-            watchVisits: Number(state.ft_watch_visits_today || 0),
-            shortsVisits: Number(state.ft_short_visits_today || 0),
-            shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
-            shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
-          },
-          unlocked: await isTemporarilyUnlocked(Date.now()),
-          aiClassification: null
-        };
-      }
-    }
-
-    // 6.6. Check temporary blocks
-    const blockedChannelsToday = state.ft_blocked_channels_today || [];
-    if (Array.isArray(blockedChannelsToday) && blockedChannelsToday.length > 0) {
-      const channelLower = channelToCheck.toLowerCase().trim();
-      const isBlockedToday = blockedChannelsToday.some(b => b.toLowerCase().trim() === channelLower);
-      if (isBlockedToday) {
-        LOG("Channel blocked for today:", { channel: channelToCheck });
-        return {
-          ok: true, pageType, blocked: true, scope: "watch", reason: "channel_blocked_today", plan,
-          counters: {
-            searches: Number(state.ft_searches_today || 0),
-            watchSeconds: Number(state.ft_watch_seconds_today || 0),
-            watchVisits: Number(state.ft_watch_visits_today || 0),
-            shortsVisits: Number(state.ft_short_visits_today || 0),
-            shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
-            shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
-          },
-          unlocked: await isTemporarilyUnlocked(Date.now()),
-          aiClassification: null
-        };
-      }
-    }
-
-    // 6.7. Check spiral detection flag
-    const spiralDetected = state.ft_spiral_detected;
-    if (spiralDetected?.channel && videoMetadata?.channel) {
-      const channelLower = videoMetadata.channel.trim().toLowerCase();
-      const spiralChannelLower = spiralDetected.channel.toLowerCase().trim();
-      if (channelLower === spiralChannelLower ||
-          channelLower.includes(spiralChannelLower) ||
-          spiralChannelLower.includes(channelLower)) {
-        LOG("🚨 Spiral detected for current channel:", spiralDetected);
-        return {
-          ok: true, pageType, blocked: false, scope: "none", reason: "spiral_detected",
-          spiralInfo: {
-            channel: spiralDetected.channel,
-            count: spiralDetected.count,
-            type: spiralDetected.type,
-            message: spiralDetected.message
-          },
-          plan,
-          counters: {
-            searches: Number(state.ft_searches_today || 0),
-            watchSeconds: Number(state.ft_watch_seconds_today || 0),
-            watchVisits: Number(state.ft_watch_visits_today || 0),
-            shortsVisits: Number(state.ft_short_visits_today || 0),
-            shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
-            shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
-          },
-          unlocked: await isTemporarilyUnlocked(Date.now()),
-          aiClassification: null
-        };
-      }
-    }
-  }
-
-  let watchTrackingInfo = null;
-  if (pageType === "WATCH" && videoMetadata?.video_id) {
-    watchTrackingInfo = await ensureWatchTrackingForVideo(videoMetadata, effectivePlan === "pro");
-  }
-
-  // 7. AI Classification (Pro users only)
-  let aiClassification = null;
-  if (effectivePlan === "pro") {
-    if (pageType === "SEARCH" && url) {
-      try {
-        const urlObj = new URL(url);
-        const searchQuery = urlObj.searchParams.get("search_query");
-        if (searchQuery) {
-          const searchClassification = await classifyContent(decodeURIComponent(searchQuery), "search");
-          if (searchClassification) {
-            await setLocal({
-              ft_last_search_classification: {
-                category_primary: searchClassification.category_primary,
-                category_secondary: searchClassification.category_secondary,
-                distraction_level: searchClassification.distraction_level,
-                confidence_category: searchClassification.confidence_category,
-                confidence_distraction: searchClassification.confidence_distraction,
-                goals_alignment: searchClassification.goals_alignment,
-                reasons: searchClassification.reasons,
-                suggestions_summary: searchClassification.suggestions_summary,
-                flags: searchClassification.flags,
-                category: searchClassification.category,
-                allowed: searchClassification.allowed,
-                confidence: searchClassification.confidence,
-                reason: searchClassification.reason,
-                tags: searchClassification.tags,
-                block_reason_code: searchClassification.block_reason_code,
-                action_hint: searchClassification.action_hint,
-                query: searchQuery,
-                timestamp: Date.now(),
-              },
-            });
-            LOG("AI Search Classification (logging only):", { query: searchQuery.substring(0, 30) });
-          }
-        }
-      } catch (e) {
-        console.warn("[FT] Error extracting search query:", e.message || e);
-      }
-    } else if (pageType === "WATCH" && videoMetadata?.title) {
-      const videoId = videoMetadata.video_id || extractVideoId(url);
-      if (videoId) {
-        const startTime = watchTrackingInfo?.startTime || Date.now();
-        const classificationReady = watchTrackingInfo?.classification_ready === true;
-        const elapsed = Date.now() - startTime;
-        if (classificationReady || elapsed >= WATCH_CLASSIFICATION_DELAY_MS) {
-          const requestTimestamp = Date.now();
-          lastClassificationRequest = { videoId, timestamp: requestTimestamp };
-          aiClassification = await classifyContent(videoMetadata, "watch");
-          if (aiClassification && lastClassificationRequest.timestamp === requestTimestamp) {
-            await persistWatchClassificationResult(videoMetadata, videoId, aiClassification);
-            LOG("AI Watch Classification:", { title: videoMetadata.title?.substring(0, 50) });
-          } else if (aiClassification) {
-            LOG("AI Classification ignored (video changed during classification)");
-            aiClassification = null;
-          }
-        } else {
-          LOG("Watch classification deferred", { elapsed, threshold: WATCH_CLASSIFICATION_DELAY_MS });
-        }
-      }
-    }
-  }
-
-  // 8. Check unlock status
-  const now = Date.now();
-  const unlocked = await isTemporarilyUnlocked(now);
-
-  // 9. Build context for evaluateBlock()
-  const channel = (pageType === "WATCH" && videoMetadata) ? videoMetadata.channel : null;
-  const canRecord = state.ft_can_record !== false;
-  const blockedChannels = canRecord ? (state.ft_blocked_channels || []) : [];
-
-  const ctx = {
-    plan,
-    config,
-    pageType,
-    searchesToday: Number(state.ft_searches_today || 0),
-    watchSecondsToday: Number(state.ft_watch_seconds_today || 0),
-    ft_blocked_today: state.ft_blocked_today || false,
-    ft_block_shorts_today: state.ft_block_shorts_today || false,
-    unlocked,
-    now,
-    channel,
-    blockedChannels,
-    ft_extension_settings: rawSettings,
-    effectiveSettings,
-  };
-
-  // 10. Evaluate block + AI hard-block override
-  let finalBlocked = false;
-  let finalScope = "none";
-  let finalReason = "ok";
-
-  const blockResult = evaluateBlock(ctx);
-  finalBlocked = blockResult.blocked;
-  finalScope = blockResult.scope;
-  finalReason = blockResult.reason;
-
-  // AI hard-block overrides evaluateBlock if not already blocked
-  if (!finalBlocked && aiClassification?.action_hint === "block") {
-    finalBlocked = true;
-    finalScope = pageType === "SEARCH" ? "search" : pageType === "WATCH" ? "watch" : "global";
-    finalReason = aiClassification.block_reason_code || "ai_distracting_blocked";
-    LOG("AI Content Blocked:", { reason: finalReason, scope: finalScope });
-  }
-
-  // 11. If global block triggered, mark it
-  if (finalBlocked && finalScope === "global" && !state.ft_blocked_today) {
-    await setLocal({ ft_blocked_today: true });
-  }
-
-  // 11.5. Evaluate thresholds (only if not blocked)
-  let thresholdAction = "none";
-  if (!finalBlocked) {
-    const {
-      ft_distracting_count_global = 0,
-      ft_distracting_time_global = 0,
-      ft_productive_count_global = 0,
-      ft_productive_time_global = 0,
-      ft_neutral_count_global = 0
-    } = await getLocal([
-      "ft_distracting_count_global",
-      "ft_distracting_time_global",
-      "ft_productive_count_global",
-      "ft_productive_time_global",
-      "ft_neutral_count_global"
-    ]);
-
-    thresholdAction = evaluateThresholds({
-      distracting_count: Number(ft_distracting_count_global || 0),
-      distracting_seconds: Number(ft_distracting_time_global || 0),
-      productive_count: Number(ft_productive_count_global || 0),
-      productive_seconds: Number(ft_productive_time_global || 0),
-      neutral_count: Number(ft_neutral_count_global || 0)
-    }, effectivePlan);
-  }
-
-  // 12. Respond to content.js
-  const resp = {
-    ok: true,
-    pageType,
-    blocked: finalBlocked,
-    scope: finalScope,
-    reason: finalReason,
-    plan: effectivePlan,
-    threshold_action: thresholdAction,
-    counters: {
-      searches: ctx.searchesToday,
-      watchSeconds: ctx.watchSecondsToday,
-      watchVisits: Number(state.ft_watch_visits_today || 0),
-      shortsVisits: Number(state.ft_short_visits_today || 0),
-      shortsEngaged: Number(state.ft_shorts_engaged_today || 0),
-      shortsSeconds: Number(state.ft_shorts_seconds_today || 0),
-    },
-    unlocked,
-    aiClassification: aiClassification ? {
-      video_id: lastClassificationRequest.videoId,
-      category_primary: aiClassification.category_primary,
-      category_secondary: aiClassification.category_secondary,
-      distraction_level: aiClassification.distraction_level,
-      confidence_category: aiClassification.confidence_category,
-      confidence_distraction: aiClassification.confidence_distraction,
-      goals_alignment: aiClassification.goals_alignment,
-      reasons: aiClassification.reasons,
-      suggestions_summary: aiClassification.suggestions_summary,
-      flags: aiClassification.flags,
-      category: aiClassification.category,
-      allowed: aiClassification.allowed,
-      confidence: aiClassification.confidence,
-      reason: aiClassification.reason,
-      tags: aiClassification.tags,
-      block_reason_code: aiClassification.block_reason_code,
-      action_hint: aiClassification.action_hint,
-    } : null
-  };
-
-  LOG("NAV:", { url, ...resp });
-  return resp;
 }}

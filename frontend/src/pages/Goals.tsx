@@ -214,7 +214,7 @@ const Goals = () => {
         // User doesn't exist in users table (OAuth signup), create them
         const trialStart = new Date();
         const trialEnd = new Date();
-        trialEnd.setDate(trialEnd.getDate() + 14);
+        trialEnd.setDate(trialEnd.getDate() + 30);
 
         const { data: userData, error: createError } = await supabase.from("users").upsert({
           email: user.email,

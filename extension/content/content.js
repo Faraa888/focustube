@@ -1531,7 +1531,7 @@ async function showGlobalLimitOverlay(plan, counters) {
   if (checkUsageBtn) {
     checkUsageBtn.addEventListener("click", () => {
       // Open dashboard in new tab (matches settings link pattern)
-      window.open("https://focustube-beta.vercel.app/app/dashboard", "_blank");
+      window.open("https://localhost:8080/app/dashboard", "_blank");
     });
   }
 
@@ -4731,7 +4731,7 @@ function showTrialExpiringBanner(daysLeft) {
   banner.style.cursor = "pointer";
   banner.addEventListener("click", (e) => {
     if (e.target !== closeBtn) {
-      window.open("https://focustube-beta.vercel.app/app/pricing", "_blank");
+      window.open("https://localhost:8080/app/pricing", "_blank");
       saveBannerDismissal();
       banner.remove();
     }

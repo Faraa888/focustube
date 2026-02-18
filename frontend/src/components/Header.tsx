@@ -11,6 +11,9 @@ import { supabase } from "@/lib/supabase";
 import { removeEmailFromExtension } from "@/lib/extensionStorage";
 import { toast } from "@/hooks/use-toast";
 
+// Type declaration for Chrome extension API
+declare const chrome: any;
+
 const Header = () => {
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -19,7 +22,30 @@ const Header = () => {
 
   // Check auth status
   useEffect(() => {
+    const getOwnerEmailFromExtensionStorage = async (): Promise<string | null> => {
+      try {
+        if (typeof chrome === "undefined" || !chrome.storage?.local) {
+          return null;
+        }
+        const result = await chrome.storage.local.get(["ft_data_owner_email"]);
+        const ownerEmail = result.ft_data_owner_email;
+        return ownerEmail && ownerEmail.trim() !== "" ? ownerEmail.trim() : null;
+      } catch {
+        return null;
+      }
+    };
+
     const checkAuth = async () => {
+      // Source of truth first: extension owner email
+      const ownerEmail = await getOwnerEmailFromExtensionStorage();
+      if (ownerEmail) {
+        setIsAuthenticated(true);
+        setUserEmail(ownerEmail);
+        setLoading(false);
+        return;
+      }
+
+      // Fallback: Supabase session
       const { data: { session } } = await supabase.auth.getSession();
       setIsAuthenticated(!!session);
       setUserEmail(session?.user?.email ?? null);
@@ -29,12 +55,44 @@ const Header = () => {
     checkAuth();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const ownerEmail = await getOwnerEmailFromExtensionStorage();
+      if (ownerEmail) {
+        setIsAuthenticated(true);
+        setUserEmail(ownerEmail);
+        return;
+      }
       setIsAuthenticated(!!session);
       setUserEmail(session?.user?.email ?? null);
     });
 
-    return () => subscription.unsubscribe();
+    // Keep website header in sync when extension auth keys change
+    const onStorageChanged = (
+      changes: Record<string, any>,
+      namespace: string
+    ) => {
+      if (namespace !== "local" || !changes.ft_data_owner_email) return;
+
+      const newOwnerEmail = changes.ft_data_owner_email.newValue;
+      if (newOwnerEmail && typeof newOwnerEmail === "string" && newOwnerEmail.trim() !== "") {
+        setIsAuthenticated(true);
+        setUserEmail(newOwnerEmail.trim());
+      } else {
+        setIsAuthenticated(false);
+        setUserEmail(null);
+      }
+    };
+
+    if (typeof chrome !== "undefined" && chrome.storage?.onChanged) {
+      chrome.storage.onChanged.addListener(onStorageChanged);
+    }
+
+    return () => {
+      subscription.unsubscribe();
+      if (typeof chrome !== "undefined" && chrome.storage?.onChanged) {
+        chrome.storage.onChanged.removeListener(onStorageChanged);
+      }
+    };
   }, []);
 
   const handleLogout = async () => {

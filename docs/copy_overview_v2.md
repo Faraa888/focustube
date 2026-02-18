@@ -38,41 +38,21 @@
 - **Headline:** `Smart limits. Not blanket blocks.`
 - **Subheadline:** `You stay in control until the pattern becomes a problem.`
 
-**Feature 1:**
-- Title: `AI filters every video`
-- Body: `Classifies content as productive, neutral, or distracting based on your goals. No guessing.`
+**Feature 1: Reclaim Your Willpower**
+- Title: `Reclaim Your Willpower`
+- Body: `You know what distracts you. YouTube knows it too. Block your specific pitfalls—channels, shorts, recommendations—before temptation hits. Stop fighting the same battle every day.`
 
-**Feature 2:**
-- Title: `Graduated nudges`
-- Body: `Gentle warnings before hard blocks. You get 3 chances before YouTube locks for the day.`
+**Feature 2: See the Spiral Before It Traps You**
+- Title: `See the Spiral Before It Traps You`
+- Body: `Nudges hit during the spiral, not after. Gentle at first. Firm when you need it. Your dashboard shows exactly where you lose time. Awareness that actually changes behavior.`
 
-**Feature 3:**
-- Title: `Block channels permanently`
-- Body: `One click to block the channels that always pull you in. Syncs across devices.`
-
-**Feature 4:**
-- Title: `Set a focus window`
-- Body: `YouTube only opens during hours you choose. Outside that window — blocked.`
-
-**Feature 5:**
-- Title: `Daily time limit`
-- Body: `Set your max watch time. When you hit it, YouTube locks until tomorrow.`
-
-**Feature 6:**
-- Title: `Track your patterns`
-- Body: `See your watch time, distraction trends, and focus score over time.`
-
-**Feature 7:**
-- Title: `Private journal`
-- Body: `Note what pulled you off track. No AI reads it unless you ask.`
-
-**Feature 8:**
-- Title: `Control Shorts`
-- Body: `Block them outright or count them toward your daily distraction limit.`
+**Feature 3: YouTube on Your Terms**
+- Title: `YouTube on Your Terms`
+- Body: `You open YouTube "for 10 minutes" and it owns the next two hours. Set when YouTube exists and how much you watch. Intention becomes automatic.`
 
 ### Final CTA
 - **Headline:** `Stop spiralling. Start shipping.`
-- **Subheadline:** `30 days free. No card required. Cancel anytime.`
+- **Subheadline:** `30 days free. See the difference. Then decide.`
 - **Button:** `Start Free Trial`
 
 ---

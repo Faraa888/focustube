@@ -2,7 +2,7 @@
 // Handles extension popup UI and authentication
 
 const SERVER_URL = "https://focustube-backend-4xah.onrender.com";
-const FRONTEND_URL = "https://focustube-beta.vercel.app";
+const FRONTEND_URL = "http://localhost:8080";
 
 // DOM elements
 const onboarding = document.getElementById("onboarding");
@@ -202,8 +202,8 @@ async function loadCurrentEmail() {
     const plan = result.ft_plan;
     const email = result.ft_user_email || ownerEmail;
 
-    // Popup-open gate: logged-in state requires BOTH owner email and plan.
-    if (!ownerEmail || !plan) {
+    // Popup-open gate: owner email controls logged-in state.
+    if (!ownerEmail) {
       showOnboarding();
       return null;
     }
