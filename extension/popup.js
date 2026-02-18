@@ -2,7 +2,7 @@
 // Handles extension popup UI and authentication
 
 const SERVER_URL = "https://focustube-backend-4xah.onrender.com";
-const FRONTEND_URL = "http://localhost:8080";
+const FRONTEND_URL = "https://focustube.co.uk";
 
 // DOM elements
 const onboarding = document.getElementById("onboarding");
