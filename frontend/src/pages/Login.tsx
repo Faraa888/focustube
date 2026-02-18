@@ -5,9 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Chrome } from "lucide-react";
+import { Chrome as ChromeIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { storeEmailForExtension } from "@/lib/extensionStorage";
+
+// Type declaration for Chrome extension API
+declare const chrome: any;
 
 const Login = () => {
   const navigate = useNavigate();
@@ -42,7 +45,7 @@ const Login = () => {
 
           const { error: insertUserError } = await supabase.from("users").insert({
             email: session.user.email,
-            plan: "pro_trial",
+            plan: "trial",
             trial_started_at: trialStart.toISOString(),
             trial_expires_at: trialExpires.toISOString(),
           });
@@ -51,15 +54,15 @@ const Login = () => {
             console.error("Error creating users row after OAuth login:", insertUserError);
           } else {
             isNewOAuthUser = true;
-            userPlan = "pro_trial";
+            userPlan = "trial";
           }
         } else {
           userPlan = existingUsers[0]?.plan || "free";
         }
 
         // Sync owner email + plan to extension storage when available
-        if (typeof Chrome !== 'undefined' && (Chrome as any).storage) {
-          (Chrome as any).storage.local.set({
+        if (typeof chrome !== 'undefined' && (chrome as any).storage) {
+          (chrome as any).storage.local.set({
             ft_data_owner_email: session.user.email,
             ft_plan: userPlan,
           });
@@ -146,8 +149,8 @@ const Login = () => {
       }
       
       // Store in extension storage with correct plan
-      if (typeof Chrome !== 'undefined' && (Chrome as any).storage) {
-        (Chrome as any).storage.local.set({
+      if (typeof chrome !== 'undefined' && (chrome as any).storage) {
+        (chrome as any).storage.local.set({
           ft_data_owner_email: session?.user?.email || email,
           ft_plan: userPlan,
         });
@@ -197,7 +200,7 @@ const Login = () => {
             disabled={loading}
             data-evt="login_google"
           >
-            <Chrome className="mr-2 h-5 w-5" />
+            <ChromeIcon className="mr-2 h-5 w-5" />
             {loading ? "Loading..." : "Continue with Google"}
           </Button>
 
