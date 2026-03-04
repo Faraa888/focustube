@@ -22,14 +22,17 @@ const Login = () => {
   // Handle OAuth callback - check if user just logged in via OAuth
   useEffect(() => {
     const checkSession = async () => {
+      console.log('[OAuth] Step 1: Session check started');
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.email) {
-        // User is logged in (OAuth callback)
+        console.log('[OAuth] Step 2: Session found:', session.user.email);
         await storeEmailForExtension(session.user.email);
 
         // Ensure OAuth users exist in users table
         let isNewOAuthUser = false;
         let userPlan = "free";
+
+        console.log('[OAuth] Step 3: Checking if user exists...');
         const { data: existingUsers, error: existingUserError } = await supabase
           .from("users")
           .select("email, plan")
@@ -37,11 +40,16 @@ const Login = () => {
           .limit(1);
 
         if (existingUserError) {
-          console.error("Error checking users row after OAuth login:", existingUserError);
-        } else if (!existingUsers || existingUsers.length === 0) {
+          console.error("[OAuth] Error checking users row after OAuth login:", existingUserError);
+        } else {
+          console.log('[OAuth] Step 4: User exists:', (existingUsers?.length ?? 0) > 0);
+        }
+
+        if (!existingUserError && (!existingUsers || existingUsers.length === 0)) {
+          console.log('[OAuth] Step 5: Creating user...');
           const trialStart = new Date();
           const trialExpires = new Date(trialStart);
-          trialExpires.setDate(trialExpires.getDate() + 30);
+          trialExpires.setDate(trialExpires.getDate() + 14);
 
           const { error: insertUserError } = await supabase.from("users").insert({
             email: session.user.email,
@@ -51,21 +59,25 @@ const Login = () => {
           });
 
           if (insertUserError) {
-            console.error("Error creating users row after OAuth login:", insertUserError);
+            console.error("[OAuth] Error creating users row after OAuth login:", insertUserError);
           } else {
+            console.log('[OAuth] Step 6: User created successfully');
             isNewOAuthUser = true;
             userPlan = "trial";
           }
-        } else {
+        } else if (!existingUserError) {
           userPlan = existingUsers[0]?.plan || "free";
         }
 
         // Sync owner email + plan to extension storage when available
+        console.log('[OAuth] Step 7: Syncing to extension...');
         if (typeof chrome !== 'undefined' && (chrome as any).storage) {
           (chrome as any).storage.local.set({
             ft_data_owner_email: session.user.email,
             ft_plan: userPlan,
           });
+        } else {
+          console.log('[OAuth] chrome.storage not available (expected outside extension context)');
         }
         
         // If coming from extension, close tab after delay
@@ -74,8 +86,12 @@ const Login = () => {
             window.close();
           }, 2000);
         } else {
-          navigate(isNewOAuthUser ? "/goals" : "/app/dashboard");
+          const path = isNewOAuthUser ? "/goals" : "/app/dashboard";
+          console.log('[OAuth] Step 8: Navigating to:', path);
+          navigate(path);
         }
+      } else {
+        console.log('[OAuth] Step 2: No session found - user not logged in yet');
       }
     };
     checkSession();
@@ -88,7 +104,7 @@ const Login = () => {
     try {
       const redirectUrl = returnToExtension 
         ? `${window.location.origin}/login?return=extension`
-        : `${window.location.origin}/app/dashboard`;
+        : `${window.location.origin}/login`;
 
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: "google",

@@ -270,7 +270,7 @@ function showOnboardingOverlay() {
           <strong>Click the FocusTube extension icon</strong> (top right of your browser) to:
         </p>
         <ul style="margin-top:12px;padding-left:20px;font-size:14px;line-height:1.8;color:#ffffff;">
-          <li>Start your 30-day free Pro trial</li>
+          <li>Start your 14-day free Pro trial</li>
           <li>Sign in to an existing account</li>
           <li>Continue with Free plan</li>
         </ul>
@@ -4672,7 +4672,7 @@ async function shouldShowTrialExpiringBanner() {
 
 /**
  * Shows trial expiring banner (small, non-intrusive, auto-dismisses after 10s)
- * @param {number} daysLeft - Days remaining in trial (0 or 1)
+ * @param {number} daysLeft - Days remaining in trial (7, 4, 3, 2, or 1)
  */
 function showTrialExpiringBanner(daysLeft) {
   // Remove any existing banner
@@ -4842,7 +4842,7 @@ async function handleNavigation() {
     // Continue with normal navigation if check fails
   }
   
-  // Check if trial is expiring (0 or 1 days left) - show small banner
+  // Check if trial nudge should show (days 7, 4, 3, 2, 1 left) - show small banner
   try {
     if (isChromeContextValid()) {
       const { ft_plan, ft_days_left } = await chrome.storage.local.get([
@@ -4850,11 +4850,11 @@ async function handleNavigation() {
         "ft_days_left"
       ]);
       
-      // Show trial expiring banner if on trial with 0-1 days left
+      // Show trial upgrade nudge if on trial with 7, 4, 3, 2, or 1 days left
       // Note: We check ft_plan directly here because we need to know if user WAS on trial
       // (even if expired, we still want to show the banner)
       if (ft_plan === "trial" && typeof ft_days_left === "number") {
-        if (ft_days_left === 0 || ft_days_left === 1) {
+        if (ft_days_left === 7 || ft_days_left === 4 || ft_days_left === 3 || ft_days_left === 2 || ft_days_left === 1) {
           // Check timing rules (once per day, optionally again after 6 hours)
           const shouldShow = await shouldShowTrialExpiringBanner();
           if (shouldShow) {

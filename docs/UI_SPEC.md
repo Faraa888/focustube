@@ -1,0 +1,559 @@
+# UI_SPEC.md
+# FocusTube — UI Specification (Rebuild Reference)
+
+---
+
+## 1. DESIGN SYSTEM
+
+### Theme
+Dark-theme only. No light mode. No toggle.
+
+### Color Palette (CSS custom properties in `src/index.css`)
+
+| Token | HSL | Hex | Usage |
+|-------|-----|-----|-------|
+| `--background` | `0 0% 7%` | `#121212` | Page background |
+| `--foreground` | `0 0% 100%` | `#ffffff` | Body text |
+| `--card` | `0 0% 13%` | `#212121` | Card backgrounds |
+| `--card-foreground` | `0 0% 100%` | `#ffffff` | Text on cards |
+| `--primary` | `348 90% 48%` | `#e3093a` | CTAs, active states, brand |
+| `--primary-foreground` | `0 0% 100%` | `#ffffff` | Text on primary |
+| `--secondary` | `0 0% 16%` | `#292929` | Secondary buttons |
+| `--secondary-foreground` | `0 0% 100%` | `#ffffff` | Text on secondary |
+| `--muted` | `0 0% 20%` | `#333333` | Muted backgrounds |
+| `--muted-foreground` | `0 0% 70%` | `#b3b3b3` | Subdued text |
+| `--border` | `0 0% 20%` | `#333333` | All borders |
+| `--input` | `0 0% 16%` | `#292929` | Input backgrounds |
+| `--ring` | `348 90% 48%` | `#e3093a` | Focus rings |
+| `--destructive` | `0 84.2% 60.2%` | `#f56565` | Errors |
+
+**Data visualization colors (inline in chart components):**
+- Distracting: `#ed2b2b`
+- Neutral: `#ffb800`
+- Productive: `#00bb13`
+ 
+**Status colors (Tailwind utilities):**
+- Success: `text-green-500`
+- Warning: `text-yellow-500`
+- Error: `text-red-500`
+- Upgrade banner: `bg-yellow-500/10 border-yellow-500/30 text-yellow-500`
+
+### Typography
+System font stack (Tailwind default — no custom font import needed).
+
+| Usage | Classes |
+|-------|---------|
+| H1 hero | `text-5xl md:text-7xl font-bold` |
+| H2 sections | `text-3xl md:text-4xl font-bold` |
+| Card titles | `text-2xl font-semibold` |
+| Sub-headings | `text-xl font-semibold` |
+| Body | `text-xl text-muted-foreground` |
+| Labels | `text-sm font-medium` |
+| Captions | `text-xs text-muted-foreground` |
+| Brand name | `text-2xl font-bold text-primary` |
+
+### Spacing
+| Pattern | Value |
+|---------|-------|
+| Container padding | `px-4` |
+| Section vertical | `py-20` |
+| Hero top | `pt-32 pb-20` |
+| App page top margin | `mt-16` (clears 64px fixed header) |
+| Card padding | `p-6` |
+| Grid gap | `gap-6` or `gap-8` |
+| Form field spacing | `space-y-4` or `space-y-6` |
+
+### Border Radius
+| Class | Value |
+|-------|-------|
+| `rounded-lg` | `0.5rem` — cards, inputs, containers |
+| `rounded-md` | `0.375rem` — buttons |
+| `rounded-full` | `9999px` — badges |
+
+### Backgrounds
+- `bg-background` — all page roots
+- `bg-card` — card components
+- `bg-primary/10` — icon containers, info banners
+- `bg-muted/50` — hover states, info boxes
+- `bg-black/80 backdrop-blur-sm` — overlay locks
+- `bg-background/95 backdrop-blur-lg` — fixed header
+
+---
+
+## 2. COMPONENT LIBRARY
+
+**UI library:** shadcn/ui on Radix UI primitives. All components in `src/components/ui/`.
+
+**Icon library:** `lucide-react`
+
+### Button Variants
+| Variant | Classes | Usage |
+|---------|---------|-------|
+| `default` | `bg-primary text-primary-foreground hover:bg-primary/90` | Primary CTAs |
+| `destructive` | `bg-destructive text-destructive-foreground` | Dangerous actions |
+| `outline` | `border border-input bg-background hover:bg-accent` | Secondary actions |
+| `secondary` | `bg-secondary text-secondary-foreground` | Less prominent |
+| `ghost` | `hover:bg-accent hover:text-accent-foreground` | Icon buttons |
+| `link` | `text-primary underline-offset-4 hover:underline` | Inline links |
+
+**Button sizes:**
+- `default`: `h-10 px-4 py-2`
+- `sm`: `h-9 rounded-md px-3`
+- `lg`: `h-11 rounded-md px-8`
+- `icon`: `h-10 w-10`
+
+### Form Pattern
+```jsx
+<form className="space-y-4">
+  <div className="space-y-2">
+    <Label htmlFor="field">Label</Label>
+    <Input id="field" name="field" type="..." placeholder="..." required />
+  </div>
+  <Button type="submit" className="w-full" disabled={loading}>
+    {loading ? "Saving..." : "Save"}
+  </Button>
+</form>
+```
+
+### Card Pattern
+```jsx
+<Card className="max-w-md mx-auto">
+  <CardHeader>
+    <CardTitle>Title</CardTitle>
+    <CardDescription>Description</CardDescription>
+  </CardHeader>
+  <CardContent className="space-y-4">
+    {/* content */}
+  </CardContent>
+</Card>
+```
+
+### Error States
+| Context | Pattern |
+|---------|---------|
+| Form inline | `<div className="text-sm text-red-500 text-center">message</div>` |
+| Alert | `<Alert variant="destructive"><AlertTitle /><AlertDescription /></Alert>` |
+| Card error | Card with `border-destructive/50 bg-destructive/5` + retry button |
+| Field validation | `<p className="text-sm text-destructive">message</p>` |
+
+### Loading States
+| Context | Pattern |
+|---------|---------|
+| Full page | `min-h-screen flex items-center justify-center text-muted-foreground` |
+| Dashboard | `text-center py-12 text-muted-foreground` |
+| Button | `disabled={loading}` + text: "Saving...", "Creating account...", etc. |
+| Goals submit | Two states: "Normalising channel names..." → "Saving..." |
+
+### Empty States
+`<p className="text-sm text-muted-foreground text-center py-8">message</p>`
+
+### Success Messages
+Use `toast()` from Sonner for all success feedback:
+```ts
+toast({ title: "Saved", description: "Your changes have been updated." })
+```
+
+### Upgrade / Paywall States
+- **Settings lock:** `absolute inset-0 bg-black/80 backdrop-blur-sm z-50` — full-page overlay over blurred content
+- **Dashboard banner:** `bg-yellow-500/10 border border-yellow-500/30` with yellow upgrade button
+
+---
+
+## 3. ROUTING
+
+| Path | Component | Auth required |
+|------|-----------|---------------|
+| `/` | `Home` | No |
+| `/pricing` | `Pricing` | No |
+| `/download` | `Download` | No |
+| `/signup` | `Signup` | No (redirect to dashboard if session) |
+| `/login` | `Login` | No (redirect to dashboard if session) |
+| `/forgot-password` | `ForgotPassword` | No — **must be built** |
+| `/goals` | `Goals` | Yes (redirect to /login if no session) |
+| `/app/dashboard` | `Dashboard` | Yes (`useRequireAuth`) |
+| `/app/settings` | `Settings` | Yes (`useRequireAuth`) |
+| `/privacy` | `Privacy` | No |
+| `/terms` | `Terms` | No |
+| `*` | `NotFound` | No |
+
+Auth guard: `useRequireAuth` hook returns `"loading" | "authenticated" | "unauthenticated"`.
+
+---
+
+## 4. PAGE LAYOUTS
+
+### Landing Page (`/`)
+
+**Header (fixed, full-width):**
+- `bg-background/95 backdrop-blur-lg border-b border-border`
+- Left: Brand name `FocusTube` in `text-primary`
+- Center: Nav links — Features, Pricing, Download (`hover:text-primary transition-colors`)
+- Right: "Start Free Trial" button (hidden on mobile) + mobile Sheet menu
+- Height: 64px
+
+**Hero section:**
+- `pt-32 pb-20 text-center`
+- H1: "No More YouTube Spirals"
+- Subheadline: "FocusTube adds friction where you spiral and clarity when you drift — so YouTube stops wasting your time and you remain in control."
+- CTA buttons: `flex-col sm:flex-row gap-4`
+  - Primary: "Start Free Trial" → `/signup`
+  - Secondary outline: "See How It Works" → scroll to features
+
+**Problem section:**
+- `py-20 bg-card/30`
+- Headline + body copy from PRODUCT_SPEC section 17
+
+**Features section:**
+- `py-20`
+- Grid: `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6`
+- FeatureCard component: `bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-primary/10`
+- Icon container: `w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4`
+
+**Pricing section:**
+- `py-20 bg-card/50`
+- Two cards: Free (expired) and Pro
+- Pro card: `border-2 border-primary relative` with "Most Popular" badge
+
+**Final CTA section:**
+- `py-20 bg-primary/5`
+- Headline + "Start Free Trial" button
+
+**Footer:**
+- `border-t border-border bg-card mt-20`
+- Grid: `grid grid-cols-1 md:grid-cols-4 gap-8`
+- Columns: Brand blurb · Product links · Legal links · Support email
+
+---
+
+### Signup Page (`/signup`)
+
+- Max width: `max-w-md`
+- Single `Card` centered on page
+- `CardHeader`: "Create your account" + "Start your 14-day free trial"
+
+**Form fields:**
+1. Email (type="email", required)
+2. Password (type="password", min 8 chars, required)
+3. Submit button: "Create account" / "Creating account..."
+
+**OAuth section:**
+- `Separator` with "or" label between OAuth and email form
+- "Continue with Google" button (outline variant, full width, Google icon)
+- OAuth above or below email form (above is standard)
+
+**Below form:**
+- "Already have an account? Sign in" → `/login`
+- On email signup success: green `Alert` with email confirmation message
+- Disposable email error: inline red error below submit button
+
+---
+
+### Login Page (`/login`)
+
+- Max width: `max-w-md`
+- Same layout as Signup
+- `CardHeader`: "Welcome back" + "Sign in to your account"
+
+**Form fields:**
+1. Email
+2. Password
+3. "Forgot password?" link → `/forgot-password` (right-aligned, `text-sm`)
+4. Submit button: "Sign in" / "Signing in..."
+
+**OAuth:**
+- Same as Signup — "Continue with Google" button
+
+**Below form:**
+- "Don't have an account? Start free trial" → `/signup`
+
+---
+
+### Forgot Password Page (`/forgot-password`)
+
+- Max width: `max-w-md`
+- `CardHeader`: "Reset your password"
+- One field: Email
+- Submit: "Send reset link"
+- On success: green Alert — "Check your email for a reset link"
+- Back link: "Back to sign in" → `/login`
+
+---
+
+### Goals Page (`/goals`) — Onboarding
+
+- Max width: `max-w-2xl`
+- Progress indicator optional (single step for MVP)
+- `CardHeader`: "Set up your focus profile" + description
+
+**Form fields:**
+
+1. **Goals** — Textarea, placeholder: "e.g. Learn to code, Build my SaaS, Improve my marketing skills"
+2. **Pitfalls** — Textarea, placeholder: "e.g. gaming videos, vlogs, reaction videos, celebrity drama"
+3. **Channels to block** — Textarea, placeholder: "e.g. PewDiePie, MrBeast, Sidemen (one per line or comma-separated)"
+
+**Submit button:** "Save and start using FocusTube" / "Normalising channel names..." → "Saving..."
+
+**Skip link:** "Skip for now" — saves empty, navigates to YouTube
+
+---
+
+### Dashboard Page (`/app/dashboard`)
+
+- Max width: `max-w-6xl`, `container mx-auto`
+- `mt-16` for fixed header clearance
+
+**For Free/Expired users:**
+- Show blurred placeholder cards with yellow upgrade banner at top
+- Banner: `bg-yellow-500/10 border border-yellow-500/30` + yellow "Upgrade to Pro" button
+- Not an error state — always renders something
+
+**For Trial/Pro users:**
+
+**Top row — Summary stats (3-column grid on md+):**
+- Focus Score card: large number, colour-coded (green >60%, yellow 40-60%, red <40%)
+- Total watch time card
+- Most active time card: "Peak: 9–11pm"
+
+**Time range selector:**
+- Tabs or segmented control: "7 days" / "30 days" / "All time"
+
+**Watch time chart:**
+- Stacked bar chart by hour of day
+- Colors: distracting (`#ed2b2b`), neutral (`#ffb800`), productive (`#00bb13`)
+- Built with Recharts
+
+**Bottom row (2-column grid on md+):**
+
+Left — **Most watched channels:**
+- List ranked by total time
+- Channel name + watch time
+
+Right — **Biggest distractions:**
+- List of distracting channels ranked by time
+- Channel name + time + "Block" button (sm size, outline variant)
+- Clicking "Block" calls `/extension/save-data` with updated blocked_channels array
+
+**Empty state:** "Start watching to see your focus patterns here."
+
+---
+
+### Settings Page (`/app/settings`)
+
+- Max width: `max-w-4xl`, `container mx-auto`
+- `mt-16` for header clearance
+- Tabs: `grid w-full grid-cols-4` (or fewer tabs if simplified)
+
+**For Free/Expired users:** Full-page lock overlay — `absolute inset-0 bg-black/80 backdrop-blur-sm z-50` with upgrade modal centered.
+
+**Tab 1: Goals**
+- Edit Goals textarea
+- Edit Pitfalls textarea
+- Save button
+
+**Tab 2: Channels**
+- Add channels to block: text input + "Block" button
+- Blocked channels list (read-only):
+  ```
+  Channel Name          [no button]
+  ```
+  Below list: "To unblock a channel, email support@focustube.co.uk"
+- Empty state: "No channels blocked yet."
+
+**Tab 3: Controls**
+- Block Shorts toggle (Switch) — label: "Block Shorts entirely"
+- Hide recommendations toggle (Switch) — label: "Hide YouTube recommendations"
+- Daily time limit slider (0–120 mins, 0 = disabled) — label: "Daily watch limit"
+  - Shows: "Disabled" when 0, "X minutes" when set
+- Focus Window section:
+  - Enabled toggle (Switch)
+  - Start time Select (15-min increments, 08:00–22:00)
+  - End time Select (15-min increments, 08:00–22:00)
+  - Validation: must be within 08:00–22:00, max 6 hours
+  - Error inline: `text-sm text-destructive`
+
+**Tab 4: Plan**
+- Plan status: "Pro trial — X days remaining" or "Pro plan"
+- Upgrade CTA (if on trial): primary button "Upgrade to Pro — $5/month"
+- Billing: link to Stripe customer portal (if Pro)
+
+---
+
+### Extension Popup (`popup.html`)
+
+Fixed dimensions: `320px` wide, auto height. Dark theme matching web app.
+
+**Logged-out state:**
+```
+FocusTube                    [logo/icon]
+
+Welcome to FocusTube.
+Sign in or start your free trial to take back
+control over YouTube.
+
+[Start Free Trial]   full-width primary button
+[Sign In]            full-width outline button
+```
+
+**Trial state:**
+```
+FocusTube                    [logo/icon]
+
+user@email.com
+Pro trial: 23 days left
+
+[Upgrade to Pro]             yellow button
+[View Dashboard]             outline button
+[Settings]                   outline button
+```
+
+**Pro state:**
+```
+FocusTube                    [logo/icon]
+
+user@email.com
+Pro plan ✓
+
+[View Dashboard]             outline button
+[Settings]                   outline button
+```
+
+**Expired state:**
+```
+FocusTube                    [logo/icon]
+
+Your 14-day trial has ended.
+
+You watched X hours this month.
+FocusTube helped you stay focused for Y% of that time.
+
+[Upgrade to Pro — $5/month]  primary button
+[No thanks, uninstall]       ghost/link button
+```
+
+**Upgrade nudge (days 17, 23, 27, 28, 29) — shown above normal content:**
+```
+Your trial ends in X days.
+Upgrade to keep your focus.
+
+[Upgrade Now]                primary button
+[Dismiss]                    ghost button
+```
+
+---
+
+## 5. VISUAL OVERLAYS (EXTENSION)
+
+All overlays injected by `content.js` into the YouTube DOM.
+
+### Nudge Overlay (Distracting / Productive)
+- **Position:** Fixed, full-screen, `z-index: 9999`
+- **Background:** `rgba(0, 0, 0, 0.85)` with subtle blur
+- **Content:** Centered card, dark background (`#212121`), border `#333333`
+- **Non-dismissable:** No close button. Countdown timer visible.
+- **Countdown:** Large number showing seconds remaining, decrements each second
+- **Message:** Per PRODUCT_SPEC section 7
+- **After countdown:** Overlay removes itself, video resumes
+
+### Hard Block Overlay (Distracting — 4+ videos / 45+ mins)
+- **Position:** Fixed, full-screen, `z-index: 9999`
+- **Background:** Solid `#121212`
+- **Content:** Centered. FocusTube logo, block message, countdown to block end (5 minutes)
+- **Non-dismissable during block period**
+- **After 5 minutes:** Overlay removes, user can resume
+
+### Daily Limit Block Overlay
+- Same as hard block but no countdown — blocked for rest of day
+- Message: "You've hit your daily limit. Time to focus on what matters. See you tomorrow."
+- Shows time until midnight reset
+
+### Focus Window Block Overlay
+- Shown on any YouTube page load outside focus window
+- Non-dismissable
+- Message: "Outside your focus hours. YouTube is blocked until [time]."
+
+### Channel Block Overlay (Dismissable)
+- Shown when user navigates to a blocked channel
+- Dismissable (X button)
+- Redirects to YouTube home
+- Message: "Channel blocked."
+
+### Shorts Block Overlay (Dismissable — Block mode)
+- Shown when user navigates to Shorts in block mode
+- Dismissable
+- Redirects to YouTube home
+- Message: "Shorts blocked."
+
+### Watch Time Counter (Always Visible)
+- Position: Fixed, bottom-right corner (or top-right — consistent position)
+- Background: `rgba(0, 0, 0, 0.7)`, `border-radius: 8px`, `padding: 6px 12px`
+- Text: `color: #b3b3b3`, `font-size: 12px`
+- Content: "Today: Xh Ym"
+- Visible on all YouTube pages including fullscreen
+
+### Shorts Counter (Shorts Pages Only)
+- Same position and style as watch time counter
+- Content: "Shorts: Xm · Y videos"
+- Only visible on `/shorts/` URLs
+
+### Search Counter
+- Injected into YouTube search bar area
+- Small text below or beside search input
+- Content: "X/15 searches"
+- Color changes: normal → `#b3b3b3`, warning (13–14) → `#eab308`, blocked (15) → `#ef4444`
+
+### Trial Expiry Nudge (Dismissable, YouTube Page)
+- Fixed, top of page, full-width banner
+- Background: `bg-yellow-500/10 border-b border-yellow-500/30`
+- Text: "Your trial ends in X days. Upgrade to keep your focus."
+- [Upgrade Now] button → focustube.co.uk/pricing
+- [×] dismiss button — dismissed once per day
+
+---
+
+## 6. RESPONSIVE DESIGN
+
+### Breakpoints (Tailwind defaults)
+| Breakpoint | Width | Usage |
+|------------|-------|-------|
+| `sm` | 640px | Hero CTA row switches to row layout |
+| `md` | 768px | Header nav visible, grids activate |
+| `lg` | 1024px | Feature grid goes to 3 columns |
+| `2xl` | 1400px | Container max-width cap |
+
+### Mobile-Specific Patterns
+- Header nav: `hidden md:flex` — replaced by Sheet drawer on mobile
+- "Start Free Trial" in header: `hidden md:inline-flex`
+- Hero CTAs: `flex-col sm:flex-row gap-4`
+- Settings tabs: `grid w-full grid-cols-4` — may need `grid-cols-2` on mobile
+
+### Desktop-Specific Patterns
+- Feature grid: `lg:grid-cols-3`
+- Dashboard grid: `md:grid-cols-2`
+- Pricing cards: `md:grid-cols-2`
+- Footer: `md:grid-cols-4`
+- Page max-widths: `max-w-4xl` (Settings), `max-w-6xl` (Dashboard hero)
+
+---
+
+## 7. ICON CONVENTIONS (lucide-react)
+
+| Size | Class | Usage |
+|------|-------|-------|
+| Small | `h-4 w-4` | Button icons, inline |
+| Medium | `h-5 w-5` | Feature list items, form icons |
+| Large | `h-6 w-6` | Card alerts, nav |
+| XL | `h-12 w-12` | Feature card icons |
+
+Icons in use: `Shield`, `Sparkles`, `Clock`, `BarChart3`, `Zap`, `Ban`, `Check`, `Menu`, `LogOut`, `Chrome`, `Download`, `CheckCircle2`, `AlertCircle`, `AlertTriangle`, `X`, `Plus`, `Info`, `Flame`, `TrendingUp`
+
+---
+
+## 8. HOVER & TRANSITION PATTERNS
+
+| Pattern | Usage |
+|---------|-------|
+| `hover:text-primary transition-colors` | Nav links |
+| `hover:border-primary/50 hover:shadow-lg` | FeatureCard |
+| `hover:bg-muted/50 transition-colors` | Settings list items |
+| `hover:bg-primary/90` | Primary button (built-in) |
+| `hover:underline` | Footer links, inline links |

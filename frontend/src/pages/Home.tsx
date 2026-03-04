@@ -253,7 +253,7 @@ const Home = () => {
             <AccordionItem value="item-1">
               <AccordionTrigger>How long is the free trial?</AccordionTrigger>
               <AccordionContent>
-                30 days. No card needed. You get full access to Pro features during the trial period.
+                14 days. No card needed. You get full access to Pro features during the trial period.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-2">

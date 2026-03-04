@@ -120,7 +120,7 @@ function showStatus() {
   headerSubtitle.textContent = "Account";
 }
 
-const TRIAL_TOTAL_DAYS = 30;
+const TRIAL_TOTAL_DAYS = 14;
 
 function calculateTrialDaysLeft(trialStartedAt) {
   if (!trialStartedAt) return null;
