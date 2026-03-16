@@ -469,45 +469,7 @@ function restoreTier1() {
  * Shows distracting nudge overlay with countdown
  * @param {number} seconds - Countdown duration (10 or 30)
  */
-function showDistractingNudge(seconds) {
-  // Destroy any existing Tier 2 overlays first
-  destroyTier2();
-  
-  // Pause and mute video
-  pauseAndMuteVideo();
-  
-  const overlay = document.createElement('div');
-  overlay.id = 'ft-overlay-nudge-distracting';
-  
-  overlay.innerHTML = `
-    <div class="ft-nudge-card">
-      <div class="ft-countdown" id="ft-nudge-countdown">${seconds}</div>
-      <div class="ft-message">Are you sure you're not getting pulled off track?</div>
-    </div>
-  `;
-  
-  document.body.appendChild(overlay);
-  
-  // Countdown timer
-  let remaining = seconds;
-  const countdownEl = document.getElementById('ft-nudge-countdown');
-  
-  const timer = setInterval(() => {
-    remaining--;
-    if (countdownEl) {
-      countdownEl.textContent = remaining;
-    }
-    
-    if (remaining <= 0) {
-      clearInterval(timer);
-      // Remove overlay
-      const el = document.getElementById('ft-overlay-nudge-distracting');
-      if (el) el.remove();
-      // Restore video state (muted state only, user must manually resume)
-      restoreVideoState();
-    }
-  }, 1000);
-}
+// showDistractingNudge is defined below at the Phase 3 behavior loop section
 
 /**
  * Shows hard block overlay (5 minutes) - Tier 3
@@ -565,33 +527,7 @@ function showHardBlock() {
   }, 1000);
 }
 
-// ─────────────────────────────────────────────────────────────
-// PHASE 3: PRODUCTIVE NUDGE OVERLAYS (TIER 2 / TIER 3)
-// ─────────────────────────────────────────────────────────────
-
-function showProductiveNudge(seconds) {
-  destroyTier2();
-  const overlay = document.createElement('div');
-  overlay.id = 'ft-overlay-nudge-productive';
-  overlay.innerHTML = `
-    <div class="ft-nudge-card">
-      <div class="ft-countdown" id="ft-nudge-countdown-p">${seconds}</div>
-      <div class="ft-message">Time to apply what you've learned?</div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  let remaining = seconds;
-  const countdownEl = document.getElementById('ft-nudge-countdown-p');
-  const timer = setInterval(() => {
-    remaining--;
-    if (countdownEl) countdownEl.textContent = remaining;
-    if (remaining <= 0) {
-      clearInterval(timer);
-      const el = document.getElementById('ft-overlay-nudge-productive');
-      if (el) el.remove();
-    }
-  }, 1000);
-}
+// showProductiveNudge is defined below at the Phase 3 behavior loop section
 
 function showProductiveSoftBreak() {
   hideTier1();
@@ -1027,10 +963,10 @@ async function _p3EvalDistractingThresholds() {
       showHardBlock();
     } else if ((dc >= 3 || ds >= 1800) && !shown.d30s) {
       await _p3SetNudgeShown({ d30s: true, d10s: true });
-      showDistractingNudge(30);
+      showDistractingNudge("nudge2", { effectiveCount: dc, effectiveTime: ds });
     } else if ((dc >= 2 || ds >= 1200) && !shown.d10s) {
       await _p3SetNudgeShown({ d10s: true });
-      showDistractingNudge(10);
+      showDistractingNudge("nudge1", { effectiveCount: dc, effectiveTime: ds });
     }
   } catch (e) {
     console.warn('[FT P3] Distracting threshold eval error:', e.message);
@@ -1052,10 +988,10 @@ async function _p3EvalProductiveThresholds() {
       showProductiveSoftBreak();
     } else if ((pc >= 5 || ps >= 3600) && !shown.p30s) {
       await _p3SetNudgeShown({ p30s: true, p5s: true });
-      showProductiveNudge(30);
+      showProductiveNudge("nudge2", { count: pc, time: ps });
     } else if ((pc >= 3 || ps >= 1800) && !shown.p5s) {
       await _p3SetNudgeShown({ p5s: true });
-      showProductiveNudge(5);
+      showProductiveNudge("nudge1", { count: pc, time: ps });
     }
   } catch (e) {
     console.warn('[FT P3] Productive threshold eval error:', e.message);
@@ -1125,7 +1061,7 @@ async function _p3HandleShorts() {
           const shownData = await chrome.storage.local.get([shownKey]);
           if (!shownData[shownKey]) {
             await chrome.storage.local.set({ [shownKey]: true });
-            showDistractingNudge(10);
+            showDistractingNudge("nudge1", { effectiveCount: 0, effectiveTime: shortsMinutes * 60 });
             break;
           }
         }
@@ -2015,7 +1951,15 @@ function removeShortsBadge() {
   shortsCurrentVideoId = null; // Clear video ID tracking
 }
 
-// REMOVED: Duplicate showShortsBadge - Phase 3 version at line 795 is canonical
+async function showShortsBadge(engaged, scrolled, seconds) {
+  let badge = document.getElementById("ft-counter-shorts");
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.id = "ft-counter-shorts";
+    document.body.appendChild(badge);
+  }
+  await updateShortsBadge(engaged, scrolled, seconds);
+}
 
 // ─────────────────────────────────────────────────────────────
 // SEARCH COUNTER BADGE
@@ -4644,21 +4588,21 @@ async function handleBreakComplete() {
  */
 async function showProductiveNudge(nudgeType, counters) {
   const { count, time } = counters;
-  
+
   // Remove any existing nudge
   const existing = document.getElementById("ft-behavior-nudge");
   if (existing) existing.remove();
-  
+
   // Pause video before showing nudge
   pauseAndMuteVideo();
-  
+
   const overlay = document.createElement("div");
-  overlay.id = "ft-overlay-nudge-distracting";
-  
+  overlay.id = "ft-overlay-nudge-productive";
+
   let message = "";
   let duration = 10; // seconds
   let showJournal = false;
-  
+
   if (nudgeType === "nudge1") {
     message = "Let's make sure you apply what you learned.";
     duration = 5;
