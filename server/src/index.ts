@@ -11,6 +11,7 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import Stripe from "stripe";
 import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import {
@@ -104,6 +105,51 @@ if (openaiApiKey) {
 } else {
   console.warn("⚠️  OPENAI_API_KEY not set - AI classification will return neutral");
 }
+
+// ─────────────────────────────────────────────────────────────
+// ANTHROPIC CLIENT INITIALIZATION
+// ─────────────────────────────────────────────────────────────
+const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+let anthropicClient: Anthropic | null = null;
+
+if (!anthropicApiKey) {
+  console.error('ANTHROPIC_API_KEY missing — Pass 2 classification disabled');
+} else {
+  anthropicClient = new Anthropic({ apiKey: anthropicApiKey });
+  console.log('Anthropic API key loaded successfully');
+}
+
+// ─────────────────────────────────────────────────────────────
+// RATE LIMITING (in-memory per-user daily counters)
+// ─────────────────────────────────────────────────────────────
+interface RateLimitEntry {
+  count: number;
+  date: string; // YYYY-MM-DD
+}
+const classifyRateLimit = new Map<string, RateLimitEntry>(); // email -> { count, date }
+const CLASSIFY_DAILY_LIMIT = 500;
+
+function checkClassifyRateLimit(email: string): { allowed: boolean; remaining: number } {
+  const today = new Date().toISOString().split("T")[0];
+  const entry = classifyRateLimit.get(email);
+  if (!entry || entry.date !== today) {
+    classifyRateLimit.set(email, { count: 1, date: today });
+    return { allowed: true, remaining: CLASSIFY_DAILY_LIMIT - 1 };
+  }
+  if (entry.count >= CLASSIFY_DAILY_LIMIT) {
+    return { allowed: false, remaining: 0 };
+  }
+  entry.count += 1;
+  return { allowed: true, remaining: CLASSIFY_DAILY_LIMIT - entry.count };
+}
+
+// Clean rate limit map daily
+setInterval(() => {
+  const today = new Date().toISOString().split("T")[0];
+  for (const [key, entry] of classifyRateLimit.entries()) {
+    if (entry.date !== today) classifyRateLimit.delete(key);
+  }
+}, 60 * 60 * 1000);
 
 // ─────────────────────────────────────────────────────────────
 // AI PROMPT CONFIGURATION
@@ -216,568 +262,349 @@ app.get("/health", (req, res) => {
 /**
  * AI Classification endpoint
  * POST /ai/classify
- * 
- * Classifies YouTube content using OpenAI as productive, neutral, or distracting
- * Caches results for 24h per user/text
+ *
+ * Two-pass classification: GPT-4o-mini first, Claude sonnet-3-5 if confidence < 0.65.
+ * Accepts: { email, video_id, title, channel, description, category, tags, is_shorts }
+ * Returns: { classification, confidence, cached, model }
+ * Rate limit: 50/user/day
  */
 app.post("/ai/classify", async (req, res) => {
-  let fallbackLegacyResponse: any = null;
   try {
-    const { 
-      user_id, 
-      text, // For search queries
-      context, 
-      user_goals,
-      global_tag,
-      // Video metadata fields
-      video_id: initialVideoId,
-      video_title,
-      video_description,
-      video_tags,
-      channel_name,
-      video_category,
+    const {
+      email,
+      video_id,
+      title,
+      channel,
+      description,
+      category,
+      tags,
       is_shorts,
-      related_videos,
-      duration_seconds,
-      video_url // Phase 2: URL for server-side validation
+      // Legacy fields (backward compat with background.js)
+      user_id,
+      video_title,
+      channel_name,
+      video_description,
+      video_category,
+      video_tags,
     } = req.body;
-    
-    // Allow video_id to be reassigned if URL validation finds a mismatch
-    let video_id = initialVideoId;
 
-    // Determine if this is a search (text) or watch (video_title) request
-    const isVideoRequest = video_title && video_title.trim().length > 0;
-    const isSearchRequest = text && text.trim().length > 0;
-    
-    const displayText = isVideoRequest ? video_title : (text || "unknown");
-    console.log(`[AI Classify] Request received: ${displayText.substring(0, 50)}... (context: ${context || "watch"})`);
+    // Normalise: accept both new (email/title/channel) and legacy (user_id/video_title/channel_name)
+    const userEmail = (email || user_id || "").toLowerCase().trim();
+    const videoId = video_id || "";
+    const videoTitle = title || video_title || "";
+    const channelName = channel || channel_name || "";
+    const videoDescription = description || video_description || "";
+    const videoCategory = category || video_category || "";
+    const videoTags: string[] = Array.isArray(tags) ? tags : (Array.isArray(video_tags) ? video_tags : []);
+    const isShorts = Boolean(is_shorts);
 
-    // Step 6: Debug logging - show what metadata was received
-    if (isVideoRequest) {
-      console.log(`[AI Classify] Metadata received:`, {
-        video_id: video_id || "MISSING",
-        title: video_title?.substring(0, 50) || "MISSING",
-        description_length: video_description?.length || 0,
-        tags_count: Array.isArray(video_tags) ? video_tags.length : 0,
-        channel: channel_name || "MISSING",
-        category: video_category || "MISSING",
-        related_videos_count: Array.isArray(related_videos) ? related_videos.length : 0,
-        is_shorts: is_shorts || false,
-        duration_seconds: duration_seconds || null,
-        user_goals_count: Array.isArray(user_goals) ? user_goals.length : 0
-      });
+    if (!userEmail || !videoTitle) {
+      return res.status(400).json({ error: "email (or user_id) and title (or video_title) are required" });
     }
 
-    if (!user_id || (!isVideoRequest && !isSearchRequest)) {
-      console.warn("[AI Classify] Missing required fields: user_id and either text (search) or video_title (watch)");
-      return res.status(400).json({
-        ok: false,
-        error: "user_id and either text (search) or video_title (watch) are required",
-      });
+    // ── Rate limit ──────────────────────────────────────────────
+    const rateCheck = checkClassifyRateLimit(userEmail);
+    if (!rateCheck.allowed) {
+      return res.status(429).json({ error: "Daily classification limit reached (50/day)", remaining: 0 });
     }
 
-    // Check if user can record data (Pro or active Trial only)
-    // Note: Extension should check ft_can_record before calling, but this is a safety net
-    const userEmail = user_id.toLowerCase().trim();
-    const canRecord = await canUserRecord(userEmail);
-    if (!canRecord) {
-      console.log(`[AI Classify] Classification returned but not saved (inactive plan): ${userEmail}`);
-      // Still return a neutral result so extension doesn't break, but don't save to DB
-      // Extension should check ft_can_record before calling this endpoint
+    // ── Shorts fast-path ─────────────────────────────────────────
+    if (isShorts) {
+      console.log(`[AI Classify] Shorts fast-path → distracting: ${videoTitle.substring(0, 50)}`);
+      return res.json({ classification: "distracting", confidence: 1.0, cached: false, model: "shorts-rule" });
     }
 
-    // Fetch anti-goals from database for logging
-    let userAntiGoals: string[] = [];
-    if (user_id) {
+    // ── DB cache lookup (video_classifications, expires_at) ───────
+    const userId = await getUserIdFromEmail(userEmail);
+    if (userId && videoId) {
+      const { data: cachedRow } = await supabase
+        .from("video_classifications")
+        .select("distraction_level, confidence_distraction, expires_at")
+        .eq("user_id", userId)
+        .eq("video_id", videoId)
+        .single();
+
+      if (cachedRow && cachedRow.distraction_level && cachedRow.expires_at) {
+        const expiresAt = new Date(cachedRow.expires_at).getTime();
+        if (Date.now() < expiresAt) {
+          console.log(`[AI Classify] DB cache hit for video ${videoId}`);
+          return res.json({
+            classification: cachedRow.distraction_level,
+            confidence: cachedRow.confidence_distraction ?? 0.5,
+            cached: true,
+            model: "cache",
+          });
+        }
+      }
+    }
+
+    // ── In-memory cache ───────────────────────────────────────────
+    const memCacheKey = userId && videoId ? `${userId}:${videoId}` : `${userEmail}:${videoTitle}`.toLowerCase().trim();
+    const memCached = getCached<any>(aiCache, memCacheKey);
+    if (memCached) {
+      console.log(`[AI Classify] Memory cache hit: ${memCacheKey.substring(0, 60)}`);
+      return res.json({ ...memCached, cached: true });
+    }
+
+    // ── Fetch user goals & pitfalls for prompt ────────────────────
+    let userGoals: string[] = [];
+    let userPitfalls: string[] = [];
+    if (userId) {
       try {
         const { data: userData } = await supabase
           .from("users")
-          .select("anti_goals")
-          .or(`id.eq.${user_id},email.eq.${user_id}`)
+          .select("goals, pitfalls")
+          .eq("id", userId)
           .single();
-        
-        if (userData?.anti_goals) {
-          userAntiGoals = typeof userData.anti_goals === "string"
-            ? JSON.parse(userData.anti_goals)
-            : (Array.isArray(userData.anti_goals) ? userData.anti_goals : []);
+        if (userData?.goals) {
+          userGoals = typeof userData.goals === "string" ? JSON.parse(userData.goals) : (Array.isArray(userData.goals) ? userData.goals : []);
         }
-      } catch (e) {
-        // Silently fail - anti-goals not critical for classification
-      }
-    }
-
-    // Enhanced logging for debugging in Render
-    console.log(`[AI Classify] 📋 INPUT:`, JSON.stringify({
-      title: video_title || text || "N/A",
-      channel: channel_name || "N/A",
-      user_goals: Array.isArray(user_goals) ? user_goals : (user_goals ? [user_goals] : []),
-      user_anti_goals: userAntiGoals.length > 0 ? userAntiGoals : "None set",
-      is_shorts: is_shorts || false,
-      context: context || "watch"
-    }, null, 2));
-
-    // Phase 2: Server-side validation - extract video_id from URL and compare
-    if (isVideoRequest && video_url && video_id) {
-      try {
-        const urlObj = new URL(video_url);
-        const urlVideoId = urlObj.searchParams.get("v");
-        if (urlVideoId && urlVideoId !== video_id) {
-          console.error(`[AI Classify] ⚠️ CRITICAL: video_id mismatch!`, {
-            received_video_id: video_id,
-            url_video_id: urlVideoId,
-            url: video_url,
-            title: video_title?.substring(0, 50)
-          });
-          // Use video_id from URL (more reliable)
-          video_id = urlVideoId;
-          console.log(`[AI Classify] Using video_id from URL: ${video_id}`);
+        if (userData?.pitfalls) {
+          userPitfalls = typeof userData.pitfalls === "string" ? JSON.parse(userData.pitfalls) : (Array.isArray(userData.pitfalls) ? userData.pitfalls : []);
         }
-      } catch (e: any) {
-        console.warn(`[AI Classify] Could not validate video_id from URL:`, e?.message || String(e));
-      }
+      } catch (_) { /* non-critical */ }
     }
 
-    // Phase 2: Cache key with title hash for additional validation
-    // Use video_id + title hash to prevent wrong cache hits
-    let cacheKey: string;
-    if (isVideoRequest) {
-      if (video_id) {
-        // Phase 2: Add title hash to cache key for validation
-        const titleHash = video_title ? video_title.toLowerCase().trim().substring(0, 30).replace(/[^a-z0-9]/g, '') : '';
-        cacheKey = `${user_id}:${video_id}:${titleHash}`;
-      } else {
-        console.warn(`[AI Classify] ⚠️  video_id missing for video request - using title as cache key (less reliable)`);
-        cacheKey = `${user_id}:${video_title}`.toLowerCase().trim();
-      }
-    } else {
-      cacheKey = `${user_id}:${text}`.toLowerCase().trim();
-    }
-    console.log(`[AI Classify] Cache key: ${cacheKey.substring(0, 80)}...`);
-    const cachedResult = getCached<any>(aiCache, cacheKey);
-    if (cachedResult !== null) {
-      const displayCategory = cachedResult.category_primary || cachedResult.category || "unknown";
-      const displayDistraction = cachedResult.distraction_level || cachedResult.category || "neutral";
-      const displayConfidence = cachedResult.confidence_distraction || cachedResult.confidence || 0.5;
-      console.log(`[AI Classify] Cache hit: ${displayCategory} (${displayDistraction}, confidence: ${displayConfidence})`);
-      return res.json(cachedResult);
-    }
+    // ── Build prompt parts ────────────────────────────────────────
+    const goalsLine = userGoals.length > 0 ? userGoals.join(", ") : "not provided";
+    const pitfallsLine = userPitfalls.length > 0 ? userPitfalls.join(", ") : "none";
+    const tagsLine = videoTags.length > 0 ? videoTags.slice(0, 5).join(", ") : "none";
 
-    const relatedVideosList = Array.isArray(related_videos) ? related_videos : [];
-    const derivedShortsRatio = relatedVideosList.length > 0
-      ? relatedVideosList.filter((video: any) => video?.is_shorts).length / relatedVideosList.length
-      : 0;
+    // Pass 1 prompts
+    const systemPromptPass1 = `You are a strict YouTube video classifier for a productivity tool. Your job is to classify videos as productive, neutral, or distracting. You must be honest about uncertainty — do not guess confidently on ambiguous inputs. Respond with JSON only. No explanation. No markdown.`;
 
-    const buildSuggestionsSummary = (incoming?: any) => ({
-      on_goal_ratio: typeof incoming?.on_goal_ratio === "number" ? incoming.on_goal_ratio : 0,
-      shorts_ratio: typeof incoming?.shorts_ratio === "number" ? incoming.shorts_ratio : derivedShortsRatio,
-      dominant_themes: Array.isArray(incoming?.dominant_themes) ? incoming.dominant_themes : [],
-    });
+    const userPromptPass1 = `STEP 1 — Classify on content alone:
+- productive: clearly educational, tutorial, skill-building, or professional development
+- distracting: clearly entertainment, sports, celebrity, gaming, vlogs, reaction videos, drama, or anything with no learning value
+- neutral: news, documentary, or genuinely ambiguous content where you are not sure
 
-    const buildFlags = (incoming: any, distractionLevel: string) => ({
-      is_shorts: typeof incoming?.is_shorts === "boolean" ? incoming.is_shorts : Boolean(is_shorts),
-      clickbait_likelihood:
-        typeof incoming?.clickbait_likelihood === "number"
-          ? incoming.clickbait_likelihood
-          : distractionLevel === "distracting"
-            ? 0.75
-            : 0.25,
-      time_sink_risk:
-        typeof incoming?.time_sink_risk === "number"
-          ? incoming.time_sink_risk
-          : distractionLevel === "distracting"
-            ? 0.8
-            : distractionLevel === "neutral"
-              ? 0.4
-              : 0.15,
-    });
+STEP 2 — Override with user context using semantic matching:
+- Compare the video content SEMANTICALLY against the user's pitfalls — do not require exact keyword matches
+- If the video's topic, theme, or tone is clearly within the spirit of a pitfall → downgrade to distracting
+- Examples of semantic matches:
+  * Pitfall "AI doom content" matches: "Why AI Will Destroy Us", "AI Existential Risk Explained", "Should We Be Scared of AI?"
+  * Pitfall "gaming videos" matches: "Fortnite highlights", "Best FIFA plays", "Minecraft Let's Play"
+  * Pitfall "celebrity drama" matches: "KSI vs Logan Paul reaction", "Top 10 celebrity feuds"
+- If the match is ambiguous or a stretch → do not override, keep content-based classification
+- Pitfall overrides always produce confidence >= 0.80
 
-    const toLegacyResult = (payload: {
-      category_primary: string;
-      category_secondary?: string[];
-      distraction_level: string;
-      confidence: number;
-      goals_alignment: string;
-      reasons: string[];
-      suggestions_summary?: any;
-      flags?: any;
-    }) => {
-      const confidenceValue = typeof payload.confidence === "number" ? payload.confidence : 0.4;
-      const reasonsList =
-        Array.isArray(payload.reasons) && payload.reasons.length > 0
-          ? payload.reasons.slice(0, 2)
-          : ["No reason provided"];
-      const suggestionsSummary = buildSuggestionsSummary(payload.suggestions_summary);
-      const flags = buildFlags(payload.flags, payload.distraction_level);
-      const blockReasonCode =
-        flags.time_sink_risk > 0.7
-          ? "likely-rabbit-hole"
-          : flags.clickbait_likelihood > 0.7
-            ? "clickbait"
-            : "ok";
-      const actionHint =
-        payload.distraction_level === "distracting"
-          ? flags.time_sink_risk > 0.7
-            ? "block"
-            : "soft-warn"
-          : "allow";
-      const allowanceCost =
-        payload.distraction_level === "distracting"
-          ? { type: "video", amount: 1 }
-          : { type: "none", amount: 0 };
-      const allowed = payload.distraction_level !== "distracting";
+CONFIDENCE RULES — follow these strictly:
+- Only return confidence >= 0.85 when the classification is obvious (e.g. Fortnite gaming = distracting, Python tutorial = productive)
+- Return confidence 0.4–0.64 when the title, channel, or description is vague, generic, or gives no clear signal
+- Return confidence 0.65–0.84 for moderately clear cases
+- Never return high confidence on vague or content-free inputs
 
-      return {
-        category_primary: payload.category_primary,
-        category_secondary: payload.category_secondary || [],
-        distraction_level: payload.distraction_level,
-        confidence_category: confidenceValue,
-        confidence_distraction: confidenceValue,
-        goals_alignment: payload.goals_alignment,
-        reasons: reasonsList,
-        suggestions_summary: suggestionsSummary,
-        flags,
-        allowed,
-        category: payload.distraction_level,
-        confidence: confidenceValue,
-        reason: reasonsList.join("; "),
-        tags: suggestionsSummary.dominant_themes,
-        block_reason_code: blockReasonCode,
-        action_hint: actionHint,
-        allowance_cost: allowanceCost,
-      };
-    };
+USER CONTEXT:
+Goals: ${goalsLine}
+Pitfalls: ${pitfallsLine}
 
-    const fallbackTemplate = classifierPrompt?.fallback || {
-      category: "other",
-      distraction_level: "neutral",
-      confidence: 0.4,
-      goals_alignment: "unknown",
-      reasons: ["fallback"],
-    };
+VIDEO:
+Title: ${videoTitle}
+Channel: ${channelName || "unknown"}
+Description: ${videoDescription.substring(0, 300) || "none"}
+Category: ${videoCategory || "unknown"}
+Tags: ${tagsLine}
 
-    const fallbackLegacy = toLegacyResult({
-      category_primary: fallbackTemplate.category || "other",
-      category_secondary: [],
-      distraction_level: fallbackTemplate.distraction_level || "neutral",
-      confidence: typeof fallbackTemplate.confidence === "number" ? fallbackTemplate.confidence : 0.4,
-      goals_alignment: fallbackTemplate.goals_alignment || "unknown",
-      reasons:
-        Array.isArray(fallbackTemplate.reasons) && fallbackTemplate.reasons.length > 0
-          ? fallbackTemplate.reasons.slice(0, 2)
-          : ["fallback"],
-    });
+Respond with JSON only:
+{"classification": "productive|neutral|distracting", "confidence": 0.0}`;
 
-    fallbackLegacyResponse = fallbackLegacy;
-    let result: any = fallbackLegacy;
+    // Pass 2 prompts (for Claude if Pass 1 confidence < 0.65)
+    const systemPromptPass2 = `You are a second-opinion YouTube video classifier. 
+A previous classifier was uncertain. Make a definitive classification.
+Respond with JSON only. No explanation. No markdown.`;
 
-    // Call OpenAI if configured
+    const userPromptPass2 = `VIDEO:
+Title: ${videoTitle}
+Channel: ${channelName || "unknown"}
+Description: ${videoDescription.substring(0, 300) || "none"}
+Category: ${videoCategory || "unknown"}
+Tags: ${tagsLine}
+
+USER CONTEXT:
+Goals: ${goalsLine}
+Pitfalls: ${pitfallsLine}
+
+CLASSIFICATION LOGIC:
+
+STEP 1 — Classify on content alone:
+- productive: educational, tutorial, skill-building, professional development
+- distracting: entertainment, sports, celebrity, gaming, vlogs, reaction videos, drama, anything with no learning value
+- neutral: news, documentary, ambiguous content that could go either way
+
+STEP 2 — Override with user context only on a direct match:
+- If video directly matches a user goal → upgrade to productive
+- If video directly matches a user pitfall → downgrade to distracting
+- If no direct match → keep the content-based classification from Step 1
+
+IMPORTANT: Entertainment content must never default to neutral. If it has no clear learning or professional value it is distracting. Neutral is reserved for genuinely ambiguous content only.
+
+The previous classifier was uncertain — commit to a clear answer.
+Do not return confidence below 0.65. You are the final decision.
+
+Respond with JSON only:
+{"classification": "productive|neutral|distracting", "confidence": 0.0}`;
+
+    // ── Pass 1: GPT-4o-mini ───────────────────────────────────────
+    let classification = "neutral";
+    let confidence = 0.0;
+    let model = "fallback";
+    let pass1Failed = false;
+
     if (openaiClient) {
-      console.log("[AI Classify] Calling OpenAI API...");
       try {
-        const modelToUse =
-          process.env.OPENAI_CLASSIFIER_MODEL ||
-          classifierPrompt?.model_hint ||
-          "gpt-4o-mini";
-
-        const effectiveOutputSchema = classifierPrompt?.output_schema || DEFAULT_CLASSIFIER_OUTPUT_SCHEMA;
-        const coreLogic = classifierPrompt?.core_logic || [
-          "Productive = directly supports the user's stated goals.",
-          "Neutral = practical or educational but not aligned with goals.",
-          "Distracting = entertainment, gossip, sports highlights, vlogs, memes, gaming, reaction videos, compilations, or clickbait spirals.",
-        ];
-        const stepInstructions = classifierPrompt?.steps || [
-          "Identify the topic from title + channel.",
-          "Compare the topic to user goals.",
-          "Decide productive vs neutral vs distracting.",
-          "Provide two short reasons and stay concise.",
-        ];
-
-        const systemSections = [
-          classifierPrompt?.role || "You classify YouTube videos for FocusTube.",
-          "",
-          "Core logic:",
-          coreLogic.map((line, idx) => `${idx + 1}. ${line}`).join("\n"),
-        ];
-
-        if (classifierPrompt?.global_channel_tag) {
-          const tagInfo = classifierPrompt.global_channel_tag;
-          systemSections.push(
-            "",
-            "Global channel tag rules:",
-            tagInfo.description || "",
-            (tagInfo.rules || []).map((rule: string, idx: number) => `${idx + 1}. ${rule}`).join("\n")
-          );
-        }
-
-        if (classifierPrompt?.shorts_rule) {
-          systemSections.push("", `Shorts rule: ${classifierPrompt.shorts_rule}`);
-        }
-
-        systemSections.push("", "Only return valid JSON. No prose.");
-
-        let systemPrompt = systemSections.filter(Boolean).join("\n");
-
-        const infoLines: string[] = [];
-          if (isVideoRequest) {
-          infoLines.push(`Title: ${video_title || "Unknown"}`);
-            if (video_description) {
-              const descPreview = video_description.substring(0, 300);
-            infoLines.push(`Description: ${descPreview}${video_description.length > 300 ? "..." : ""}`);
-          }
-          if (channel_name) infoLines.push(`Channel: ${channel_name}`);
-          if (video_category) infoLines.push(`YouTube Category: ${video_category}`);
-            if (video_tags && Array.isArray(video_tags) && video_tags.length > 0) {
-            infoLines.push(`Tags: ${video_tags.slice(0, 5).join(", ")}${video_tags.length > 5 ? "..." : ""}`);
-          }
-          if (is_shorts) infoLines.push("Type: Shorts video");
-            if (duration_seconds) {
-              const minutes = Math.floor(duration_seconds / 60);
-              const seconds = duration_seconds % 60;
-            infoLines.push(`Duration: ${minutes}m ${seconds}s`);
-            }
-          } else {
-          infoLines.push(`Search Query: ${text || "Unknown query"}`);
-        }
-
-        const goalsLine =
-          user_goals && Array.isArray(user_goals) && user_goals.length > 0
-            ? user_goals.join(", ")
-            : "not provided";
-
-        const suggestionsPreview =
-          relatedVideosList.slice(0, 5)
-            .map((video: any, idx: number) => {
-              const title = video?.title || `Untitled suggestion ${idx + 1}`;
-              return `- ${title}${video?.is_shorts ? " (Shorts)" : ""}`;
-            })
-            .join("\n") || "- none provided";
-
-        const stepsSection = stepInstructions.map((step, idx) => `${idx + 1}. ${step}`).join("\n");
-
-        let userPrompt = `Video context:
-${infoLines.join("\n")}
-
-User goals: ${goalsLine}
-Global channel tag: ${global_tag || "none"}
-Nearby suggestions:
-${suggestionsPreview}
-
-Follow these steps:
-${stepsSection}
-
-Return JSON matching this schema:
-${JSON.stringify(effectiveOutputSchema, null, 2)}
-
-No extra commentary.`;
-
+        console.log(`[AI Classify] Pass 1 (gpt-4o-mini): ${videoTitle.substring(0, 50)}`);
         const completion = await openaiClient.chat.completions.create({
-          model: modelToUse,
+          model: "gpt-4o-mini",
           messages: [
-            {
-              role: "system",
-              content: systemPrompt,
-            },
-            {
-              role: "user",
-              content: userPrompt,
-            },
+            { role: "system", content: systemPromptPass1 },
+            { role: "user", content: userPromptPass1 },
           ],
-          temperature: 0.3,
-          max_tokens: 350,
-          response_format: { type: "json_object" }, // Force JSON output
+          temperature: 0.2,
+          max_tokens: 120,
+          response_format: { type: "json_object" },
         });
-
-        const responseText = completion.choices[0]?.message?.content?.trim() || "";
-        
-        // Parse JSON response
-        let parsedResponse: any = null;
-        try {
-          parsedResponse = JSON.parse(responseText);
-        } catch (parseError) {
-          console.warn("[AI Classify] Failed to parse JSON response, retrying with strict instruction");
-          // Retry once with strict instruction
-          try {
-            const retryCompletion = await openaiClient.chat.completions.create({
-              model: modelToUse,
-              messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userPrompt + "\n\nReturn ONLY valid JSON. No prose." }
-              ],
-              temperature: 0.3,
-              max_tokens: 350,
-              response_format: { type: "json_object" },
-            });
-            const retryText = retryCompletion.choices[0]?.message?.content?.trim() || "";
-            parsedResponse = JSON.parse(retryText);
-          } catch (retryError) {
-            console.error("[AI Classify] Retry also failed, using failsafe");
-            parsedResponse = null;
-          }
-        }
-
-        // Validate and normalize new schema response
-        if (parsedResponse) {
-          const categoryPrimary =
-            parsedResponse.category ||
-            parsedResponse.category_primary ||
-            "other";
-          const categorySecondary = parsedResponse.category_secondary || [];
-          const distractionLevel =
-            parsedResponse.distraction_level ||
-            parsedResponse.category ||
-            "neutral";
-          const confidenceValue =
-            typeof parsedResponse.confidence === "number"
-              ? parsedResponse.confidence
-              : typeof parsedResponse.confidence_distraction === "number"
-                ? parsedResponse.confidence_distraction
-                : 0.5;
-          const goalsAlignment = parsedResponse.goals_alignment || "unknown";
-          const reasons =
-            Array.isArray(parsedResponse.reasons) && parsedResponse.reasons.length > 0
-              ? parsedResponse.reasons.slice(0, 2)
-              : ["No reason provided"];
-
-          result = toLegacyResult({
-            category_primary: categoryPrimary,
-            category_secondary: categorySecondary,
-            distraction_level: distractionLevel,
-            confidence: confidenceValue,
-            goals_alignment: goalsAlignment,
-            reasons,
-            suggestions_summary: parsedResponse.suggestions_summary,
-            flags: parsedResponse.flags,
-          });
-        } else {
-          // If parsing failed completely, use failsafe
-          result = { ...fallbackLegacy };
-        }
-
-        const displayTitle = isVideoRequest ? video_title : (text || "unknown");
-        const displayCategory = result.category_primary || result.category || "unknown";
-        const displayDistraction = result.distraction_level || result.category || "neutral";
-        
-        // Enhanced output logging for debugging in Render
-        console.log(`[AI Classify] ✅ OUTPUT:`, JSON.stringify({
-          title: displayTitle.substring(0, 80),
-          channel: channel_name || "N/A",
-          user_goals: Array.isArray(user_goals) ? user_goals : (user_goals ? [user_goals] : []),
-          user_anti_goals: userAntiGoals.length > 0 ? userAntiGoals : "None set",
-          classification: displayDistraction,
-          category: displayCategory,
-          confidence: result.confidence_distraction || result.confidence || 0.5,
-          reasons: Array.isArray(result.reasons) ? result.reasons : [result.reason || "N/A"]
-        }, null, 2));
-      } catch (openaiError: any) {
-        console.error("[AI Classify] ❌ OpenAI error:", openaiError.message || openaiError);
-        // Fallback to failsafe from prompt config (already mapped above)
-        result = { ...fallbackLegacy };
+        const text = completion.choices[0]?.message?.content?.trim() || "{}";
+        const parsed = JSON.parse(text);
+        const rawClass = (parsed.classification || "neutral").toLowerCase();
+        classification = ["productive", "neutral", "distracting"].includes(rawClass) ? rawClass : "neutral";
+        confidence = typeof parsed.confidence === "number" ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5;
+        model = "gpt-4o-mini";
+        console.log(`[AI Classify] Pass 1 result: ${classification} (confidence: ${confidence})`);
+      } catch (err: any) {
+        console.error("[AI Classify] Pass 1 (OpenAI) failed:", err.message || err);
+        pass1Failed = true;
       }
-    } else {
-      console.warn("[AI Classify] ⚠️ OpenAI client not initialized - using failsafe (returning neutral)");
-      // Result already set to failsafe above (with mapping)
     }
 
-    // Store classification for analytics (fire-and-forget) - only if user can record
-    if (result && isVideoRequest && user_id && canRecord) {
-      // Look up UUID from email (user_id is email from extension)
-      getUserIdFromEmail(user_id.toLowerCase().trim()).then((userId) => {
-        if (!userId) {
-          console.warn("[AI Classify] User not found for email, skipping classification save:", user_id);
-          return;
-        }
-        return upsertVideoClassification({
-          user_id: userId, // Use UUID instead of email
-          video_id: video_id || "",
-          video_title: video_title || text || "",
-          channel_name: channel_name || null,
-          video_category: video_category || null,
-          distraction_level: result.distraction_level || result.category || null,
-          category_primary: result.category_primary || null,
-          confidence_distraction: result.confidence_distraction || result.confidence || null,
+    // ── Pass 2: Claude sonnet-3-5 if confidence < 0.65 ───────────
+    let pass2Failed = false;
+    if (confidence < 0.65 && anthropicClient) {
+      try {
+        console.log(`[AI Classify] Pass 2 (claude-haiku-4-5-20251001): confidence was ${confidence}`);
+        const response = await anthropicClient.messages.create({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 100,
+          system: systemPromptPass2,
+          messages: [{ role: "user", content: userPromptPass2 }],
         });
-      }).catch((dbErr) => {
-        console.warn("[AI Classify] Failed to upsert video classification (non-blocking):", dbErr);
-      });
-    } else if (result && isVideoRequest && user_id && !canRecord) {
-      // User can't record - classification was computed but not saved (as logged above)
+        const raw = (response.content[0] as any)?.text || "{}";
+        const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        const rawClass = (parsed.classification || "neutral").toLowerCase();
+        const claudeClass = ["productive", "neutral", "distracting"].includes(rawClass) ? rawClass : "neutral";
+        const claudeConf = typeof parsed.confidence === "number" ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5;
+        // Accept Pass 2 result regardless of confidence
+        classification = claudeClass;
+        confidence = claudeConf;
+        model = "claude-haiku-4-5-20251001";
+        console.log(`[AI Classify] Pass 2 result: ${claudeClass} (confidence: ${claudeConf}) → accepted`);
+      } catch (err: any) {
+        console.error("[AI Classify] Pass 2 (Claude) failed - full error:", err);
+        pass2Failed = true;
+        // Default to neutral on failure
+        if (model === "fallback") {
+          classification = "neutral";
+          confidence = 0.0;
+        }
+      }
     }
 
-    // Cache the result (even if it's a fallback)
-    setCached(aiCache, cacheKey, result);
+    const result = { classification, confidence, cached: false, model };
 
+    // ── Persist to DB and cache only if not failed/defaulted ──────
+    const isFallback = model === "fallback" || pass1Failed || (confidence < 0.65 && pass2Failed);
+    
+    if (!isFallback) {
+      // Only cache successful classifications
+      if (userId && videoId) {
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        const classifiedAt = new Date().toISOString();
+        supabase
+          .from("video_classifications")
+          .upsert({
+            user_id: userId,
+            video_id: videoId,
+            video_title: videoTitle || null,
+            channel_name: channelName || null,
+            video_category: videoCategory || null,
+            distraction_level: classification,
+            confidence_distraction: confidence,
+            model_used: model,
+            classified_at: classifiedAt,
+            expires_at: expiresAt,
+            updated_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+          }, { onConflict: "user_id,video_id" })
+          .then(({ error }) => {
+            if (error) console.warn("[AI Classify] DB upsert failed:", error.message);
+          });
+      }
+
+      // Store in memory cache
+      setCached(aiCache, memCacheKey, result);
+    } else {
+      console.log(`[AI Classify] Skipping cache for failed/defaulted result`);
+    }
+
+    console.log(`[AI Classify] ✅ ${videoTitle.substring(0, 50)} → ${classification} (${confidence}) via ${model}`);
     res.json(result);
   } catch (error: any) {
     console.error("Error in /ai/classify:", error);
-    // Always return a valid response, even on error
-    // Use failsafe from prompt config
-    const errorFallback =
-      fallbackLegacyResponse ||
-      {
-        category_primary: "other",
-        category_secondary: [],
-        distraction_level: "neutral",
-        confidence_category: 0.4,
-        confidence_distraction: 0.4,
-        goals_alignment: "unknown",
-        reasons: ["fallback", "classifier unavailable"],
-        suggestions_summary: {
-          on_goal_ratio: 0,
-          shorts_ratio: 0,
-          dominant_themes: [],
-        },
-        flags: {
-          is_shorts: false,
-          clickbait_likelihood: 0.2,
-          time_sink_risk: 0.2,
-        },
-        category: "neutral",
-        confidence: 0.4,
-        reason: "fallback; classifier unavailable",
-        tags: [],
-        block_reason_code: "ok",
-        action_hint: "allow",
-        allowance_cost: { type: "none", amount: 0 },
-        allowed: true,
-      };
-
-    res.status(500).json({
-      ...errorFallback,
-      block_reason_code: "unknown",
-      action_hint: "allow",
-      allowance_cost: { type: "none", amount: 0 },
-      allowed: true,
-      error: "Internal server error",
-    });
+    res.json({ classification: "neutral", confidence: 0.0, cached: false, model: "fallback" });
   }
 });
 
 /**
- * Update watch time for a classified video
+ * Save completed video watch session
  * POST /video/update-watch-time
+ * Accepts: { email, video_id, video_title, channel_name, classification, watch_seconds }
  */
 app.post("/video/update-watch-time", async (req, res) => {
   try {
-    const { user_id, video_id, watch_seconds } = req.body || {};
+    const {
+      email,
+      video_id,
+      video_title,
+      channel_name,
+      classification,
+      watch_seconds,
+      // Legacy field compat
+      user_id,
+    } = req.body || {};
 
-    if (!user_id || !video_id || typeof watch_seconds !== "number" || watch_seconds < 0) {
-      return res.status(400).json({ error: "Missing or invalid fields" });
+    const userEmail = (email || user_id || "").toLowerCase().trim();
+    if (!userEmail || !video_id || typeof watch_seconds !== "number" || watch_seconds < 0) {
+      return res.status(400).json({ error: "email, video_id, and watch_seconds are required" });
     }
 
-    // Look up UUID from email (user_id is email from extension)
-    const userEmail = user_id.toLowerCase().trim();
     const userId = await getUserIdFromEmail(userEmail);
-    
     if (!userId) {
-      console.warn("[Update Watch Time] User not found for email:", userEmail);
+      console.warn("[Watch Time] User not found:", userEmail);
       return res.status(404).json({ error: "User not found" });
     }
 
-    const success = await updateVideoWatchTime(userId, video_id, watch_seconds);
-    if (!success) {
-      return res.status(500).json({ error: "Failed to update watch time" });
+    const distractionLevel = ["productive", "neutral", "distracting"].includes(classification)
+      ? classification
+      : "neutral";
+
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase.from("video_sessions").insert({
+      user_id: userId,
+      video_id,
+      video_title: video_title || null,
+      channel_name: channel_name || null,
+      watch_seconds,
+      watched_at: nowIso,
+      distraction_level: distractionLevel,
+      created_at: nowIso,
+    });
+
+    if (error) {
+      console.error("[Watch Time] DB insert error:", error);
+      return res.status(500).json({ error: "Failed to save session" });
     }
 
+    console.log(`[Watch Time] Saved session: ${video_id} (${distractionLevel}, ${watch_seconds}s) for ${userEmail}`);
     res.json({ success: true });
   } catch (error) {
     console.error("Error in /video/update-watch-time:", error);
@@ -809,6 +636,136 @@ async function canUserRecord(email: string): Promise<boolean> {
   }
   return false;
 }
+
+/**
+ * Bootstrap endpoint for extension popup
+ * GET /extension/bootstrap?email=user@email.com
+ * 
+ * Returns all user data needed for extension initialization:
+ * - plan, trial_days_left
+ * - goals, pitfalls
+ * - blocked_channels
+ * - settings (focus_window_start, focus_window_end, etc.)
+ */
+app.get("/extension/bootstrap", async (req, res) => {
+  try {
+    const email = req.query.email as string;
+
+    if (!email) {
+      return res.status(400).json({
+        ok: false,
+        error: "Email parameter required",
+      });
+    }
+
+    // Get user from Supabase
+    const { data: users, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .limit(1);
+
+    if (userError) {
+      console.error("[Bootstrap] Error fetching user:", userError);
+      return res.status(500).json({
+        ok: false,
+        error: "Database error",
+      });
+    }
+
+    if (!users || users.length === 0) {
+      // User not found - return 401 to indicate invalid session
+      return res.status(401).json({
+        ok: false,
+        error: "User not found",
+      });
+    }
+
+    const user = users[0];
+    let plan = user.plan || "free";
+    const trial_expires_at = user.trial_expires_at;
+
+    // Auto-downgrade expired trials
+    if (plan === "trial" && trial_expires_at) {
+      const expiresAt = new Date(trial_expires_at);
+      const now = new Date();
+      if (expiresAt.getTime() <= now.getTime()) {
+        plan = "free";
+      }
+    }
+
+    // Helper function to parse JSON array from TEXT column
+    function parseJsonArray(value: any): string[] {
+      if (!value) return [];
+      if (Array.isArray(value)) return value;
+      if (typeof value === 'string') {
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    }
+
+    // Calculate trial_days_left
+    let trial_days_left: number | null = null;
+    if (plan === "trial" && trial_expires_at) {
+      const expiresAt = new Date(trial_expires_at);
+      const now = new Date();
+      const diffMs = expiresAt.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      trial_days_left = Math.max(0, diffDays);
+    }
+
+    // Parse JSON arrays from TEXT columns
+    const goals = parseJsonArray(user.goals);
+    const pitfalls = parseJsonArray(user.pitfalls);
+    const blocked_channels = parseJsonArray(user.blocked_channels);
+
+    // Get extension_data by user_id (not email)
+    const { data: extensionData, error: extError } = await supabase
+      .from("extension_data")
+      .select("settings")
+      .eq("user_id", user.id)
+      .limit(1);
+
+    if (extError && extError.code !== "PGRST116") {
+      console.error("[Bootstrap] Error fetching extension_data:", extError);
+    }
+
+    const extData = extensionData && extensionData.length > 0 ? extensionData[0] : null;
+
+    // Get settings from extension_data (JSONB column)
+    const settings = extData?.settings || {};
+
+    // Extract focus window from settings
+    const focus_window_enabled = settings.focus_window_enabled || false;
+    const focus_window_start = settings.focus_window_start || null;
+    const focus_window_end = settings.focus_window_end || null;
+
+    return res.json({
+      ok: true,
+      plan,
+      trial_days_left,
+      trial_expires_at,
+      goals,
+      pitfalls,
+      blocked_channels,
+      settings,
+      focus_window_enabled,
+      focus_window_start,
+      focus_window_end,
+    });
+  } catch (error: any) {
+    console.error("[Bootstrap] Error:", error);
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Internal server error",
+    });
+  }
+});
 
 app.get("/license/verify", async (req, res) => {
   try {
@@ -1112,7 +1069,7 @@ app.get("/extension/get-data", async (req, res) => {
     // Get user goals from users table (using email)
     const { data: userData, error: userError } = await supabase
       .from("users")
-      .select("goals, anti_goals, distracting_channels")
+      .select("goals, pitfalls, blocked_channels")
       .eq("email", userEmail)
       .single();
 
@@ -1129,29 +1086,29 @@ app.get("/extension/get-data", async (req, res) => {
       }
     }
 
-    // Parse anti_goals (stored as TEXT in database, should be JSON array)
-    let anti_goals: string[] = [];
-    if (userData?.anti_goals) {
+    // Parse pitfalls (stored as TEXT in database, should be JSON array)
+    let pitfalls: string[] = [];
+    if (userData?.pitfalls) {
       try {
-        anti_goals = typeof userData.anti_goals === "string"
-          ? JSON.parse(userData.anti_goals)
-          : (Array.isArray(userData.anti_goals) ? userData.anti_goals : []);
+        pitfalls = typeof userData.pitfalls === "string"
+          ? JSON.parse(userData.pitfalls)
+          : (Array.isArray(userData.pitfalls) ? userData.pitfalls : []);
       } catch (e) {
-        console.warn("[Extension Data] Failed to parse anti_goals:", e);
-        anti_goals = [];
+        console.warn("[Extension Data] Failed to parse pitfalls:", e);
+        pitfalls = [];
       }
     }
 
-    // Parse distracting_channels (stored as TEXT in database, should be JSON array)
-    let distracting_channels: string[] = [];
-    if (userData?.distracting_channels) {
+    // Parse blocked_channels (stored as TEXT in database, should be JSON array)
+    let blocked_channels: string[] = [];
+    if (userData?.blocked_channels) {
       try {
-        distracting_channels = typeof userData.distracting_channels === "string"
-          ? JSON.parse(userData.distracting_channels)
-          : (Array.isArray(userData.distracting_channels) ? userData.distracting_channels : []);
+        blocked_channels = typeof userData.blocked_channels === "string"
+          ? JSON.parse(userData.blocked_channels)
+          : (Array.isArray(userData.blocked_channels) ? userData.blocked_channels : []);
       } catch (e) {
-        console.warn("[Extension Data] Failed to parse distracting_channels:", e);
-        distracting_channels = [];
+        console.warn("[Extension Data] Failed to parse blocked_channels:", e);
+        blocked_channels = [];
       }
     }
 
@@ -1174,8 +1131,8 @@ app.get("/extension/get-data", async (req, res) => {
           channel_spiral_count: {},
           settings: {},
           goals: goals,
-          anti_goals: anti_goals,
-          distracting_channels: distracting_channels,
+          pitfalls: pitfalls,
+          user_blocked_channels: blocked_channels,
         },
       });
     }
@@ -1188,8 +1145,8 @@ app.get("/extension/get-data", async (req, res) => {
         channel_spiral_count: extensionData.channel_spiral_count || {},
         settings: extensionData.settings || {},
         goals: goals,
-        anti_goals: anti_goals,
-        distracting_channels: distracting_channels,
+        pitfalls: pitfalls,
+        user_blocked_channels: blocked_channels,
       },
     });
   } catch (error) {
@@ -1406,123 +1363,102 @@ app.post("/extension/save-data", async (req, res) => {
 });
 
 /**
- * Save timer endpoint
+ * Save daily counter state
  * POST /extension/save-timer
- * 
- * Saves watch timer to extension_data.settings for cross-device sync
- * Body: { email: "user@example.com", watch_seconds_today: 1800, date: "2025-01-13" }
+ * Accepts: { email, date, distracting_videos, distracting_seconds, neutral_videos,
+ *            neutral_seconds, productive_videos, productive_seconds, total_seconds }
  */
 app.post("/extension/save-timer", async (req, res) => {
   try {
-    const { email, watch_seconds_today, date } = req.body;
+    const {
+      email,
+      date,
+      distracting_videos = 0,
+      distracting_seconds = 0,
+      neutral_videos = 0,
+      neutral_seconds = 0,
+      productive_videos = 0,
+      productive_seconds = 0,
+      total_seconds,
+      // Legacy compat
+      watch_seconds_today,
+    } = req.body;
 
     if (!email || typeof email !== "string") {
-      return res.status(400).json({
-        ok: false,
-        error: "Email is required",
-      });
+      return res.status(400).json({ ok: false, error: "email is required" });
     }
 
-    if (watch_seconds_today === undefined || typeof watch_seconds_today !== "number") {
-      return res.status(400).json({
-        ok: false,
-        error: "watch_seconds_today is required and must be a number",
-      });
-    }
-
-    // Get UUID from email (like dashboard does)
     const userEmail = email.toLowerCase().trim();
     const userId = await getUserIdFromEmail(userEmail);
-    
     if (!userId) {
-      return res.status(404).json({
-        ok: false,
-        error: "User not found",
-      });
+      return res.status(404).json({ ok: false, error: "User not found" });
     }
 
-    const today = date || new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const today = date || new Date().toISOString().split("T")[0];
+    const totalSec = typeof total_seconds === "number"
+      ? total_seconds
+      : (typeof watch_seconds_today === "number" ? watch_seconds_today : distracting_seconds + neutral_seconds + productive_seconds);
 
-    // Get existing extension_data using UUID
-    const { data: existingData, error: fetchError } = await supabase
+    // Read existing settings to merge
+    const { data: existingData } = await supabase
       .from("extension_data")
       .select("settings")
       .eq("user_id", userId)
       .single();
 
-    let settings: any = {};
-    if (existingData && existingData.settings && typeof existingData.settings === 'object') {
-      settings = existingData.settings;
-    }
+    const settings: any = (existingData?.settings && typeof existingData.settings === "object")
+      ? { ...existingData.settings }
+      : {};
 
-    // Update timer in settings
-    settings.watch_seconds_today = watch_seconds_today;
-    settings.timer_synced_at = new Date().toISOString();
+    // Write daily counter fields
     settings.timer_date = today;
+    settings.timer_synced_at = new Date().toISOString();
+    settings.distracting_videos = distracting_videos;
+    settings.distracting_seconds = distracting_seconds;
+    settings.neutral_videos = neutral_videos;
+    settings.neutral_seconds = neutral_seconds;
+    settings.productive_videos = productive_videos;
+    settings.productive_seconds = productive_seconds;
+    settings.total_seconds = totalSec;
+    settings.watch_seconds_today = totalSec; // legacy field kept in sync
 
-    // Upsert extension_data with updated settings
     const { error: updateError } = await supabase
       .from("extension_data")
-      .upsert({
-        user_id: userId,
-        settings: settings,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: "user_id",
-      });
+      .upsert({ user_id: userId, settings, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
 
     if (updateError) {
-      console.error("[Timer] Error saving timer:", updateError);
-      return res.status(500).json({
-        ok: false,
-        error: "Failed to save timer",
-      });
+      console.error("[Save Timer] DB error:", updateError);
+      return res.status(500).json({ ok: false, error: "Failed to save timer" });
     }
 
-    res.json({
-      ok: true,
-      message: "Timer saved successfully",
-    });
+    console.log(`[Save Timer] Saved counters for ${userEmail} on ${today}`);
+    res.json({ ok: true });
   } catch (error) {
     console.error("Error in /extension/save-timer:", error);
-    res.status(500).json({
-      ok: false,
-      error: "Internal server error",
-    });
+    res.status(500).json({ ok: false, error: "Internal server error" });
   }
 });
 
 /**
- * Get timer endpoint
- * GET /extension/get-timer?email=user@example.com
- * 
- * Returns watch timer from extension_data.settings for cross-device sync
+ * Get today's daily counter state
+ * GET /extension/get-timer?email=user@example.com&date=2026-03-20
+ * Returns: { ok, date, distracting_videos, distracting_seconds, neutral_videos,
+ *            neutral_seconds, productive_videos, productive_seconds, total_seconds }
  */
 app.get("/extension/get-timer", async (req, res) => {
   try {
-    const email = req.query.email as string;
-
+    const email = (req.query.email as string || "").toLowerCase().trim();
     if (!email) {
-      return res.status(400).json({
-        ok: false,
-        error: "Email is required",
-      });
+      return res.status(400).json({ ok: false, error: "email query parameter required" });
     }
 
-    // Get UUID from email (like dashboard does)
-    const userEmail = email.toLowerCase().trim();
-    const userId = await getUserIdFromEmail(userEmail);
-    
+    const userId = await getUserIdFromEmail(email);
     if (!userId) {
-      return res.status(404).json({
-        ok: false,
-        error: "User not found",
-      });
+      return res.status(404).json({ ok: false, error: "User not found" });
     }
 
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const today = (req.query.date as string) || new Date().toISOString().split("T")[0];
 
-    // Get extension_data using UUID
     const { data, error } = await supabase
       .from("extension_data")
       .select("settings")
@@ -1530,47 +1466,45 @@ app.get("/extension/get-timer", async (req, res) => {
       .single();
 
     if (error && error.code !== "PGRST116") {
-      console.error("[Timer] Error fetching timer:", error);
-      return res.status(500).json({
-        ok: false,
-        error: "Failed to fetch timer",
-      });
+      console.error("[Get Timer] DB error:", error);
+      return res.status(500).json({ ok: false, error: "Failed to fetch timer" });
     }
 
-    // If no data found, return 0
-    if (!data || !data.settings) {
-      return res.json({
-        ok: true,
-        watch_seconds_today: 0,
-        timer_date: today,
-      });
-    }
+    const emptyCounters = {
+      ok: true,
+      date: today,
+      distracting_videos: 0,
+      distracting_seconds: 0,
+      neutral_videos: 0,
+      neutral_seconds: 0,
+      productive_videos: 0,
+      productive_seconds: 0,
+      total_seconds: 0,
+    };
 
-    const settings = data.settings || {};
-    const timerDate = settings.timer_date || today;
-    
-    // Only return timer if it's for today (don't use yesterday's timer)
-    if (timerDate === today) {
-      return res.json({
-        ok: true,
-        watch_seconds_today: Number(settings.watch_seconds_today || 0),
-        timer_date: timerDate,
-        timer_synced_at: settings.timer_synced_at || null,
-      });
-    } else {
-      // Timer is for a different day, return 0
-      return res.json({
-        ok: true,
-        watch_seconds_today: 0,
-        timer_date: today,
-      });
-    }
+    if (!data?.settings) return res.json(emptyCounters);
+
+    const s = data.settings;
+    const timerDate = s.timer_date || "";
+
+    // Only return counters if they're for today
+    if (timerDate !== today) return res.json(emptyCounters);
+
+    res.json({
+      ok: true,
+      date: timerDate,
+      distracting_videos: Number(s.distracting_videos || 0),
+      distracting_seconds: Number(s.distracting_seconds || 0),
+      neutral_videos: Number(s.neutral_videos || 0),
+      neutral_seconds: Number(s.neutral_seconds || 0),
+      productive_videos: Number(s.productive_videos || 0),
+      productive_seconds: Number(s.productive_seconds || 0),
+      total_seconds: Number(s.total_seconds || s.watch_seconds_today || 0),
+      timer_synced_at: s.timer_synced_at || null,
+    });
   } catch (error) {
     console.error("Error in /extension/get-timer:", error);
-    res.status(500).json({
-      ok: false,
-      error: "Internal server error",
-    });
+    res.status(500).json({ ok: false, error: "Internal server error" });
   }
 });
 
@@ -2385,6 +2319,204 @@ app.post("/webhook/stripe", bodyParser.raw({ type: "application/json" }), async 
     res.status(200).json({
       received: true,
       error: "Internal error (logged)",
+    });
+  }
+});
+
+/**
+ * Test endpoint for Claude API verification (dev only)
+ * GET /ai/test-claude
+ * Tests Anthropic API with a sample classification request
+ */
+app.get("/ai/test-claude", async (req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    return res.status(403).json({ error: "Test endpoint disabled in production" });
+  }
+
+  if (!anthropicClient) {
+    return res.status(503).json({ error: "ANTHROPIC_API_KEY not configured" });
+  }
+
+  try {
+    console.log("[Test Claude] Making test API call...");
+    
+    // Test payload
+    const testTitle = "Fortnite World Cup Highlights";
+    const testChannel = "ESPN Esports";
+    const testGoals = "Learn AI, AI Coding";
+    const testPitfalls = "gaming";
+    
+    const systemPrompt = `You are a YouTube video classifier for a productivity tool. 
+Classify videos as productive, neutral, or distracting. Respond with JSON only. 
+No explanation. No markdown.`;
+
+    const userPrompt = `VIDEO:
+Title: ${testTitle}
+Channel: ${testChannel}
+Description: Highlights from the Fortnite World Cup tournament
+Category: Gaming
+Tags: fortnite, esports, gaming
+
+USER CONTEXT:
+Goals: ${testGoals}
+Pitfalls: ${testPitfalls}
+
+CLASSIFICATION LOGIC:
+
+STEP 1 — Classify on content alone:
+- productive: educational, tutorial, skill-building, professional development
+- distracting: entertainment, sports, celebrity, gaming, vlogs, reaction videos, drama, anything with no learning value
+- neutral: news, documentary, ambiguous content that could go either way
+
+STEP 2 — Override with user context only on a direct match:
+- If video directly matches a user goal → upgrade to productive
+- If video directly matches a user pitfall → downgrade to distracting
+- If no direct match → keep the content-based classification from Step 1
+
+IMPORTANT: Entertainment content must never default to neutral. If it has no clear learning or professional value it is distracting. Neutral is reserved for genuinely ambiguous content only.
+
+Respond with JSON only:
+{"classification": "productive|neutral|distracting", "confidence": 0.0}`;
+
+    const response = await anthropicClient.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 100,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+    });
+
+    const raw = (response.content[0] as any)?.text || "{}";
+    console.log("[Test Claude] Raw response:", raw);
+    const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const result = JSON.parse(cleaned);
+    
+    console.log("[Test Claude] ✅ Success:", result);
+    res.json({
+      success: true,
+      test_payload: {
+        title: testTitle,
+        channel: testChannel,
+        goals: testGoals,
+        pitfalls: testPitfalls,
+        expected: "distracting"
+      },
+      result: result,
+      raw_response: raw
+    });
+  } catch (err: any) {
+    console.error("[Test Claude] ❌ Failed - full error:", err);
+    res.status(500).json({
+      success: false,
+      error: err.message || String(err),
+      full_error: err
+    });
+  }
+});
+
+/**
+ * Admin endpoint to reset user counters for testing
+ * POST /admin/reset-counters
+ * 
+ * Protected by ADMIN_SECRET header check
+ * Body: { "email": "user@example.com" }
+ * 
+ * Resets:
+ * - extension_data.settings.daily_limit_minutes to 0
+ * - Deletes all video_sessions for today for this user
+ */
+app.post("/admin/reset-counters", async (req, res) => {
+  try {
+    // Check admin secret
+    const adminSecret = req.headers['x-admin-secret'] as string;
+    if (!adminSecret || !process.env.ADMIN_SECRET || adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(403).json({
+        success: false,
+        error: "Unauthorized - invalid or missing ADMIN_SECRET",
+      });
+    }
+
+    const { email } = req.body;
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({
+        success: false,
+        error: "Email is required",
+      });
+    }
+
+    const userEmail = email.toLowerCase().trim();
+    
+    // Find user by email
+    const { data: users, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("email", userEmail)
+      .limit(1);
+
+    if (userError || !users || users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "User not found",
+      });
+    }
+
+    const userId = users[0].id;
+
+    // Update extension_data: set settings.daily_limit_minutes = 0
+    const { data: currentExtData } = await supabase
+      .from("extension_data")
+      .select("settings")
+      .eq("user_id", userId)
+      .single();
+
+    const currentSettings = currentExtData?.settings || {};
+    const updatedSettings = {
+      ...currentSettings,
+      daily_limit_minutes: 0,
+    };
+
+    const { error: updateError } = await supabase
+      .from("extension_data")
+      .upsert({
+        user_id: userId,
+        settings: updatedSettings,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id" });
+
+    if (updateError) {
+      console.error("[Admin Reset] Failed to update extension_data:", updateError);
+      return res.status(500).json({
+        success: false,
+        error: "Failed to update settings",
+      });
+    }
+
+    // Delete all video_sessions for today
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const todayStart = `${today}T00:00:00.000Z`;
+    const todayEnd = `${today}T23:59:59.999Z`;
+
+    const { error: deleteError } = await supabase
+      .from("video_sessions")
+      .delete()
+      .eq("user_id", userId)
+      .gte("watched_at", todayStart)
+      .lte("watched_at", todayEnd);
+
+    if (deleteError) {
+      console.error("[Admin Reset] Failed to delete video_sessions:", deleteError);
+      return res.status(500).json({
+        success: false,
+        error: "Failed to delete video sessions",
+      });
+    }
+
+    console.log(`[Admin Reset] ✅ Reset counters for ${userEmail}`);
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("[Admin Reset] Error:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Internal server error",
     });
   }
 });

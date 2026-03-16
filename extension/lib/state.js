@@ -75,7 +75,7 @@ const DEFAULTS = {
   ft_extension_settings: {},         // Other extension settings
   
   // Focus Window (time-based blocking)
-  ft_focus_window_enabled: true,     // true = focus window is active
+  ft_focus_window_enabled: false,    // false = focus window disabled by default
   ft_focus_window_start: "13:00",    // Start time in 24h format (1:00 PM)
   ft_focus_window_end: "21:00",      // End time in 24h format (9:00 PM)
   
@@ -358,8 +358,10 @@ export async function setPlan(plan) {
 // SERVER SYNC (fetch plan from Express server)
 // ─────────────────────────────────────────────────────────────
 
-// Server URL (production)
-const SERVER_URL = "https://focustube-backend-4xah.onrender.com";
+// Server URL from environment variable (injected at build time)
+// DO NOT HARDCODE - use BACKEND_URL env var
+// Fallback to localhost for development testing
+const SERVER_URL = typeof BACKEND_URL !== 'undefined' ? BACKEND_URL : 'http://localhost:3000';
 
 function normalizeEmail(email) {
   return email ? email.trim().toLowerCase() : "";
@@ -627,7 +629,7 @@ export async function loadExtensionDataFromServer() {
     }
 
     // SUPABASE IS SOURCE OF TRUTH - Server data overwrites local cache directly
-    // No merge logic for blocked_channels, settings, goals, anti_goals
+    // No merge logic for blocked_channels, settings, goals, pitfalls
     // Only watch_history is merged (append-only, local-first)
     const { 
       blocked_channels, 
@@ -635,7 +637,8 @@ export async function loadExtensionDataFromServer() {
       channel_spiral_count, 
       settings,
       goals,
-      anti_goals
+      pitfalls,
+      user_blocked_channels
     } = result.data;
     
     // Merge watch_history (append-only, local-first) - keep this merge
@@ -680,7 +683,7 @@ export async function loadExtensionDataFromServer() {
       "ft_blocked_channels",
       "ft_extension_settings",
       "ft_user_goals",
-      "ft_user_anti_goals"
+      "ft_user_pitfalls"
     ]);
     
     const storageUpdate = {
@@ -784,23 +787,22 @@ export async function loadExtensionDataFromServer() {
       }
     }
 
-    // Anti-goals: Only update if server has valid data
-    if (anti_goals !== undefined && anti_goals !== null) {
-      storageUpdate.ft_user_anti_goals = Array.isArray(anti_goals) ? anti_goals : [];
+    // Pitfalls: Only update if server has valid data
+    if (pitfalls !== undefined && pitfalls !== null) {
+      storageUpdate.ft_user_pitfalls = Array.isArray(pitfalls) ? pitfalls : [];
     } else {
       // Server returned null - KEEP existing local data
-      if (Array.isArray(currentLocal.ft_user_anti_goals) && currentLocal.ft_user_anti_goals.length > 0) {
-        console.warn("[FT] Server returned null/undefined anti_goals, keeping local data");
+      if (Array.isArray(currentLocal.ft_user_pitfalls) && currentLocal.ft_user_pitfalls.length > 0) {
+        console.warn("[FT] Server returned null/undefined pitfalls, keeping local data");
         // Don't set it - keep existing
       } else {
-        storageUpdate.ft_user_anti_goals = [];
+        storageUpdate.ft_user_pitfalls = [];
       }
     }
 
-    // Load distracting_channels if provided (from users table)
-    const distracting_channels = result.data?.distracting_channels;
-    if (distracting_channels !== undefined) {
-      storageUpdate.ft_user_distraction_channels = Array.isArray(distracting_channels) ? distracting_channels : [];
+    // Load user_blocked_channels if provided (from users table)
+    if (user_blocked_channels !== undefined) {
+      storageUpdate.ft_user_distraction_channels = Array.isArray(user_blocked_channels) ? user_blocked_channels : [];
     }
     
     await setLocal(storageUpdate);
@@ -814,8 +816,8 @@ export async function loadExtensionDataFromServer() {
       blockedChannels: (blocked_channels || []).length,
       watchHistory: (watch_history || []).length,
       goals: (goals || []).length,
-      antiGoals: (anti_goals || []).length,
-      distractionChannels: (distracting_channels || []).length,
+      pitfalls: (pitfalls || []).length,
+      userBlockedChannels: (user_blocked_channels || []).length,
     });
 
     return result.data;
@@ -851,7 +853,7 @@ export async function saveExtensionDataToServer(data = null) {
       ft_channel_spiral_count = {},
       ft_extension_settings = {},
       ft_user_goals = [],
-      ft_user_anti_goals = [],
+      ft_user_pitfalls = [],
       ft_channel_lifetime_stats = {},
       ft_focus_window_enabled = false,
       ft_focus_window_start = "13:00",
@@ -872,7 +874,7 @@ export async function saveExtensionDataToServer(data = null) {
       "ft_channel_spiral_count",
       "ft_extension_settings",
       "ft_user_goals",
-      "ft_user_anti_goals",
+      "ft_user_pitfalls",
       "ft_channel_lifetime_stats",
       "ft_focus_window_enabled",
       "ft_focus_window_start",
@@ -931,8 +933,8 @@ export async function saveExtensionDataToServer(data = null) {
       if (data.goals !== undefined) {
         toSave.goals = data.goals;
       }
-      if (data.anti_goals !== undefined) {
-        toSave.anti_goals = data.anti_goals;
+      if (data.pitfalls !== undefined) {
+        toSave.pitfalls = data.pitfalls;
       }
       if (data.channel_lifetime_stats !== undefined) {
         toSave.channel_lifetime_stats = data.channel_lifetime_stats;
@@ -951,7 +953,7 @@ export async function saveExtensionDataToServer(data = null) {
         channel_spiral_count: ft_channel_spiral_count,
         settings: settingsToSave,
         goals: ft_user_goals,
-        anti_goals: ft_user_anti_goals,
+        pitfalls: ft_user_pitfalls,
         channel_lifetime_stats: ft_channel_lifetime_stats,
       };
     }
@@ -1037,7 +1039,7 @@ export function getEffectiveSettings(plan, rawSettings = {}) {
     effective.daily_limit_minutes = dailyLimit; // Legacy field name
     // Apply all other settings from rawSettings
     effective.nudge_style = rawSettings.nudge_style || "firm";
-    effective.focus_window_enabled = rawSettings.focus_window_enabled ?? true;
+    effective.focus_window_enabled = rawSettings.focus_window_enabled ?? false;
     effective.focus_window_start = rawSettings.focus_window_start || "13:00";
     effective.focus_window_end = rawSettings.focus_window_end || "21:00";
     effective.spiral_events = rawSettings.spiral_events || [];

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
+import { removeEmailFromExtension } from "@/lib/extensionStorage";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -59,6 +60,10 @@ export function useRequireAuth(): AuthStatus {
         setStatus("authenticated");
       } else if (event === "SIGNED_OUT") {
         setStatus("unauthenticated");
+        // Clear extension data when user signs out (including Google OAuth)
+        removeEmailFromExtension().catch((err) => {
+          console.error("Failed to clear extension on sign out:", err);
+        });
         navigate("/login", { replace: true });
       }
     });

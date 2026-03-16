@@ -139,13 +139,33 @@ async function getUserId() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// BACKGROUND SYNC: Sync plan every 5 minutes
+// BACKGROUND SYNC: Sync plan every 3 minutes
+// Auto-detects when user logs in on website and updates popup
 // ─────────────────────────────────────────────────────────────
-setInterval(() => {
-  syncPlanFromServer().catch((err) => {
+setInterval(async () => {
+  const previousState = await getLocal(["ft_user_email", "ft_plan"]);
+  const synced = await syncPlanFromServer().catch((err) => {
     console.warn("[FT] Background plan sync failed:", err);
+    return false;
   });
-}, 5 * 60 * 1000); // 5 minutes
+  
+  if (synced) {
+    const newState = await getLocal(["ft_user_email", "ft_plan"]);
+    // If user email or plan changed, notify popup to refresh
+    if (previousState.ft_user_email !== newState.ft_user_email || 
+        previousState.ft_plan !== newState.ft_plan) {
+      console.log("[FT] User state changed - notifying popup to refresh");
+      // Send message to popup if it's open
+      chrome.runtime.sendMessage({ 
+        type: "FT_USER_STATE_CHANGED",
+        email: newState.ft_user_email,
+        plan: newState.ft_plan
+      }).catch(() => {
+        // Popup might not be open, that's okay
+      });
+    }
+  }
+}, 3 * 60 * 1000); // 3 minutes
 
 // ─────────────────────────────────────────────────────────────
 // WATCH EVENT BATCH SENDER
@@ -956,56 +976,22 @@ async function handleMessage(msg) {
     return { ok: true, email };
   }
 
-  if (msg?.type === "FT_REMOVE_EMAIL_FROM_WEBSITE") {
+  if (msg?.type === "FT_REMOVE_EMAIL_FROM_WEBSITE" || msg?.type === "FT_SIGN_OUT_FROM_WEBSITE") {
     // CRITICAL: Save all data to server BEFORE clearing
     // This ensures no data loss on logout
     const { ft_user_email } = await getLocal(["ft_user_email"]);
+    
     if (ft_user_email) {
-      // Save everything to server before clearing
+      LOG("Saving data to server before logout...");
       await saveExtensionDataToServer(null).catch((err) => {
-        console.warn("[FT] Failed to save data before logout (non-critical):", err);
-        // Continue with logout even if save fails - data is already in Supabase
-      });
-      
-      // Save timer to server before logout (for cross-device sync)
-      await saveTimerToServer().catch((err) => {
-        console.warn("[FT] Failed to save timer before logout (non-critical):", err);
+        LOG("Failed to save data before logout:", err);
       });
     }
     
-    // Only remove auth-related fields, NOT user data
-    // User data (blocked_channels, watch_history, settings, goals) stays in Supabase
-    // When user logs back in, data will be restored from Supabase via loadExtensionDataFromServer()
-    // 
-    // IMPORTANT: Timer counters (ft_watch_seconds_today, etc.) are NOT cleared on logout
-    // They persist in local storage so daily limits continue across logout/login sessions
-    // They only reset at midnight via maybeRotateCounters() or when explicitly reset
+    // Clear ALL user-scoped data (comprehensive sign out)
     await clearUserScopedData();
-    await chrome.storage.local.remove([
-      "ft_user_email",      // Auth only
-      "ft_plan",             // Auth only
-      "ft_days_left",        // Auth only
-      "ft_trial_expires_at", // Auth only
-      // DO NOT clear timer counters - they persist across logout/login for daily limits:
-      // - ft_watch_seconds_today (persists - daily limit continues)
-      // - ft_watch_visits_today (persists - daily limit continues)
-      // - ft_searches_today (persists - daily limit continues)
-      // - ft_short_visits_today (persists - daily limit continues)
-      // - ft_shorts_engaged_today (persists - daily limit continues)
-      // - ft_shorts_seconds_today (persists - daily limit continues)
-
-      // - ft_blocked_today (persists - temporary blocks continue)
-      // - ft_block_shorts_today (persists - temporary blocks continue)
-      // DO NOT remove user data - it's preserved in Supabase:
-      // - ft_blocked_channels (preserved in Supabase)
-      // - ft_watch_history (preserved in Supabase)
-      // - ft_extension_settings (preserved in Supabase)
-      // - ft_user_goals (preserved in Supabase)
-      // - ft_user_pitfalls (preserved in Supabase)
-      // - ft_channel_spiral_count (preserved in Supabase)
-    ]);
     
-    LOG("Email and auth data removed from website logout (user data preserved in Supabase)");
+    LOG("✅ User signed out - all extension data cleared");
     return { ok: true };
   }
 
@@ -1036,34 +1022,6 @@ async function handleMessage(msg) {
     return { ok: true };
   }
 
-  if (msg?.type === "FT_BLOCK_CHANNEL_TODAY") {
-    const channel = msg?.channel?.trim();
-    if (!channel) {
-      return { ok: false, error: "Channel is required" };
-    }
-    
-    const { ft_blocked_channels_today = [] } = await getLocal(["ft_blocked_channels_today"]);
-    const blockedToday = Array.isArray(ft_blocked_channels_today) ? [...ft_blocked_channels_today] : [];
-    
-    if (!blockedToday.includes(channel)) {
-      blockedToday.push(channel);
-      await setLocal({ 
-        ft_blocked_channels_today: blockedToday,
-        ft_spiral_detected: null  // Clear spiral flag
-      });
-      LOG("Channel blocked for today:", channel);
-      
-      // Sync to server
-      await saveExtensionDataToServer({
-        blocked_channels_today: blockedToday
-      }).catch((err) => {
-        LOG("Failed to save temporary block to server:", err);
-      });
-    }
-    
-    return { ok: true, channel };
-  }
-
   if (msg?.type === "FT_RELOAD_EXTENSION_DATA") {
     // Explicit sync from Supabase (triggered by user action or website)
     // Only called on explicit sync, not on navigation
@@ -1073,7 +1031,7 @@ async function handleMessage(msg) {
     return { ok: true };
   }
 
-  if (msg?.type === "FT_BLOCK_CHANNEL_PERMANENT") {
+  if (msg?.type === "FT_BLOCK_CHANNEL") {
     const channel = msg?.channel?.trim();
     if (!channel) {
       return { ok: false, error: "Channel is required" };
@@ -1208,7 +1166,9 @@ async function handleMessage(msg) {
     
     try {
       // Update plan in Supabase via server
-      const SERVER_URL = "https://focustube-backend-4xah.onrender.com";
+      // Use environment variable - DO NOT HARDCODE
+      // Fallback to localhost for development testing
+      const SERVER_URL = typeof BACKEND_URL !== 'undefined' ? BACKEND_URL : 'http://localhost:3000';
       const response = await fetch(`${SERVER_URL}/user/update-plan`, {
         method: "POST",
         headers: {
@@ -1328,6 +1288,104 @@ async function handleMessage(msg) {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // PHASE 2: Message handlers for content script network calls
+  // Content scripts cannot call localhost due to loopback restrictions
+  // ─────────────────────────────────────────────────────────────
+  
+  if (msg?.type === "FT_PHASE2_CLASSIFY") {
+    try {
+      const { email, video_id, title, channel_name, description, tags } = msg;
+      if (!email || !video_id) {
+        return { ok: false, error: "Missing email or video_id", classification: "neutral" };
+      }
+
+      const response = await fetch(`${SERVER_URL}/ai/classify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, video_id, title, channel_name, description, tags }),
+        signal: AbortSignal.timeout(15000)
+      });
+
+      if (!response.ok) {
+        console.warn(`[FT] Phase 2 classify failed: ${response.status}`);
+        return { ok: false, error: `HTTP ${response.status}`, classification: "neutral" };
+      }
+
+      const data = await response.json();
+      return { 
+        ok: true, 
+        classification: data.classification || "neutral",
+        cached: data.cached || false,
+        model: data.model || null,
+        confidence: data.confidence || null
+      };
+    } catch (err) {
+      console.warn("[FT] Phase 2 classify error:", err.message);
+      return { ok: false, error: err.message, classification: "neutral" };
+    }
+  }
+
+  if (msg?.type === "FT_PHASE2_SAVE_WATCH_SESSION") {
+    try {
+      const { email, video_id, video_title, channel_name, classification, watch_seconds } = msg;
+      if (!email || !video_id || watch_seconds < 1) {
+        return { ok: true }; // Silent skip
+      }
+
+      await fetch(`${SERVER_URL}/video/update-watch-time`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          video_id,
+          video_title: video_title || null,
+          channel_name: channel_name || null,
+          classification: classification || "neutral",
+          watch_seconds: Math.round(watch_seconds)
+        }),
+        signal: AbortSignal.timeout(8000)
+      });
+
+      return { ok: true };
+    } catch (err) {
+      console.warn("[FT] Phase 2 save watch session error:", err.message);
+      return { ok: false, error: err.message };
+    }
+  }
+
+  if (msg?.type === "FT_PHASE2_SYNC_COUNTERS") {
+    try {
+      const { email, date, distracting_videos, distracting_seconds, neutral_videos, neutral_seconds, productive_videos, productive_seconds, total_seconds } = msg;
+      if (!email) {
+        return { ok: false, error: "Missing email" };
+      }
+
+      const response = await fetch(`${SERVER_URL}/extension/save-timer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email, date,
+          distracting_videos, distracting_seconds,
+          neutral_videos, neutral_seconds,
+          productive_videos, productive_seconds,
+          total_seconds
+        }),
+        signal: AbortSignal.timeout(8000)
+      });
+
+      if (!response.ok) {
+        console.warn(`[FT] Phase 2 sync counters failed: ${response.status}`);
+        return { ok: false, error: `HTTP ${response.status}` };
+      }
+
+      return { ok: true };
+    } catch (err) {
+      console.warn("[FT] Phase 2 sync counters error:", err.message);
+      return { ok: false, error: err.message };
+    }
+  }
+
   if (msg?.type === "FT_CLASSIFY_VIDEO") {
     try {
       const videoMetadata = msg?.videoMetadata;
@@ -1381,12 +1439,14 @@ async function handleMessage(msg) {
 
 // Message listener with proper promise handling
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  console.log('[FT Background] Received message:', msg?.type, 'from tab:', sender?.tab?.id);
   handleMessage(msg)
     .then((response) => {
+      console.log('[FT Background] Sending response for:', msg?.type, 'ok:', response?.ok);
       sendResponse(response);
     })
     .catch((err) => {
-      console.error("Error in background listener:", err);
+      console.error("[FT Background] Error in listener:", msg?.type, err);
       sendResponse({ ok: false, error: String(err) });
     });
   return true; // Keep channel open for async

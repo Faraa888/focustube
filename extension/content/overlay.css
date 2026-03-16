@@ -1,285 +1,143 @@
 /* content/overlay.css */
-/* Styles for FocusTube block overlay */
+/* Phase 3: FocusTube Overlay Styles - Three-Tier Design Philosophy */
+/* Tier 1: Ambient (low opacity, hover-reveal) */
+/* Tier 2: Nudge (intentional interruption, countdown-based) */
+/* Tier 3: Block (fully invasive, user-defined rules) */
 
-#ft-overlay {
+/* ═══════════════════════════════════════════════════════════════ */
+/* TIER 1: AMBIENT ELEMENTS (never destroyed except by Tier 3) */
+/* ═══════════════════════════════════════════════════════════════ */
+
+/* Watch Time Counter - bottom-right, ambient */
+#ft-counter-watchtime {
   position: fixed;
-  inset: 0;
+  bottom: 20px;
+  right: 20px;
   z-index: 2147483647;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.98); /* Darker */
-  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 6px;
+  padding: 4px 10px;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  color: #b3b3b3;
+  opacity: 0.35;
+  transition: opacity 150ms ease;
+  pointer-events: none;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
 }
 
-#ft-overlay .ft-box {
-  max-width: 800px; /* Bigger */
-  background: #0a0a0a; /* Darker */
-  padding: 40px; /* Bigger padding */
-  border-radius: 12px;
-  text-align: center;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8); /* Darker shadow */
+#ft-counter-watchtime:hover {
+  opacity: 1;
 }
 
-#ft-overlay h1 {
-  font-size: 2em;
-  margin: 0 0 16px 0;
-  color: #ff4444;
-}
-
-#ft-overlay #ft-overlay-message {
-  font-size: 1.1em;
-  line-height: 1.6;
-  margin: 0 0 24px 0;
-  color: #ccc;
-}
-
-#ft-overlay #ft-unlock {
-  margin-top: 12px;
-  padding: 10px 14px;
-  background: #e33;
-  color: #fff;
-  border: none;
+/* Shorts Counter - same style as watch time */
+#ft-counter-shorts {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 2147483647;
+  background: rgba(0, 0, 0, 0.5);
   border-radius: 6px;
-  cursor: pointer;
-  font-size: 1em;
-  transition: background 0.2s;
+  padding: 4px 10px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  color: #b3b3b3;
+  opacity: 0.35;
+  transition: opacity 150ms ease;
+  pointer-events: none;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
 }
 
-#ft-overlay #ft-unlock:hover {
-  background: #ff6666;
+#ft-counter-shorts:hover {
+  opacity: 1;
 }
 
-/* Button styles for overlay actions */
-#ft-overlay .ft-button {
-  padding: 12px 24px;
-  font-size: 1em;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
-  font-weight: 500;
-}
-
-#ft-overlay .ft-button:active {
-  transform: scale(0.98);
-}
-
-#ft-overlay .ft-button-primary {
-  background: #ff4444;
-  color: #fff;
-}
-
-#ft-overlay .ft-button-primary:hover {
-  background: #ff6666;
-}
-
-#ft-overlay .ft-button-secondary {
-  background: #333;
-  color: #fff;
-  border: 1px solid #555;
-}
-
-#ft-overlay .ft-button-secondary:hover {
-  background: #444;
-}
-
-/* Button container for multiple buttons */
-#ft-overlay .ft-button-container {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  margin-top: 24px;
-}
-
-/* Pro mode Shorts counter badge - prominent styling */
-#ft-shorts-counter {
+/* Search Counter - appears below search input */
+#ft-counter-search {
   position: fixed;
   top: 80px;
-  right: 20px;
-  z-index: 999998;
-  background: rgba(20, 20, 20, 0.92);
-  backdrop-filter: blur(12px);
-  color: #fff;
-  padding: 18px 28px;
-  border-radius: 12px;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 20px;
-  font-weight: 600;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 68, 68, 0.2);
-  border: 2px solid rgba(255, 68, 68, 0.3);
-  user-select: none;
-  pointer-events: auto;
-  min-width: 280px;
-}
-
-#ft-shorts-counter .ft-counter-text {
-  color: #fff;
-  line-height: 1.5;
-  font-weight: 600;
-}
-
-#ft-shorts-counter .ft-counter-line {
-  color: #fff;
-  line-height: 1.6;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-#ft-shorts-counter .ft-counter-line:last-child {
-  margin-bottom: 0;
-}
-
-#ft-shorts-counter .ft-counter-line.ft-counter-time {
-  margin-top: 4px;
-}
-
-#ft-shorts-counter .ft-counter-highlight {
-  color: #ff6666;
-  font-weight: 700;
-  font-size: 22px;
-}
-
-/* Badge block button */
-#ft-shorts-counter .ft-badge-block-btn {
-  width: 100%;
-  margin-top: 12px;
-  padding: 10px 16px;
-  background: #ff4444;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
-  box-shadow: 0 2px 8px rgba(255, 68, 68, 0.3);
-}
-
-#ft-shorts-counter .ft-badge-block-btn:hover {
-  background: #ff3333;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(255, 68, 68, 0.4);
-}
-
-#ft-shorts-counter .ft-badge-block-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 6px rgba(255, 68, 68, 0.3);
-}
-
-/* Global watch time counter */
-#ft-global-time-counter {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 999996;
-  background: rgba(20, 20, 20, 0.92);
-  backdrop-filter: blur(12px);
-  color: #fff;
-  padding: 12px 20px;
-  border-radius: 8px;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 15px;
-  font-weight: 600;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  border: 2px solid rgba(100, 150, 255, 0.3);
-  user-select: none;
-  pointer-events: none;
-  white-space: nowrap;
-  transition: all 0.3s ease;
-}
-
-#ft-global-time-counter .ft-global-time-text {
-  color: #fff;
-  font-weight: 600;
-}
-
-#ft-global-time-counter .ft-global-time-text strong {
-  color: #64b5f6;
-  font-weight: 700;
-  font-size: 16px;
-}
-
-/* Minimal format for fullscreen */
-#ft-global-time-counter.ft-global-time-minimal {
-  padding: 8px 14px;
-  font-size: 13px;
-  border-width: 1px;
-  background: rgba(20, 20, 20, 0.85);
-}
-
-#ft-global-time-counter.ft-global-time-minimal .ft-global-time-text-minimal {
-  color: #64b5f6;
-  font-weight: 600;
-  font-size: 13px;
-}
-
-/* Search counter badge */
-#ft-search-counter {
-  position: fixed;
-  top: 80px;
-  left: 70%;
-  z-index: 999997;
-  background: rgba(255, 68, 68, 0.95);
-  backdrop-filter: blur(12px);
-  color: #fff;
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 14px;
-  font-weight: 700;
-  box-shadow: 0 4px 12px rgba(255, 68, 68, 0.4);
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  user-select: none;
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-#ft-search-counter .ft-search-counter-text {
-  color: #fff;
-  font-weight: 600;
-}
-
-/* Search warning toast */
-#ft-search-warning {
-  position: fixed;
-  top: 20px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 999998;
-  pointer-events: none;
-  animation: slideDown 0.3s ease-out;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-}
-
-#ft-search-warning .ft-search-warning-content {
-  background: rgba(255, 193, 7, 0.95);
-  backdrop-filter: blur(8px);
-  color: #000;
-  padding: 12px 20px;
-  border-radius: 8px;
+  z-index: 2147483647;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 6px;
+  padding: 4px 10px;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  border: 2px solid rgba(255, 152, 0, 0.5);
-  white-space: nowrap;
+  font-size: 11px;
+  color: #b3b3b3;
+  opacity: 0.35;
+  transition: opacity 150ms ease, color 150ms ease;
+  pointer-events: none;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Global limit overlay */
-.ft-global-limit-overlay {
+#ft-counter-search:hover {
+  opacity: 1;
+}
+
+/* Search counter color states */
+#ft-counter-search.warning {
+  color: #eab308;
+  opacity: 0.5;
+}
+
+#ft-counter-search.blocked {
+  color: #ef4444;
+  opacity: 1;
+}
+
+/* Trial Expiry Banner - bottom-left pill */
+#ft-banner-trial {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 2147483647;
+  background: rgba(234, 179, 8, 0.15);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  color: #eab308;
+  opacity: 0.5;
+  transition: opacity 150ms ease, padding 150ms ease;
+  cursor: pointer;
+  user-select: none;
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+#ft-banner-trial:hover {
+  opacity: 1;
+  padding: 8px 16px;
+  max-width: 400px;
+}
+
+#ft-banner-trial .ft-banner-close {
+  margin-left: 8px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+#ft-banner-trial .ft-banner-close:hover {
+  opacity: 1;
+}
+
+/* Hidden state for Tier 1 elements during Tier 3 blocks */
+.ft-tier1-hidden {
+  display: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/* TIER 2: NUDGE OVERLAYS (intentional interruption) */
+/* ═══════════════════════════════════════════════════════════════ */
+
+/* Distracting Nudge Overlay (10s / 30s) */
+#ft-overlay-nudge-distracting {
   position: fixed;
   inset: 0;
   z-index: 2147483647;
@@ -287,12 +145,11 @@
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(12px);
-  padding: 20px;
-  animation: fadeIn 0.5s ease-out;
+  backdrop-filter: blur(4px);
+  animation: overlayFadeIn 200ms ease-out;
 }
 
-@keyframes fadeIn {
+@keyframes overlayFadeIn {
   from {
     opacity: 0;
   }
@@ -301,503 +158,159 @@
   }
 }
 
-.ft-global-limit-box {
-  max-width: 600px;
-  width: 100%;
-  background: #121212;
-  padding: 40px;
-  border-radius: 20px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
-  color: #fff;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  border: 2px solid rgba(255, 68, 68, 0.3);
-}
-
-.ft-global-limit-header {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.ft-global-limit-lock {
-  font-size: 80px;
-  line-height: 1;
-  margin-bottom: 16px;
-  animation: lockBounce 0.5s ease-out;
-}
-
-@keyframes lockBounce {
-  0% {
-    opacity: 0;
-    transform: translateY(-50px) scale(0.5);
-  }
-  60% {
-    transform: translateY(10px) scale(1.1);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.ft-global-limit-header h1 {
-  font-size: 32px;
-  margin: 0;
-  color: #ff6666;
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.ft-global-limit-body {
-  text-align: center;
-}
-
-.ft-global-limit-intro {
-  font-size: 18px;
-  margin: 0 0 24px 0;
-  color: #ccc;
-  font-weight: 500;
-}
-
-.ft-global-limit-stats {
-  background: rgba(255, 68, 68, 0.1);
+#ft-overlay-nudge-distracting .ft-nudge-card {
+  background: #212121;
+  border: 1px solid #333333;
   border-radius: 12px;
-  padding: 24px;
-  margin: 24px 0;
-  text-align: left;
+  padding: 32px 40px;
+  max-width: 500px;
+  text-align: center;
+  animation: cardSlideIn 200ms ease-out;
 }
 
-.ft-global-limit-stat {
-  font-size: 16px;
-  margin: 12px 0;
-  color: #fff;
-  line-height: 1.6;
+@keyframes cardSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
-.ft-global-limit-stat strong {
-  color: #ff6666;
-  font-weight: 600;
+#ft-overlay-nudge-distracting .ft-countdown {
+  font-size: 72px;
+  font-weight: bold;
+  color: #e3093a;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 24px;
+  line-height: 1;
 }
 
-.ft-global-limit-message {
-  font-size: 18px;
-  margin: 24px 0;
-  color: #ffcc66;
-  font-style: italic;
+#ft-overlay-nudge-distracting .ft-message {
+  font-size: 14px;
+  color: #b3b3b3;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   line-height: 1.5;
 }
 
-.ft-global-limit-box .ft-button-container {
-  margin-top: 32px;
-  display: flex;
-  gap: 16px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-/* Milestone popup modal */
-#ft-milestone-popup {
+/* Productive Nudge Overlay (5s / 30s / 5-min soft break) */
+#ft-overlay-nudge-productive {
   position: fixed;
   inset: 0;
   z-index: 2147483647;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(8px);
-  padding: 20px;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  animation: overlayFadeIn 200ms ease-out;
 }
 
-#ft-milestone-popup .ft-milestone-box {
+#ft-overlay-nudge-productive .ft-nudge-card {
+  background: #212121;
+  border: 1px solid #333333;
+  border-radius: 12px;
+  padding: 32px 40px;
   max-width: 500px;
-  background: #121212;
-  padding: 32px;
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-  color: #fff;
+  text-align: center;
+  animation: cardSlideIn 200ms ease-out;
+}
+
+#ft-overlay-nudge-productive .ft-countdown {
+  font-size: 72px;
+  font-weight: bold;
+  color: #00bb13;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 24px;
+  line-height: 1;
+}
+
+#ft-overlay-nudge-productive .ft-message {
+  font-size: 14px;
+  color: #b3b3b3;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
 }
 
-#ft-milestone-popup h2 {
-  font-size: 24px;
-  margin: 0 0 16px 0;
-  color: #ff6666;
-  line-height: 1.4;
-}
-
-#ft-milestone-popup .ft-milestone-intro {
-  font-size: 16px;
-  margin: 16px 0 12px 0;
-  color: #ccc;
-  font-weight: 500;
-}
-
-#ft-milestone-popup .ft-milestone-examples {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 24px 0;
-}
-
-#ft-milestone-popup .ft-milestone-examples li {
-  padding: 8px 0;
-  font-size: 15px;
-  line-height: 1.6;
-  color: #e0e0e0;
-}
-
-#ft-milestone-popup .ft-milestone-buttons {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 24px;
-}
-
-/* AI Distracting popup modal (same style as milestone popup) */
-#ft-ai-distracting-popup {
+/* Channel Spiral Toast - bottom-right, dismissable */
+#ft-toast-spiral {
   position: fixed;
-  inset: 0;
+  bottom: 80px;
+  right: 20px;
   z-index: 2147483647;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(8px);
-  padding: 20px;
-}
-
-#ft-ai-distracting-popup .ft-milestone-box {
-  max-width: 500px;
-  background: #121212;
-  padding: 32px;
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-  color: #fff;
+  width: 280px;
+  background: #212121;
+  border: 1px solid #333333;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  animation: toastSlideUp 200ms ease-out;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-#ft-ai-distracting-popup h2 {
-  font-size: 24px;
-  margin: 0 0 16px 0;
-  color: #ff6666;
-  line-height: 1.4;
-}
-
-#ft-ai-distracting-popup .ft-milestone-intro {
-  font-size: 16px;
-  margin: 16px 0 12px 0;
-  color: #ccc;
-  font-weight: 500;
-}
-
-#ft-ai-distracting-popup .ft-milestone-buttons {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 24px;
-}
-
-/* Journal nudge popup (temporary, dismissible) */
-#ft-journal-nudge {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 2147483646;
-  max-width: 400px;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  animation: slideInUp 0.3s ease-out;
-}
-
-@keyframes slideInUp {
+@keyframes toastSlideUp {
   from {
-    transform: translateY(100%);
     opacity: 0;
+    transform: translateY(20px);
   }
   to {
+    opacity: 1;
     transform: translateY(0);
-    opacity: 1;
   }
 }
 
-/* Block Channel Confirmation popup (same style as milestone popup) */
-#ft-block-channel-confirmation {
-  position: fixed;
-  inset: 0;
-  z-index: 2147483647;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(8px);
-  padding: 20px;
-}
-
-#ft-block-channel-confirmation .ft-milestone-box {
-  max-width: 500px;
-  background: #121212;
-  padding: 32px;
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-  color: #fff;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-#ft-block-channel-confirmation h2 {
-  font-size: 24px;
-  margin: 0 0 16px 0;
-  color: #ff6666;
-  line-height: 1.4;
-}
-
-#ft-block-channel-confirmation .ft-milestone-intro {
-  font-size: 16px;
-  margin: 16px 0 12px 0;
-  color: #ccc;
-  font-weight: 500;
-}
-
-#ft-block-channel-confirmation .ft-milestone-buttons {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 24px;
-}
-
-/* Spiral Detection Nudge popup (same style as milestone popup) */
-#ft-spiral-nudge {
-  position: fixed;
-  inset: 0;
-  z-index: 2147483647;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.98);
-  backdrop-filter: blur(8px);
-  padding: 0;
-  width: 100%;
-  height: 100%;
-}
-
-#ft-spiral-nudge .ft-milestone-box {
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  max-height: none;
-  background: #0a0a0a;
-  padding: 60px;
-  border-radius: 0;
-  box-shadow: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  color: #fff;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-#ft-spiral-nudge h2 {
-  font-size: 48px;
-  margin: 0 0 24px 0;
-  color: #ffaa00;
-  line-height: 1.4;
-}
-
-#ft-spiral-nudge .ft-milestone-intro {
-  font-size: 24px;
-  margin: 16px 0 32px 0;
-  color: #ccc;
-  font-weight: 500;
-  line-height: 1.5;
-}
-
-#ft-spiral-nudge .ft-spiral-timer {
-  display: flex;
-  justify-content: center;
-  margin: 40px 0;
-}
-
-#ft-spiral-nudge .ft-timer-circle {
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  border: 4px solid #ffaa00;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  background: rgba(255, 170, 0, 0.1);
-  animation: pulse 1s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(255, 170, 0, 0.7);
-  }
-  50% {
-    box-shadow: 0 0 0 10px rgba(255, 170, 0, 0);
-  }
-}
-
-#ft-spiral-nudge .ft-timer-circle #ft-timer-count {
-  font-size: 48px;
-  font-weight: 700;
-  color: #ffaa00;
+#ft-toast-spiral .ft-toast-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: #999;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
   line-height: 1;
 }
 
-#ft-spiral-nudge .ft-milestone-buttons {
-  display: flex;
-  gap: 16px;
-  justify-content: center;
-  margin-top: 40px;
-  flex-wrap: wrap;
-}
-
-#ft-spiral-nudge .ft-button {
-  padding: 12px 24px;
-  font-size: 15px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
-  font-weight: 500;
-  font-family: inherit;
-}
-
-#ft-spiral-nudge .ft-button:active {
-  transform: scale(0.98);
-}
-
-#ft-spiral-nudge .ft-button-secondary {
-  background: #333;
-  color: #fff;
-  border: 1px solid #555;
-}
-
-#ft-spiral-nudge .ft-button-secondary:hover {
-  background: #444;
-}
-
-#ft-spiral-nudge .ft-button-warning {
-  background: #ff8800;
+#ft-toast-spiral .ft-toast-close:hover {
   color: #fff;
 }
 
-#ft-spiral-nudge .ft-button-warning:hover {
-  background: #ff9900;
-}
-
-#ft-spiral-nudge .ft-button-danger {
-  background: #ff4444;
+#ft-toast-spiral .ft-toast-message {
+  font-size: 14px;
   color: #fff;
+  line-height: 1.5;
+  padding-right: 20px;
 }
 
-#ft-spiral-nudge .ft-button-danger:hover {
-  background: #ff6666;
-}
-
-#ft-spiral-nudge .ft-button-outline {
-  background: transparent;
-  color: #fff;
-  border: 2px solid #555;
-}
-
-#ft-spiral-nudge .ft-button-outline:hover {
-  background: #222;
-  border-color: #777;
-}
-
-/* Focus Window Overlay */
-#ft-focus-window-overlay {
+/* Channel Block Overlay (dismissable) */
+#ft-overlay-channel {
   position: fixed;
   inset: 0;
   z-index: 2147483647;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.95);
-  backdrop-filter: blur(8px);
-  padding: 20px;
-  overflow: hidden;
-  touch-action: none;
-  -webkit-overflow-scrolling: none;
+  background: rgba(0, 0, 0, 0.85);
+  animation: overlayFadeIn 200ms ease-out;
 }
 
-/* Prevent any interaction with content behind */
-#ft-focus-window-overlay::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: rgba(0, 0, 0, 0.95);
-}
-
-#ft-focus-window-overlay .ft-milestone-box {
-  max-width: 500px;
-  background: #121212;
-  padding: 32px;
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-  color: #fff;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-#ft-focus-window-overlay h2 {
-  font-size: 24px;
-  margin: 0 0 16px 0;
-  color: #4a9eff;
-  line-height: 1.4;
-}
-
-#ft-focus-window-overlay .ft-milestone-intro {
-  font-size: 16px;
-  margin: 16px 0 24px 0;
-  color: #ccc;
-  font-weight: 500;
-  line-height: 1.5;
-}
-
-#ft-focus-window-overlay .ft-milestone-buttons {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  margin-top: 24px;
-  flex-wrap: wrap;
-}
-
-#ft-focus-window-overlay .ft-button {
-  padding: 12px 24px;
-  font-size: 15px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
-  font-weight: 500;
-  font-family: inherit;
-}
-
-#ft-focus-window-overlay .ft-button:active {
-  transform: scale(0.98);
-}
-
-#ft-focus-window-overlay .ft-button-primary {
-  background: #4a9eff;
-  color: #fff;
-}
-
-#ft-focus-window-overlay .ft-button-primary:hover {
-  background: #6bb0ff;
-}
-
-#ft-journal-nudge .ft-journal-nudge-box {
-  background: #1a1a1a;
-  border: 1px solid #333;
+#ft-overlay-channel .ft-nudge-card {
+  background: #212121;
+  border: 1px solid #333333;
   border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  padding: 32px 40px;
+  max-width: 500px;
+  text-align: center;
   position: relative;
+  animation: cardSlideIn 200ms ease-out;
 }
 
-#ft-journal-nudge .ft-journal-nudge-close {
+#ft-overlay-channel .ft-close-btn {
   position: absolute;
   top: 12px;
   right: 12px;
@@ -805,302 +318,446 @@
   border: none;
   color: #999;
   font-size: 24px;
+  cursor: pointer;
+  padding: 4px;
   line-height: 1;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: color 0.2s, background 0.2s;
 }
 
-#ft-journal-nudge .ft-journal-nudge-close:hover {
+#ft-overlay-channel .ft-close-btn:hover {
   color: #fff;
-  background: #333;
 }
 
-#ft-journal-nudge h3 {
-  margin: 0 0 8px 0;
+#ft-overlay-channel .ft-message {
   font-size: 18px;
   color: #fff;
-  font-weight: 600;
-}
-
-#ft-journal-nudge .ft-journal-nudge-subtitle {
-  margin: 0 0 16px 0;
-  font-size: 14px;
-  color: #999;
-  line-height: 1.4;
-}
-
-#ft-journal-nudge .ft-journal-nudge-input {
-  width: 100%;
-  min-height: 80px;
-  padding: 12px;
-  background: #0a0a0a;
-  border: 1px solid #333;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 14px;
-  font-family: inherit;
-  resize: vertical;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   margin-bottom: 16px;
-  box-sizing: border-box;
 }
 
-#ft-journal-nudge .ft-journal-nudge-input:focus {
-  outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
-}
-
-#ft-journal-nudge .ft-journal-nudge-buttons {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-#ft-journal-nudge .ft-journal-nudge-btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-#ft-journal-nudge .ft-journal-nudge-btn-primary {
-  background: #667eea;
-  color: #fff;
-}
-
-#ft-journal-nudge .ft-journal-nudge-btn-primary:hover:not(:disabled) {
-  background: #5568d3;
-}
-
-#ft-journal-nudge .ft-journal-nudge-btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-#ft-journal-nudge .ft-journal-nudge-btn-secondary {
-  background: transparent;
-  color: #999;
-  border: 1px solid #333;
-}
-
-#ft-journal-nudge .ft-journal-nudge-btn-secondary:hover {
-  background: #222;
-  color: #fff;
-  border-color: #444;
-}
-
-/* Onboarding overlay styles */
-.ft-onboarding-overlay {
+/* Shorts Block Overlay (dismissable) */
+#ft-overlay-shorts {
   position: fixed;
   inset: 0;
   z-index: 2147483647;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.9);
-  backdrop-filter: blur(12px);
-  padding: 20px;
+  background: rgba(0, 0, 0, 0.85);
+  animation: overlayFadeIn 200ms ease-out;
 }
 
-.ft-onboarding-box {
-  max-width: 600px;
-  width: 100%;
-  background: #121212;
-  padding: 40px;
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+#ft-overlay-shorts .ft-nudge-card {
+  background: #212121;
+  border: 1px solid #333333;
+  border-radius: 12px;
+  padding: 32px 40px;
+  max-width: 500px;
+  text-align: center;
+  position: relative;
+  animation: cardSlideIn 200ms ease-out;
+}
+
+#ft-overlay-shorts .ft-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: #999;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+#ft-overlay-shorts .ft-close-btn:hover {
   color: #fff;
+}
+
+#ft-overlay-shorts .ft-message {
+  font-size: 18px;
+  color: #fff;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  margin-bottom: 16px;
+}
+
+/* Onboarding Overlay */
+#ft-overlay-onboarding {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  animation: overlayFadeIn 200ms ease-out;
+}
+
+#ft-overlay-onboarding .ft-nudge-card {
+  background: #212121;
+  border: 1px solid #333333;
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 500px;
+  text-align: center;
+  animation: cardSlideIn 200ms ease-out;
+}
+
+/* Shorts Confirmation Overlay */
+#ft-overlay-shorts-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  animation: overlayFadeIn 200ms ease-out;
+}
+
+#ft-overlay-shorts-confirm .ft-nudge-card {
+  background: #212121;
+  border: 1px solid #333333;
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 500px;
+  text-align: center;
+  animation: cardSlideIn 200ms ease-out;
+}
+
+/* Channel Success Overlay */
+#ft-overlay-channel-success {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  animation: overlayFadeIn 200ms ease-out;
+}
+
+#ft-overlay-channel-success .ft-nudge-card {
+  background: #212121;
+  border: 1px solid #333333;
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 500px;
+  text-align: center;
+  animation: cardSlideIn 200ms ease-out;
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/* TIER 3: BLOCK OVERLAYS (fully invasive, user-defined rules) */
+/* ═══════════════════════════════════════════════════════════════ */
+
+/* Hard Block Overlay (4+ distracting videos / 45+ mins) */
+#ft-overlay-block-hard {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #121212;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-.ft-onboarding-box h1 {
+#ft-overlay-block-hard .ft-block-content {
+  text-align: center;
+  max-width: 600px;
+  padding: 40px;
+}
+
+#ft-overlay-block-hard .ft-wordmark {
   font-size: 32px;
-  margin: 0 0 16px 0;
+  font-weight: bold;
   color: #fff;
-  text-align: center;
-  line-height: 1.2;
+  margin-bottom: 32px;
 }
 
-.ft-onboarding-intro {
-  font-size: 18px;
-  margin: 0 0 24px 0;
-  color: #ccc;
-  text-align: center;
-  font-weight: 500;
-}
-
-.ft-onboarding-goals-section {
-  margin: 24px 0;
-}
-
-.ft-onboarding-goals-section label {
+#ft-overlay-block-hard .ft-message {
+  font-size: 24px;
   color: #fff;
-  font-weight: 600;
-  margin-bottom: 8px;
-  display: block;
-}
-
-.ft-onboarding-goals-section textarea {
-  color: #fff;
-}
-
-.ft-onboarding-goals-section textarea::placeholder {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.ft-onboarding-goals-section textarea:focus {
-  outline: none;
-  border-color: rgba(100, 150, 255, 0.5);
-  background: rgba(255, 255, 255, 0.15);
-}
-
-@keyframes slideIn {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-/* Behavior loop nudge - full screen overlay */
-#ft-behavior-nudge {
-  position: fixed;
-  inset: 0;
-  z-index: 2147483647;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.98);
-  backdrop-filter: blur(8px);
-  padding: 0;
-}
-
-#ft-behavior-nudge .ft-milestone-box {
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  max-height: none;
-  background: #0a0a0a;
-  padding: 60px;
-  border-radius: 0;
-  box-shadow: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-#ft-behavior-nudge h2 {
-  font-size: 48px;
-  margin: 0 0 24px 0;
-  color: #ff6666;
+  margin-bottom: 40px;
   line-height: 1.4;
 }
 
-#ft-behavior-nudge .ft-milestone-intro {
-  font-size: 24px;
-  margin: 24px 0 32px 0;
-  color: #ccc;
-  font-weight: 500;
-}
-
-#ft-behavior-nudge .ft-spiral-timer {
-  margin: 40px 0;
-}
-
-#ft-behavior-nudge .ft-timer-circle {
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  border: 4px solid #ff6666;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto;
-}
-
-#ft-behavior-nudge #ft-timer-count {
-  font-size: 48px;
+#ft-overlay-block-hard .ft-countdown {
+  font-size: 96px;
   font-weight: bold;
-  color: #ff6666;
+  color: #e3093a;
+  font-family: monospace;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 24px;
+  line-height: 1;
 }
 
-#ft-behavior-nudge .ft-milestone-buttons {
-  display: flex;
-  gap: 20px;
-  justify-content: center;
-  margin-top: 40px;
+#ft-overlay-block-hard .ft-countdown-label {
+  font-size: 16px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 2px;
 }
 
-#ft-behavior-nudge .ft-button {
-  padding: 16px 32px;
-  font-size: 18px;
-  min-width: 150px;
-}
-
-#ft-behavior-nudge .ft-button-outline {
-  background: transparent;
-  color: #fff;
-  border: 1px solid #555;
-}
-
-#ft-behavior-nudge .ft-button-outline:hover {
-  background: #1a1a1a;
-}
-
-/* Journal Modal (separate from nudge, not timer-locked) */
-#ft-journal-modal {
+/* Daily Limit Block Overlay */
+#ft-overlay-block-daily {
   position: fixed;
   inset: 0;
-  z-index: 2147483648; /* Above nudge */
+  z-index: 2147483647;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.95);
-  backdrop-filter: blur(8px);
-}
-
-#ft-journal-modal .ft-journal-box {
-  width: 90%;
-  max-width: 600px;
-  background: #0a0a0a;
-  padding: 40px;
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8);
-  color: #fff;
+  background: #121212;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-#ft-journal-modal h2 {
+#ft-overlay-block-daily .ft-block-content {
+  text-align: center;
+  max-width: 600px;
+  padding: 40px;
+}
+
+#ft-overlay-block-daily .ft-wordmark {
   font-size: 32px;
-  margin: 0 0 16px 0;
-  color: #3ea6ff;
+  font-weight: bold;
+  color: #fff;
+  margin-bottom: 32px;
 }
 
-#ft-journal-modal .ft-journal-context {
-  font-size: 16px;
-  margin: 0 0 20px 0;
-  color: #ccc;
+#ft-overlay-block-daily .ft-message {
+  font-size: 24px;
+  color: #fff;
+  margin-bottom: 24px;
+  line-height: 1.4;
 }
 
-#ft-journal-modal .ft-journal-buttons {
+#ft-overlay-block-daily .ft-reset-time {
+  font-size: 18px;
+  color: #999;
+  margin-top: 16px;
+}
+
+/* Focus Window Block Overlay */
+#ft-overlay-block-focus {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
   display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 20px;
+  align-items: center;
+  justify-content: center;
+  background: #121212;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-#ft-journal-modal .ft-button {
-  padding: 12px 24px;
+#ft-overlay-block-focus .ft-block-content {
+  text-align: center;
+  max-width: 600px;
+  padding: 40px;
+}
+
+#ft-overlay-block-focus .ft-wordmark {
+  font-size: 32px;
+  font-weight: bold;
+  color: #fff;
+  margin-bottom: 32px;
+}
+
+#ft-overlay-block-focus .ft-message {
+  font-size: 24px;
+  color: #fff;
+  margin-bottom: 24px;
+  line-height: 1.4;
+}
+
+#ft-overlay-block-focus .ft-unlock-time {
+  font-size: 18px;
+  color: #999;
+  margin-top: 16px;
+}
+
+/* Productive Soft Break Overlay */
+#ft-overlay-block-productive {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #121212;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+#ft-overlay-block-productive .ft-block-content {
+  text-align: center;
+  max-width: 600px;
+  padding: 40px;
+}
+
+#ft-overlay-block-productive .ft-wordmark {
+  font-size: 32px;
+  font-weight: bold;
+  color: #fff;
+  margin-bottom: 32px;
+}
+
+#ft-overlay-block-productive .ft-message {
+  font-size: 24px;
+  color: #fff;
+  margin-bottom: 40px;
+  line-height: 1.4;
+}
+
+#ft-overlay-block-productive .ft-countdown {
+  font-size: 96px;
+  font-weight: bold;
+  color: #00bb13;
+  font-family: monospace;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 24px;
+  line-height: 1;
+}
+
+#ft-overlay-block-productive .ft-countdown-label {
   font-size: 16px;
-  min-width: 100px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/* UTILITY STYLES */
+/* ═══════════════════════════════════════════════════════════════ */
+
+/* Block Channel Button (injected into YouTube UI) */
+.ft-block-channel-btn {
+  background: #e3093a;
+  color: #fff;
+  border: none;
+  border-radius: 18px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  transition: background 150ms ease;
+  margin-left: 8px;
+}
+
+.ft-block-channel-btn:hover {
+  background: #c70832;
+}
+
+.ft-block-channel-btn.blocked {
+  background: #4caf50;
+  cursor: default;
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+/* SHORTS BADGE CONTENT CLASSES */
+/* ─────────────────────────────────────────────────────────────── */
+
+/* A single line of text inside the Shorts counter badge */
+.ft-counter-line {
+  font-size: 11px;
+  color: #b3b3b3;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* Secondary line with slight top spacing */
+.ft-counter-line.ft-counter-time {
+  margin-top: 2px;
+}
+
+/* Highlighted number within a counter line */
+.ft-counter-highlight {
+  color: #fff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Block for Today button inside the Shorts badge */
+.ft-badge-block-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 4px 0;
+  background: #e3093a;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  transition: background 150ms ease;
+}
+
+.ft-badge-block-btn:hover {
+  background: #c70832;
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+/* WATCH-TIME COUNTER CONTENT CLASSES */
+/* ─────────────────────────────────────────────────────────────── */
+
+/* Full format: "Total time: 1h 15m" */
+.ft-global-time-text {
+  font-size: 11px;
+  color: #b3b3b3;
+  font-variant-numeric: tabular-nums;
+}
+
+.ft-global-time-text strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Minimal format (used in fullscreen) — just the time value */
+.ft-global-time-text-minimal {
+  font-size: 11px;
+  color: #b3b3b3;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Badge modifier class applied in minimal mode */
+#ft-counter-watchtime.ft-global-time-minimal {
+  padding: 2px 8px;
+}
+
+/* ─────────────────────────────────────────────────────────────── */
+/* SEARCH WARNING TOAST */
+/* ─────────────────────────────────────────────────────────────── */
+
+#ft-search-warning,
+.ft-search-warning {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+  background: rgba(234, 179, 8, 0.15);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: #eab308;
+  pointer-events: none;
+  user-select: none;
+  animation: toastSlideUp 200ms ease-out;
+}
+
+.ft-search-warning-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }

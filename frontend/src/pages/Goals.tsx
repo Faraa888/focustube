@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import { storeEmailForExtension } from "@/lib/extensionStorage";
+import { getApiUrl } from "@/lib/api";
 import { X, Info } from "lucide-react";
 
 const Goals = () => {
@@ -127,7 +128,7 @@ const Goals = () => {
       if (distractingChannels.length > 0) {
         setNormalizingChannels(true);
         try {
-          const normalizeResponse = await fetch("https://focustube-backend-4xah.onrender.com/ai/normalize-channels", {
+          const normalizeResponse = await fetch(getApiUrl('/ai/normalize-channels'), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ channel_names: distractingChannels }),
@@ -158,7 +159,7 @@ const Goals = () => {
         try {
           // Get current blocked channels
           const getDataResponse = await fetch(
-            `https://focustube-backend-4xah.onrender.com/extension/get-data?email=${encodeURIComponent(user.email)}`
+            `${getApiUrl('/extension/get-data')}?email=${encodeURIComponent(user.email)}`
           );
           
           let currentBlocked: string[] = [];
@@ -179,7 +180,7 @@ const Goals = () => {
           });
 
           // Save updated blocked channels
-          await fetch("https://focustube-backend-4xah.onrender.com/extension/save-data", {
+          await fetch(getApiUrl('/extension/save-data'), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -219,11 +220,10 @@ const Goals = () => {
         const { data: userData, error: createError } = await supabase.from("users").upsert({
           email: user.email,
           plan: "trial",
-          trial_started_at: trialStart.toISOString(),
           trial_expires_at: trialEnd.toISOString(),
           goals: arrayToJsonString(goals),
-          anti_goals: arrayToJsonString(antiGoals),
-          distracting_channels: arrayToJsonString(normalizedChannels),
+          pitfalls: arrayToJsonString(antiGoals),
+          blocked_channels: arrayToJsonString(normalizedChannels),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }, {
@@ -250,8 +250,8 @@ const Goals = () => {
           .from("users")
           .update({
             goals: arrayToJsonString(goals),
-            anti_goals: arrayToJsonString(antiGoals),
-            distracting_channels: arrayToJsonString(normalizedChannels),
+            pitfalls: arrayToJsonString(antiGoals),
+            blocked_channels: arrayToJsonString(normalizedChannels),
             updated_at: new Date().toISOString(),
           })
           .eq("email", user.email);

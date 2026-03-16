@@ -443,72 +443,119 @@ Upgrade to keep your focus.
 
 ## 5. VISUAL OVERLAYS (EXTENSION)
 
-All overlays injected by `content.js` into the YouTube DOM.
+All overlays and persistent UI injected by `content.js` into the YouTube DOM.
 
-### Nudge Overlay (Distracting / Productive)
-- **Position:** Fixed, full-screen, `z-index: 9999`
-- **Background:** `rgba(0, 0, 0, 0.85)` with subtle blur
-- **Content:** Centered card, dark background (`#212121`), border `#333333`
-- **Non-dismissable:** No close button. Countdown timer visible.
-- **Countdown:** Large number showing seconds remaining, decrements each second
-- **Message:** Per PRODUCT_SPEC section 7
-- **After countdown:** Overlay removes itself, video resumes
+### DESIGN PHILOSOPHY
+FocusTube UI exists on a spectrum from ambient to invasive.
+Invasiveness must match the severity of the moment.
+Never compete with YouTube's own UI unless the intervention is intentional.
 
-### Hard Block Overlay (Distracting — 4+ videos / 45+ mins)
-- **Position:** Fixed, full-screen, `z-index: 9999`
-- **Background:** Solid `#121212`
-- **Content:** Centered. FocusTube logo, block message, countdown to block end (5 minutes)
-- **Non-dismissable during block period**
-- **After 5 minutes:** Overlay removes, user can resume
-
-### Daily Limit Block Overlay
-- Same as hard block but no countdown — blocked for rest of day
-- Message: "You've hit your daily limit. Time to focus on what matters. See you tomorrow."
-- Shows time until midnight reset
-
-### Focus Window Block Overlay
-- Shown on any YouTube page load outside focus window
-- Non-dismissable
-- Message: "Outside your focus hours. YouTube is blocked until [time]."
-
-### Channel Block Overlay (Dismissable)
-- Shown when user navigates to a blocked channel
-- Dismissable (X button)
-- Redirects to YouTube home
-- Message: "Channel blocked."
-
-### Shorts Block Overlay (Dismissable — Block mode)
-- Shown when user navigates to Shorts in block mode
-- Dismissable
-- Redirects to YouTube home
-- Message: "Shorts blocked."
-
-### Watch Time Counter (Always Visible)
-- Position: Fixed, bottom-right corner (or top-right — consistent position)
-- Background: `rgba(0, 0, 0, 0.7)`, `border-radius: 8px`, `padding: 6px 12px`
-- Text: `color: #b3b3b3`, `font-size: 12px`
-- Content: "Today: Xh Ym"
-- Visible on all YouTube pages including fullscreen
-
-### Shorts Counter (Shorts Pages Only)
-- Same position and style as watch time counter
-- Content: "Shorts: Xm · Y videos"
-- Only visible on `/shorts/` URLs
-
-### Search Counter
-- Injected into YouTube search bar area
-- Small text below or beside search input
-- Content: "X/15 searches"
-- Color changes: normal → `#b3b3b3`, warning (13–14) → `#eab308`, blocked (15) → `#ef4444`
-
-### Trial Expiry Nudge (Dismissable, YouTube Page)
-- Fixed, top of page, full-width banner
-- Background: `bg-yellow-500/10 border-b border-yellow-500/30`
-- Text: "Your trial ends in X days. Upgrade to keep your focus."
-- [Upgrade Now] button → focustube.co.uk/pricing
-- [×] dismiss button — dismissed once per day
+| Level | Elements | Behaviour |
+|-------|----------|-----------|
+| Ambient | Watch time counter, search counter, shorts counter, trial banner | Small, low opacity at rest. Visible on hover. Never jarring. |
+| Nudge | Distracting/productive countdown overlays, channel spiral toasts | Intentional interruption. Countdown makes them feel fair. |
+| Block | Hard block, daily limit, focus window | Fully invasive by design. User set these rules themselves. |
 
 ---
+
+### AMBIENT ELEMENTS (rest state / hover state)
+
+#### Watch Time Counter
+- **Rest state:** Fixed bottom-right, `opacity: 0.35`, `font-size: 11px`, `padding: 4px 10px`
+  Background: `rgba(0,0,0,0.5)`, `border-radius: 6px`
+  Content: "Xh Ym" — no label
+- **Hover state:** `opacity: 1`, shows full label "Today: Xh Ym", smooth 150ms transition
+- Visible on all YouTube pages including fullscreen
+- Never destroyed by nudge overlays — only hidden by full-screen blocks, restored after
+
+#### Shorts Counter
+- Same style as watch time counter
+- Only injected on `/shorts/` URLs
+- Rest state content: "Xm · Y" — expands to "Shorts: Xm · Y videos" on hover
+- Appears after first Short watched, not on page load
+
+#### Search Counter
+- Injected only when user focuses the YouTube search bar
+- Appears below search input as a small pill: "X / 15"
+- Color: `#b3b3b3` normal → `#eab308` at 13–14 → `#ef4444` at 15
+- Disappears when search bar loses focus (unless at warning state)
+- At 15: remains visible, blocks search navigation
+
+#### Trial Expiry Banner
+- **Not** a full-width top banner
+- Small fixed pill, bottom-left corner
+- Rest state: `opacity: 0.5`, shows "X days left"
+- Hover state: expands to show "Your trial ends in X days. Upgrade to keep your focus." + [Upgrade Now] button
+- Background: `rgba(234,179,8,0.15)`, border: `1px solid rgba(234,179,8,0.3)`, text: `#eab308`
+- Dismissed on click of X — once per day, stored in `ft_trial_nudge_dismissed_date`
+- Only shown on days 7, 10, 11, 12, 13 of trial
+
+---
+
+### NUDGE OVERLAYS (intentional interruption)
+
+#### Distracting Nudge Overlay (10s / 30s)
+- Fixed full-screen, `z-index: 9999`
+- Background: `rgba(0,0,0,0.85)` with `backdrop-filter: blur(4px)`
+- Centered card: `background: #212121`, `border: 1px solid #333333`, `border-radius: 12px`, `padding: 32px 40px`
+- Accent: `#e3093a` red
+- Countdown: large monospace number, bold, dominant visual element
+- Message: smaller, muted — `color: #b3b3b3`, `font-size: 14px`
+- Entry animation: card scale 0.96 → 1.0 + opacity 0 → 1, 200ms ease-out
+- Non-dismissable. No close button.
+- After countdown: removes itself, video resumes
+
+#### Productive Nudge Overlay (5s / 30s / 5-min soft break)
+- Same structure as distracting overlay
+- Accent: `#00bb13` green instead of red
+- Tone is encouraging, not punitive
+
+#### Channel Spiral Toast (3x same channel / 5x in 7 days)
+- NOT a full overlay — small toast, bottom-right, above watch time counter
+- `width: 280px`, card style, dismissable X button
+- Auto-dismisses after 5 seconds if not interacted with
+- 3x same day: "You've watched [Channel] 3 times today."
+- 5x in 7 days: "You keep coming back to [Channel]. Intentional?"
+- Entry: slides up from bottom-right, 200ms ease-out
+
+---
+
+### BLOCK OVERLAYS (fully invasive — user-defined rules)
+
+These are intentionally jarring. The user set these rules themselves.
+All block overlays: fixed full-screen, `z-index: 9999`, non-dismissable during block period.
+All block overlays: hide ambient elements (watch time counter, shorts counter, trial banner) during block. Restore them after block ends.
+
+#### Hard Block Overlay (4+ distracting videos / 45+ mins)
+- Background: solid `#121212` — no transparency, no blur
+- Centered content: FocusTube wordmark, block message, large countdown (5 minutes)
+- Message: "Take a break. Come back in 5 minutes."
+- Countdown: large monospace, `color: #e3093a`
+- After 5 minutes: removes itself, restores ambient elements, video can resume
+- Counters do NOT reset — persist until midnight
+
+#### Daily Limit Block Overlay
+- Same as hard block
+- No countdown — blocked rest of day
+- Message: "You've hit your daily limit. See you tomorrow."
+- Shows time until local midnight: "Resets in Xh Ym"
+
+#### Focus Window Block Overlay
+- Same as hard block
+- Message: "Outside your focus hours. YouTube is blocked until [time]."
+- Shows exact unlock time
+
+#### Channel Block Overlay (Dismissable)
+- Semi-transparent overlay — `rgba(0,0,0,0.85)` not solid
+- Dismissable: X button top-right
+- Redirects to youtube.com on dismiss
+- Message: "Channel blocked."
+- Auto-redirects after 3 seconds if not dismissed
+
+#### Shorts Block Overlay (Dismissable)
+- Same as channel block overlay
+- Message: "Shorts blocked."
+- Auto-redirects after 3 seconds
 
 ## 6. RESPONSIVE DESIGN
 

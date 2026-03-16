@@ -1,0 +1,58 @@
+# SECRETS — never read, never reference contents
+server/.env
+server/.env.local
+server/.env.*.local
+.env
+.env.*
+!.env.example
+
+# Dependencies — too large, irrelevant
+node_modules/
+extension/node_modules/
+server/node_modules/
+jspm_packages/
+
+# Build outputs — generated, not useful
+server/dist/
+server/*.js.map
+server/*.d.ts.map
+dist/
+*.tsbuildinfo
+
+# Lock files — never edit these
+package-lock.json
+yarn.lock
+.pnp.*
+.yarn/
+
+# Extension build artifacts
+extension/*.zip
+extension/*.crx
+extension/*.pem
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache
+.cache/
+.parcel-cache/
+.npm/
+.eslintcache
+.stylelintcache
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace

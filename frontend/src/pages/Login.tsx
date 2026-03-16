@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Chrome as ChromeIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { storeEmailForExtension } from "@/lib/extensionStorage";
+import { validateEmail } from "@/lib/emailValidation";
 
 // Type declaration for Chrome extension API
 declare const chrome: any;
@@ -19,10 +20,35 @@ const Login = () => {
   const [error, setError] = useState("");
   const returnToExtension = searchParams.get('return') === 'extension';
 
+  // Check for existing valid session on page load
+  useEffect(() => {
+    const checkExistingSession = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      // If there's a valid session and no error, redirect to dashboard
+      if (session && !error) {
+        console.log('[Login] Valid session found, redirecting to dashboard');
+        navigate("/app/dashboard");
+      }
+    };
+    
+    // Only check on initial page load (no hash fragment)
+    if (!window.location.hash) {
+      checkExistingSession();
+    }
+  }, [navigate]);
+
   // Handle OAuth callback - check if user just logged in via OAuth
   useEffect(() => {
     const checkSession = async () => {
-      console.log('[OAuth] Step 1: Session check started');
+      // Only process OAuth callback if there's a hash fragment (OAuth redirect)
+      // This prevents interfering with normal email/password login
+      if (!window.location.hash) {
+        console.log('[OAuth] No hash fragment - skipping OAuth check (normal page load)');
+        return;
+      }
+      
+      console.log('[OAuth] Step 1: Session check started (OAuth redirect detected)');
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.email) {
         console.log('[OAuth] Step 2: Session found:', session.user.email);
@@ -46,7 +72,19 @@ const Login = () => {
         }
 
         if (!existingUserError && (!existingUsers || existingUsers.length === 0)) {
-          console.log('[OAuth] Step 5: Creating user...');
+          console.log('[OAuth] Step 5: Creating NEW user (first time OAuth signup)...');
+          
+          // Validate email before creating user (block disposable emails)
+          const emailValidation = validateEmail(session.user.email || '');
+          if (!emailValidation.isValid) {
+            console.error('[OAuth] Email validation failed:', emailValidation.error);
+            // Sign out the user since we can't use this email
+            await supabase.auth.signOut();
+            // Redirect to signup with error
+            navigate('/signup?error=' + encodeURIComponent(emailValidation.error || 'Invalid email'));
+            return;
+          }
+          
           const trialStart = new Date();
           const trialExpires = new Date(trialStart);
           trialExpires.setDate(trialExpires.getDate() + 14);
@@ -54,19 +92,20 @@ const Login = () => {
           const { error: insertUserError } = await supabase.from("users").insert({
             email: session.user.email,
             plan: "trial",
-            trial_started_at: trialStart.toISOString(),
             trial_expires_at: trialExpires.toISOString(),
           });
 
           if (insertUserError) {
             console.error("[OAuth] Error creating users row after OAuth login:", insertUserError);
           } else {
-            console.log('[OAuth] Step 6: User created successfully');
+            console.log('[OAuth] Step 6: User created successfully - THIS IS A NEW USER');
             isNewOAuthUser = true;
             userPlan = "trial";
           }
         } else if (!existingUserError) {
+          console.log('[OAuth] Step 5: User already exists - RETURNING USER');
           userPlan = existingUsers[0]?.plan || "free";
+          isNewOAuthUser = false;
         }
 
         // Sync owner email + plan to extension storage when available
@@ -82,11 +121,13 @@ const Login = () => {
         
         // If coming from extension, close tab after delay
         if (returnToExtension) {
+          console.log('[OAuth] Step 8: Returning to extension - closing tab in 2s');
           setTimeout(() => {
             window.close();
           }, 2000);
         } else {
           const path = isNewOAuthUser ? "/goals" : "/app/dashboard";
+          console.log('[OAuth] Step 8: isNewOAuthUser =', isNewOAuthUser);
           console.log('[OAuth] Step 8: Navigating to:', path);
           navigate(path);
         }

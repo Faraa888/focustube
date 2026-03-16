@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FocusTube — Classification Eval</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface2: #1a1a1a;
+    --border: #222222;
+    --primary: #e3093a;
+    --primary-dim: rgba(227,9,58,0.15);
+    --text: #ffffff;
+    --muted: #666666;
+    --productive: #00bb13;
+    --neutral: #ffb800;
+    --distracting: #ed2b2b;
+    --productive-dim: rgba(0,187,19,0.12);
+    --neutral-dim: rgba(255,184,0,0.12);
+    --distracting-dim: rgba(237,43,43,0.12);
+    --pass: #00bb13;
+    --fail: #ed2b2b;
+    --uncertain: #ffb800;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    padding: 32px;
+  }
+
+  .header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 40px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+  }
+
+  .logo {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--primary);
+    letter-spacing: -0.5px;
+  }
+
+  .header-sub {
+    font-size: 13px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .config-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 12px;
+    margin-bottom: 32px;
+    align-items: end;
+  }
+
+  .field label {
+    display: block;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+
+  .field input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    border-radius: 6px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .field input:focus { border-color: var(--primary); }
+
+  .run-btn {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 11px 28px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.2s, transform 0.1s;
+    letter-spacing: 0.3px;
+  }
+
+  .run-btn:hover { opacity: 0.9; }
+  .run-btn:active { transform: scale(0.98); }
+  .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .profiles-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    margin-bottom: 32px;
+  }
+
+  .profile-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+
+  .profile-card:hover { border-color: #444; }
+  .profile-card.active { border-color: var(--primary); background: var(--primary-dim); }
+
+  .profile-card input[type=checkbox] {
+    position: absolute;
+    top: 10px; right: 10px;
+    accent-color: var(--primary);
+    width: 14px; height: 14px;
+  }
+
+  .profile-name {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    padding-right: 20px;
+  }
+
+  .profile-meta {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .profile-meta span {
+    display: block;
+  }
+
+  .profile-meta .goal { color: var(--productive); }
+  .profile-meta .pitfall { color: var(--distracting); }
+
+  .section-label {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+  }
+
+  .progress-bar {
+    height: 2px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-bottom: 24px;
+    overflow: hidden;
+    display: none;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--primary);
+    transition: width 0.3s ease;
+    border-radius: 2px;
+  }
+
+  .summary-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+  }
+
+  .stat-value {
+    font-size: 32px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .results-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .results-table th {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  .results-table td {
+    padding: 10px 12px;
+    font-size: 13px;
+    border-bottom: 1px solid #161616;
+    vertical-align: middle;
+  }
+
+  .results-table tr:hover td { background: var(--surface); }
+
+  .video-title {
+    font-weight: 600;
+    font-size: 12px;
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .video-channel {
+    font-size: 10px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 2px;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .badge.productive { background: var(--productive-dim); color: var(--productive); }
+  .badge.neutral { background: var(--neutral-dim); color: var(--neutral); }
+  .badge.distracting { background: var(--distracting-dim); color: var(--distracting); }
+
+  .confidence-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .conf-track {
+    width: 80px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .conf-fill {
+    height: 100%;
+    border-radius: 2px;
+  }
+
+  .conf-val {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    width: 32px;
+  }
+
+  .verdict {
+    font-size: 16px;
+  }
+
+  .model-tag {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    padding: 2px 6px;
+    background: var(--surface2);
+    border-radius: 3px;
+  }
+
+  .model-tag.pass2 { color: #7c6fff; background: rgba(124,111,255,0.12); }
+
+  .profile-tag {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    max-width: 100px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .loading-row td {
+    text-align: center;
+    padding: 20px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .filter-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .filter-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 5px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .filter-btn:hover { border-color: #444; color: var(--text); }
+  .filter-btn.active { background: var(--primary-dim); border-color: var(--primary); color: var(--primary); }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+  }
+
+  .empty-state .big { font-size: 40px; margin-bottom: 12px; }
+
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .reasoning-row td {
+    padding: 0 12px 12px 12px;
+    background: #0d0d0d;
+    border-bottom: 1px solid #161616;
+  }
+
+  .reasoning-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #999;
+    line-height: 1.6;
+  }
+
+  .reasoning-box .r-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .reasoning-box .r-text {
+    color: #ccc;
+  }
+
+  .expand-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    cursor: pointer;
+    padding: 2px 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .expand-btn:hover { color: var(--text); }
+
+  .error-toast {
+    background: var(--distracting-dim);
+    border: 1px solid var(--distracting);
+    color: var(--distracting);
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    margin-bottom: 16px;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">FocusTube</div>
+  <div class="header-sub">// classification eval · 20 videos × 5 profiles</div>
+</div>
+
+<div class="config-row">
+  <div class="field">
+    <label>Backend URL</label>
+    <input type="text" id="backendUrl" value="http://localhost:3000" />
+  </div>
+  <div class="field">
+    <label>Test Email</label>
+    <input type="text" id="testEmail" value="test6@gmail.com" />
+  </div>
+  <button class="run-btn" id="runBtn" onclick="runEval()">▶ Run Eval</button>
+</div>
+
+<div class="section-label">Select profiles to test</div>
+<div class="profiles-grid" id="profilesGrid"></div>
+
+<div class="progress-bar" id="progressBar">
+  <div class="progress-fill" id="progressFill"></div>
+</div>
+
+<div class="error-toast" id="errorToast"></div>
+
+<div class="summary-row" id="summaryRow" style="display:none">
+  <div class="stat-card">
+    <div class="stat-value" id="statTotal">—</div>
+    <div class="stat-label">Total Calls</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value" style="color:var(--pass)" id="statPass">—</div>
+    <div class="stat-label">Correct</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value" style="color:var(--fail)" id="statFail">—</div>
+    <div class="stat-label">Wrong</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value" style="color:var(--uncertain)" id="statPass2">—</div>
+    <div class="stat-label">Pass-2 Fired</div>
+  </div>
+</div>
+
+<div class="filter-row" id="filterRow" style="display:none">
+  <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+  <button class="filter-btn" onclick="setFilter('wrong', this)">Wrong Only</button>
+  <button class="filter-btn" onclick="setFilter('pass2', this)">Pass-2 Only</button>
+  <button class="filter-btn" onclick="setFilter('productive', this)">Productive</button>
+  <button class="filter-btn" onclick="setFilter('neutral', this)">Neutral</button>
+  <button class="filter-btn" onclick="setFilter('distracting', this)">Distracting</button>
+</div>
+
+<div class="table-wrap">
+  <table class="results-table">
+    <thead>
+      <tr>
+        <th>Video</th>
+        <th>Profile</th>
+        <th>Expected</th>
+        <th>Got</th>
+        <th>Confidence</th>
+        <th>Model</th>
+        <th>✓</th>
+      </tr>
+    </thead>
+    <tbody id="resultsBody">
+      <tr>
+        <td colspan="7">
+          <div class="empty-state">
+            <div class="big">⚡</div>
+            Configure backend URL, select profiles, and hit Run Eval
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+const VIDEOS = [
+  // Clear productive
+  { id: 'eval-v01', title: 'Python for Beginners - Full Course', channel: 'freeCodeCamp', description: 'Learn Python programming from scratch with hands-on projects', category: 'Education', tags: ['python','coding','tutorial'], expected: 'productive' },
+  { id: 'eval-v02', title: 'How to Build a SaaS in 30 Days', channel: 'Y Combinator', description: 'Founder talks through the process of launching a startup quickly', category: 'Education', tags: ['startup','saas','founder'], expected: 'productive' },
+  { id: 'eval-v03', title: 'React Hooks Explained - useState, useEffect', channel: 'Fireship', description: 'Master React hooks with real examples', category: 'Science & Technology', tags: ['react','javascript','hooks'], expected: 'productive' },
+  { id: 'eval-v04', title: 'How I Made $10k With My First Digital Product', channel: 'Ali Abdaal', description: 'Step by step breakdown of launching an online course', category: 'Education', tags: ['business','income','course'], expected: 'productive' },
+  { id: 'eval-v05', title: 'Cold Email Strategy That Actually Works in 2026', channel: 'Alex Hormozi', description: 'Proven cold outreach framework for B2B sales', category: 'Education', tags: ['sales','email','business'], expected: 'productive' },
+
+  // Clear distracting
+  { id: 'eval-v06', title: 'Fortnite Season 8 Funny Moments Compilation', channel: 'FaZe Clan', description: 'Best clips from Season 8 battle royale', category: 'Gaming', tags: ['fortnite','gaming','funny'], expected: 'distracting' },
+  { id: 'eval-v07', title: 'KSI vs Logan Paul 3 - Full Fight Reaction', channel: 'Sidemen', description: 'Reacting to the biggest boxing event of the year', category: 'Entertainment', tags: ['reaction','boxing','celebrity'], expected: 'distracting' },
+  { id: 'eval-v08', title: 'I Spent 24 Hours In A Lamborghini', channel: 'MrBeast', description: 'Crazy challenge living inside a supercar for a day', category: 'Entertainment', tags: ['mrbeast','challenge','lamborghini'], expected: 'distracting' },
+  { id: 'eval-v09', title: 'Top 10 Celebrity Drama of 2026', channel: 'Entertainment Weekly', description: 'Biggest celebrity feuds and controversies this year', category: 'Entertainment', tags: ['celebrity','drama','gossip'], expected: 'distracting' },
+  { id: 'eval-v10', title: 'FIFA 26 Ultimate Team Pack Opening - 200 Packs', channel: 'W2S', description: 'Opening hundreds of FIFA packs for the best players', category: 'Gaming', tags: ['fifa','gaming','packs'], expected: 'distracting' },
+
+  // Genuinely ambiguous
+  { id: 'eval-v11', title: 'My Morning Routine as a Developer', channel: 'Theo - t3.gg', description: 'How I start my day, what tools I use', category: 'People & Blogs', tags: ['routine','developer','productivity'], expected: 'neutral' },
+  { id: 'eval-v12', title: 'Is AI Going to Take Your Job?', channel: 'CNBC', description: 'Experts debate the future of work in the AI era', category: 'News & Politics', tags: ['ai','jobs','future'], expected: 'neutral' },
+  { id: 'eval-v13', title: 'What I Eat in a Day - Software Engineer', channel: 'TechWithTim', description: 'Vlog style day in the life with food diary', category: 'People & Blogs', tags: ['vlog','food','engineer'], expected: 'neutral' },
+  { id: 'eval-v14', title: 'The Biggest Tech News This Week', channel: 'MKBHD', description: 'Roundup of the top tech stories from the past 7 days', category: 'Science & Technology', tags: ['tech','news','weekly'], expected: 'neutral' },
+  { id: 'eval-v15', title: 'An Interesting Perspective on Hustle Culture', channel: 'Random Blogger', description: 'Personal thoughts on working hard vs working smart', category: 'People & Blogs', tags: [], expected: 'neutral' },
+
+  // Context-dependent (goal/pitfall overrides matter)
+  { id: 'eval-v16', title: 'Claude AI vs GPT-5: Which is Better for Coding?', channel: 'AI Jason', description: 'Comparing Anthropic and OpenAI models for software development', category: 'Science & Technology', tags: ['ai','claude','gpt','coding'], expected: 'productive' },
+  { id: 'eval-v17', title: 'AI Doom: Why We Should All Be Worried', channel: 'Robert Miles', description: 'The case for existential risk from artificial intelligence', category: 'Education', tags: ['ai','doom','risk','existential'], expected: 'distracting' },
+  { id: 'eval-v18', title: 'Building AI Agents with LangChain - Full Tutorial', channel: 'Sam Witteveen', description: 'Complete guide to building autonomous AI agents', category: 'Education', tags: ['ai','agents','langchain','tutorial'], expected: 'productive' },
+  { id: 'eval-v19', title: 'Day Trading Crypto - I Made $50k This Week', channel: 'CryptoKing', description: 'How I flipped altcoins for massive gains', category: 'Finance', tags: ['crypto','trading','money'], expected: 'distracting' },
+  { id: 'eval-v20', title: 'How Attention Mechanisms Work in Transformers', channel: 'Andrej Karpathy', description: 'Deep dive into the math behind self-attention in neural networks', category: 'Education', tags: ['ai','transformers','deep learning'], expected: 'productive' },
+];
+
+const PROFILES = [
+  {
+    id: 'p1',
+    name: 'AI Builder',
+    goals: 'Learn AI, build AI agents, master LLMs and coding',
+    pitfalls: 'AI doom content, crypto get-rich-quick, gaming videos'
+  },
+  {
+    id: 'p2',
+    name: 'SaaS Founder',
+    goals: 'Build a SaaS product, learn marketing and sales, grow MRR',
+    pitfalls: 'gaming, celebrity drama, reaction videos, vlogs'
+  },
+  {
+    id: 'p3',
+    name: 'Junior Dev',
+    goals: 'Learn React, Python, get my first developer job',
+    pitfalls: 'gaming videos, FIFA, fortnite, entertainment'
+  },
+  {
+    id: 'p4',
+    name: 'Fitness & Finance',
+    goals: 'Learn investing, personal finance, fitness and nutrition',
+    pitfalls: 'gaming, celebrity gossip, reaction content, sports highlights'
+  },
+  {
+    id: 'p5',
+    name: 'General User',
+    goals: 'Be more productive, learn new skills, reduce wasted time',
+    pitfalls: 'mindless entertainment, clickbait, conspiracy theories'
+  }
+];
+
+let allResults = [];
+let currentFilter = 'all';
+
+function renderProfiles() {
+  const grid = document.getElementById('profilesGrid');
+  grid.innerHTML = PROFILES.map(p => `
+    <div class="profile-card active" id="pc-${p.id}" onclick="toggleProfile('${p.id}', this)">
+      <input type="checkbox" checked id="chk-${p.id}" onclick="event.stopPropagation()">
+      <div class="profile-name">${p.name}</div>
+      <div class="profile-meta">
+        <span class="goal">↑ ${p.goals.substring(0,40)}...</span>
+        <span class="pitfall">↓ ${p.pitfalls.substring(0,40)}...</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleProfile(id, el) {
+  const chk = document.getElementById('chk-' + id);
+  chk.checked = !chk.checked;
+  el.classList.toggle('active', chk.checked);
+}
+
+function getSelectedProfiles() {
+  return PROFILES.filter(p => document.getElementById('chk-' + p.id)?.checked);
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorToast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 5000);
+}
+
+async function classifyVideo(backendUrl, email, video, profile) {
+  const res = await fetch(`${backendUrl}/ai/classify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email,
+      video_id: `${video.id}-${profile.id}`,
+      title: video.title,
+      channel: video.channel,
+      description: video.description,
+      category: video.category,
+      tags: video.tags,
+      goals: profile.goals,
+      pitfalls: profile.pitfalls,
+      include_reasoning: true
+    })
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function runEval() {
+  const backendUrl = document.getElementById('backendUrl').value.trim();
+  const email = document.getElementById('testEmail').value.trim();
+  const profiles = getSelectedProfiles();
+
+  if (!profiles.length) { showError('Select at least one profile.'); return; }
+
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Running...';
+
+  const progressBar = document.getElementById('progressBar');
+  const progressFill = document.getElementById('progressFill');
+  progressBar.style.display = 'block';
+  progressFill.style.width = '0%';
+
+  document.getElementById('summaryRow').style.display = 'none';
+  document.getElementById('filterRow').style.display = 'none';
+
+  const body = document.getElementById('resultsBody');
+  body.innerHTML = `<tr class="loading-row"><td colspan="7"><span class="spinner"></span>Running ${VIDEOS.length * profiles.length} classifications...</td></tr>`;
+
+  allResults = [];
+  const total = VIDEOS.length * profiles.length;
+  let done = 0;
+
+  for (const profile of profiles) {
+    for (const video of VIDEOS) {
+      try {
+        const result = await classifyVideo(backendUrl, email, video, profile);
+        allResults.push({ video, profile, result, error: null });
+      } catch (e) {
+        allResults.push({ video, profile, result: null, error: e.message });
+      }
+      done++;
+      progressFill.style.width = `${(done / total) * 100}%`;
+      // Small delay to avoid hammering the backend
+      await new Promise(r => setTimeout(r, 150));
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = '▶ Run Eval';
+  renderResults();
+}
+
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderResults(false);
+}
+
+function renderResults(updateSummary = true) {
+  const body = document.getElementById('resultsBody');
+
+  if (updateSummary) {
+    const total = allResults.length;
+    const correct = allResults.filter(r => r.result && r.result.classification === r.video.expected).length;
+    const wrong = allResults.filter(r => r.result && r.result.classification !== r.video.expected).length;
+    const pass2 = allResults.filter(r => r.result && r.result.model && r.result.model.includes('haiku')).length;
+
+    document.getElementById('statTotal').textContent = total;
+    document.getElementById('statPass').textContent = correct;
+    document.getElementById('statFail').textContent = wrong;
+    document.getElementById('statPass2').textContent = pass2;
+    document.getElementById('summaryRow').style.display = 'grid';
+    document.getElementById('filterRow').style.display = 'flex';
+  }
+
+  let filtered = allResults;
+  if (currentFilter === 'wrong') filtered = allResults.filter(r => r.result && r.result.classification !== r.video.expected);
+  else if (currentFilter === 'pass2') filtered = allResults.filter(r => r.result && r.result.model && r.result.model.includes('haiku'));
+  else if (['productive','neutral','distracting'].includes(currentFilter)) {
+    filtered = allResults.filter(r => r.video.expected === currentFilter);
+  }
+
+  if (!filtered.length) {
+    body.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="big">🎯</div>No results match this filter</div></td></tr>`;
+    return;
+  }
+
+  body.innerHTML = filtered.map((r, i) => {
+    const got = r.result ? r.result.classification : 'error';
+    const correct = got === r.video.expected;
+    const conf = r.result ? r.result.confidence : 0;
+    const isPass2 = r.result && r.result.model && r.result.model.includes('haiku');
+    const confColor = conf >= 0.85 ? '#00bb13' : conf >= 0.65 ? '#ffb800' : '#ed2b2b';
+    const reasoning = r.result ? r.result.reasoning : null;
+    const rowId = `reason-${i}`;
+
+    const reasoningContent = reasoning
+      ? `<div class="r-label">Model reasoning</div><div class="r-text">${reasoning}</div>`
+      : `<div class="r-label">Input context</div><div class="r-text">Goals: ${r.profile.goals}<br>Pitfalls: ${r.profile.pitfalls}<br>Video: "${r.video.title}" · ${r.video.channel} · ${r.video.category}</div>`;
+
+    return `
+      <tr onclick="toggleReason('${rowId}')" style="cursor:pointer">
+        <td>
+          <div class="video-title">${r.video.title}</div>
+          <div class="video-channel">${r.video.channel}</div>
+        </td>
+        <td><div class="profile-tag">${r.profile.name}</div></td>
+        <td><span class="badge ${r.video.expected}">${r.video.expected}</span></td>
+        <td>${r.result ? `<span class="badge ${got}">${got}</span>` : `<span style="color:var(--distracting);font-size:11px;font-family:monospace">ERR</span>`}</td>
+        <td>
+          <div class="confidence-bar">
+            <div class="conf-track">
+              <div class="conf-fill" style="width:${conf*100}%;background:${confColor}"></div>
+            </div>
+            <div class="conf-val">${conf ? (conf).toFixed(2) : '—'}</div>
+          </div>
+        </td>
+        <td>
+          ${r.result ? `<span class="model-tag ${isPass2 ? 'pass2' : ''}">${isPass2 ? 'haiku' : 'gpt-4o-mini'}</span>` : '—'}
+        </td>
+        <td class="verdict">${r.result ? (correct ? '✅' : '❌') : '⚠️'}</td>
+      </tr>
+      <tr class="reasoning-row" id="${rowId}" style="display:none">
+        <td colspan="7">
+          <div class="reasoning-box">${reasoningContent}</div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function toggleReason(id) {
+  const row = document.getElementById(id);
+  if (!row) return;
+  row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+}
+
+renderProfiles();
+</script>
+</body>
+</html>

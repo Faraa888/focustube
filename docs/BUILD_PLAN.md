@@ -10,6 +10,24 @@
 
 ---
 
+## TESTING STRATEGY
+
+**Phase 1-5: Test on localhost**
+- Backend: http://localhost:3000
+- Frontend: http://localhost:8080
+- Extension: points to localhost backend
+- All .env files use localhost URLs
+- Test all functionality locally before any deployment
+
+**After Phase 5 passes: Deploy to production**
+- Update .env files to production URLs
+- Backend: https://focustube-backend-4xah.onrender.com (Render)
+- Frontend: https://focustube.co.uk (Vercel)
+- Extension: rebuild with production URLs
+- Run smoke test checklist on production
+
+---
+
 ## KEEP (Don't Touch)
 
 Nothing from the old codebase is kept verbatim. However, the following patterns and structures carry forward as confirmed-correct references for the rebuild:

@@ -1,8 +1,11 @@
 // popup.js
 // Handles extension popup UI and authentication
 
-const SERVER_URL = "https://focustube-backend-4xah.onrender.com";
-const FRONTEND_URL = "https://focustube.co.uk";
+// URLs from environment variables (injected at build time)
+// DO NOT HARDCODE - these are replaced during build
+// Fallback to localhost for development testing
+const SERVER_URL = typeof BACKEND_URL !== 'undefined' ? BACKEND_URL : 'http://localhost:3000';
+const FRONTEND_URL = typeof FRONTEND_URL_VAR !== 'undefined' ? FRONTEND_URL_VAR : 'http://localhost:8080';
 
 // DOM elements
 const onboarding = document.getElementById("onboarding");
@@ -120,17 +123,14 @@ function showStatus() {
   headerSubtitle.textContent = "Account";
 }
 
-const TRIAL_TOTAL_DAYS = 14;
-
-function calculateTrialDaysLeft(trialStartedAt) {
-  if (!trialStartedAt) return null;
-  const startedAt = new Date(trialStartedAt);
-  if (Number.isNaN(startedAt.getTime())) return null;
+function calculateTrialDaysLeft(trialExpiresAt) {
+  if (!trialExpiresAt) return 0;
+  const expires = new Date(trialExpiresAt);
+  if (Number.isNaN(expires.getTime())) return 0;
 
   const now = new Date();
-  const elapsedMs = now.getTime() - startedAt.getTime();
-  const elapsedDays = Math.floor(elapsedMs / (1000 * 60 * 60 * 24));
-  return Math.max(0, TRIAL_TOTAL_DAYS - elapsedDays);
+  const daysLeft = Math.ceil((expires - now) / (1000 * 60 * 60 * 24));
+  return Math.max(0, daysLeft);
 }
 
 async function verifyBootstrapSession(email) {
@@ -195,13 +195,45 @@ async function loadCurrentEmail() {
       "ft_user_email",
       "ft_plan",
       "ft_data_owner_email",
-      "ft_trial_started_at",
+      "ft_trial_expires_at",
       "ft_days_left",
+      "ft_extension_settings"
     ]);
+    
+    const email = result.ft_user_email;
+    const plan = result.ft_plan || "free";
+    const daysLeft = result.ft_days_left;
+    const trialExpiresAt = result.ft_trial_expires_at;
+    const settings = result.ft_extension_settings || {};
+    
+    console.log("📧 [POPUP] Email found:", email);
+    console.log("📋 [POPUP] Plan:", plan);
+    console.log("⏰ [POPUP] Days left:", daysLeft);
+    console.log("⚙️ [POPUP] Settings:", settings);
+    
+    // CRITICAL: Verify user session with backend on every popup open
+    // This ensures extension and website are always in sync
+    if (email) {
+      console.log("🔐 [POPUP] Verifying session with backend...");
+      const verification = await verifyBootstrapSession(email);
+      
+      if (!verification.valid) {
+        console.warn("⚠️ [POPUP] Session invalid - user signed out on website");
+        // Clear local data and show onboarding
+        await chrome.storage.local.remove([
+          "ft_user_email",
+          "ft_plan", 
+          "ft_days_left",
+          "ft_trial_expires_at",
+          "ft_data_owner_email"
+        ]);
+        showOnboarding();
+        return;
+      }
+      console.log("✅ [POPUP] Session verified");
+    }
+    
     const ownerEmail = result.ft_data_owner_email;
-    const plan = result.ft_plan;
-    const email = result.ft_user_email || ownerEmail;
-
     // Popup-open gate: owner email controls logged-in state.
     if (!ownerEmail) {
       showOnboarding();
@@ -217,11 +249,11 @@ async function loadCurrentEmail() {
         return null;
       }
 
-      if (bootstrapSession.valid === true && bootstrapSession.data?.trial_started_at) {
-        await chrome.storage.local.set({ ft_trial_started_at: bootstrapSession.data.trial_started_at });
+      if (bootstrapSession.valid === true && bootstrapSession.data?.trial_expires_at) {
+        await chrome.storage.local.set({ ft_trial_expires_at: bootstrapSession.data.trial_expires_at });
         result = {
           ...result,
-          ft_trial_started_at: bootstrapSession.data.trial_started_at,
+          ft_trial_expires_at: bootstrapSession.data.trial_expires_at,
         };
       }
     }
@@ -247,8 +279,8 @@ async function loadCurrentEmail() {
           // User exists in database - show logged-in status
           console.log("✅ [POPUP] User verified, showing status screen");
           const currentPlan = planData.plan || plan;
-          const trialStartedAt = planData.trial_started_at || result.ft_trial_started_at || null;
-          const calculatedDaysLeft = calculateTrialDaysLeft(trialStartedAt);
+          const trialExpiresAt = planData.trial_expires_at || result.ft_trial_expires_at || null;
+          const calculatedDaysLeft = calculateTrialDaysLeft(trialExpiresAt);
           const daysLeft = currentPlan.toLowerCase() === "trial"
             ? (
                 calculatedDaysLeft ??
@@ -285,8 +317,8 @@ async function loadCurrentEmail() {
           if (planData.can_record !== undefined) {
             updates.ft_can_record = planData.can_record;
           }
-          if (planData.trial_started_at) {
-            updates.ft_trial_started_at = planData.trial_started_at;
+          if (planData.trial_expires_at) {
+            updates.ft_trial_expires_at = planData.trial_expires_at;
           }
           if (Object.keys(updates).length > 0) {
             await chrome.storage.local.set(updates);
@@ -315,7 +347,7 @@ async function loadCurrentEmail() {
         showStatus();
         const fallbackDaysLeft = plan.toLowerCase() === "trial"
           ? (
-              calculateTrialDaysLeft(result.ft_trial_started_at) ??
+              calculateTrialDaysLeft(result.ft_trial_expires_at) ??
               (result.ft_days_left ?? null)
             )
           : null;
@@ -374,7 +406,6 @@ async function saveEmailAndSync(email) {
         ft_plan: planData.plan.toLowerCase(),
         ft_days_left: planData.days_left || null,
         ft_trial_expires_at: planData.trial_expires_at || null,
-        ft_trial_started_at: planData.trial_started_at || null,
       });
       
       // Trigger background sync
@@ -476,6 +507,12 @@ function handleContinueFree() {
   window.close();
 }
 
+// Set signup link href dynamically
+const signupLink = document.getElementById("signupLink");
+if (signupLink) {
+  signupLink.href = `${FRONTEND_URL}/signup`;
+}
+
 // Event listeners (with null checks for safety)
 if (loginBtn) loginBtn.addEventListener("click", handleLogin);
 if (signupBtn) signupBtn.addEventListener("click", handleSignup);
@@ -499,6 +536,15 @@ if (manageAccountBtn) manageAccountBtn.addEventListener("click", handleManageAcc
 
 // Load current state on popup open
 loadCurrentEmail().catch(console.error);
+
+// Listen for user state changes from background script
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === "FT_USER_STATE_CHANGED") {
+    console.log("🔄 [POPUP] User state changed - auto-refreshing popup");
+    // Reload popup state to show new user/plan
+    loadCurrentEmail().catch(console.error);
+  }
+});
 
 // Sync plan from server on popup open (quick check)
 chrome.runtime.sendMessage({ type: "FT_SYNC_PLAN" }).catch((err) => {

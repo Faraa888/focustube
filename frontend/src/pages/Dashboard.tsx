@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Clock, TrendingUp, Flame, AlertCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
+import { getApiUrl } from "@/lib/api";
 import FocusScore from "@/components/dashboard/FocusScore";
 import WatchTimeMap from "@/components/dashboard/WatchTimeMap";
 import SpiralFeed from "@/components/dashboard/SpiralFeed";
@@ -39,7 +40,7 @@ const Dashboard = () => {
 
         // Check plan via /license/verify to get can_record flag
         const planResponse = await fetch(
-          `https://focustube-backend-4xah.onrender.com/license/verify?email=${encodeURIComponent(user.email)}`
+          `${getApiUrl('/license/verify')}?email=${encodeURIComponent(user.email)}`
         );
         if (planResponse.ok) {
           const planData = await planResponse.json();
@@ -49,7 +50,7 @@ const Dashboard = () => {
 
         // Fetch stats
         const statsResponse = await fetch(
-          `https://focustube-backend-4xah.onrender.com/dashboard/stats?email=${encodeURIComponent(user.email)}`
+          `${getApiUrl('/dashboard/stats')}?email=${encodeURIComponent(user.email)}`
         );
 
         if (!statsResponse.ok) {
@@ -65,7 +66,7 @@ const Dashboard = () => {
 
         // Fetch blocked channels
         const blockedResponse = await fetch(
-          `https://focustube-backend-4xah.onrender.com/extension/get-data?email=${encodeURIComponent(user.email)}`
+          `${getApiUrl('/extension/get-data')}?email=${encodeURIComponent(user.email)}`
         );
 
         if (blockedResponse.ok) {
@@ -284,13 +285,13 @@ const Dashboard = () => {
                                 if (!user?.email) return;
                                 
                                 const response = await fetch(
-                                  `https://focustube-backend-4xah.onrender.com/extension/get-data?email=${encodeURIComponent(user.email)}`
+                                  `${getApiUrl('/extension/get-data')}?email=${encodeURIComponent(user.email)}`
                                 );
                                 const result = await response.json();
                                 const currentBlocked = result.ok && result.data?.blocked_channels ? result.data.blocked_channels : [];
                                 const updatedBlocked = [...currentBlocked, distraction.channel];
                                 
-                                const saveResponse = await fetch("https://focustube-backend-4xah.onrender.com/extension/save-data", {
+                                const saveResponse = await fetch(getApiUrl('/extension/save-data'), {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({

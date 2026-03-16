@@ -64,16 +64,17 @@ export async function storeEmailForExtension(email: string): Promise<boolean> {
 /**
  * Remove email from chrome.storage.local (on logout)
  * Uses postMessage to communicate with extension content script
+ * Clears ALL user data including email, plan, and settings
  */
 export async function removeEmailFromExtension(): Promise<boolean> {
   try {
     try {
       const response = await sendMessageToExtension({
-        type: "FT_REMOVE_EMAIL_FROM_WEBSITE"
+        type: "FT_SIGN_OUT_FROM_WEBSITE"
       });
       
       if (response && response.ok) {
-        console.log('✅ Email removed from chrome.storage');
+        console.log('✅ User signed out - all extension data cleared');
         return true;
       }
       return false;
@@ -81,6 +82,7 @@ export async function removeEmailFromExtension(): Promise<boolean> {
       const errorMsg = error.message || String(error);
       if (errorMsg.includes('Extension not responding') || 
           errorMsg.includes('Extension context invalidated')) {
+        console.log('ℹ️ Extension not responding - sign out will sync on next popup open');
         return false;
       }
       console.error('Unexpected error sending message to extension:', error);

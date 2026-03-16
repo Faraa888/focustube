@@ -34,8 +34,10 @@ async function getServerUrl() {
     console.warn("[FT] Error reading server URL from storage:", e.message);
   }
   
-  // Default to production backend URL
-  return "https://focustube-backend-4xah.onrender.com";
+  // Default to backend URL from environment variable (injected at build time)
+  // DO NOT HARDCODE - use BACKEND_URL env var
+  // Fallback to localhost for development testing
+  return typeof BACKEND_URL !== 'undefined' ? BACKEND_URL : 'http://localhost:3000';
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -205,7 +207,7 @@ async function openStripeCheckout(planType = "monthly") {
       errorMsg = error;
     }
     
-    alert(`Failed to open checkout: ${errorMsg}\n\nPlease try again. If the problem persists:\n1. Check your email is set (dev panel bottom right)\n2. Ensure server is running (localhost:3000)\n3. Contact support if issue continues.`);
+    alert(`Failed to open checkout: ${errorMsg}\n\nPlease try again. If the problem persists:\n1. Check your email is set (dev panel bottom right)\n2. Ensure server is running\n3. Contact support if issue continues.`);
   }
 }
 
@@ -214,27 +216,27 @@ async function openStripeCheckout(planType = "monthly") {
  * Displays explanation and two action buttons.
  */
 function showShortsBlockedOverlay() {
-  removeOverlay(); // ensure no duplicates
+  destroyTier2();
 
   const overlay = document.createElement("div");
-  overlay.id = "ft-overlay";
+  overlay.id = "ft-overlay-shorts-confirm";
 
   overlay.innerHTML = `
-    <div class="ft-box">
-      <h1>FocusTube Active</h1>
-      <p id="ft-overlay-message">
+    <div class="ft-nudge-card">
+      <h1 style="font-size:24px;margin-bottom:16px;color:#fff;">FocusTube Active</h1>
+      <p style="font-size:16px;margin-bottom:24px;color:#b3b3b3;line-height:1.5;">
         Shorts are blocked on the Free plan to help you stay focused. Upgrade to Pro to watch Shorts with smart tracking and controls.
       </p>
-      <div class="ft-button-container">
-        <button id="ft-back-home" class="ft-button ft-button-secondary">Back to Home Screen</button>
-        <button id="ft-upgrade-pro" class="ft-button ft-button-primary">Upgrade to Pro</button>
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <button id="ft-back-home" style="padding:12px 24px;background:#333;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;">Back to Home Screen</button>
+        <button id="ft-upgrade-pro" style="padding:12px 24px;background:#e3093a;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:500;cursor:pointer;">Upgrade to Pro</button>
       </div>
     </div>
   `;
 
   // Back to Home button - just dismiss overlay (user already on home)
   overlay.querySelector("#ft-back-home").addEventListener("click", () => {
-    removeOverlay();
+    destroyTier2();
   });
 
   // Upgrade to Pro button - opens Stripe Checkout
@@ -252,16 +254,15 @@ function showShortsBlockedOverlay() {
  * Prompts user to click extension icon to sign up/sign in
  */
 function showOnboardingOverlay() {
-  removeOverlay(); // ensure no duplicates
+  destroyTier2();
 
   const overlay = document.createElement("div");
-  overlay.id = "ft-overlay";
-  overlay.className = "ft-onboarding-overlay";
+  overlay.id = "ft-overlay-onboarding";
 
   overlay.innerHTML = `
-    <div class="ft-box ft-onboarding-box">
-      <h1>🎯 Welcome to FocusTube!</h1>
-      <p class="ft-onboarding-intro" style="font-size:16px;margin-bottom:20px;">
+    <div class="ft-nudge-card">
+      <h1 style="font-size:28px;margin-bottom:16px;">🎯 Welcome to FocusTube!</h1>
+      <p style="font-size:16px;margin-bottom:20px;color:#b3b3b3;">
         Get started by connecting your account to unlock Pro features.
       </p>
       
@@ -276,9 +277,9 @@ function showOnboardingOverlay() {
         </ul>
       </div>
       
-      <div class="ft-button-container" style="margin-top:24px;">
-        <button id="ft-onboarding-dismiss" class="ft-button ft-button-primary">Got it, I'll click the icon</button>
-        <button id="ft-onboarding-skip" class="ft-button" style="margin-top:12px;background:transparent;border:1px solid rgba(255,255,255,0.3);">Skip for now</button>
+      <div style="margin-top:24px;display:flex;flex-direction:column;gap:12px;">
+        <button id="ft-onboarding-dismiss" style="padding:12px 24px;background:#e3093a;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:500;cursor:pointer;">Got it, I'll click the icon</button>
+        <button id="ft-onboarding-skip" style="padding:12px 24px;background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;font-size:14px;cursor:pointer;">Skip for now</button>
       </div>
     </div>
   `;
@@ -295,10 +296,7 @@ function showOnboardingOverlay() {
         ft_onboarding_completed: true
       });
       
-      // Dismiss overlay
-      removeOverlay();
-      
-      // Trigger navigation check to show normal extension flow
+      destroyTier2();
       handleNavigation().catch(console.error);
     } catch (e) {
       console.error("[FT] Error dismissing onboarding:", e);
@@ -317,11 +315,11 @@ function showOnboardingOverlay() {
         ft_onboarding_completed: true
       });
       
-      removeOverlay();
+      destroyTier2();
       handleNavigation().catch(console.error);
     } catch (e) {
       console.error("[FT] Error skipping onboarding:", e);
-      removeOverlay();
+      destroyTier2();
     }
   });
 
@@ -333,26 +331,26 @@ function showOnboardingOverlay() {
  * Displays encouraging message about choosing discipline.
  */
 function showProManualBlockOverlay() {
-  removeOverlay(); // ensure no duplicates
+  destroyTier2();
 
   const overlay = document.createElement("div");
-  overlay.id = "ft-overlay";
+  overlay.id = "ft-overlay-shorts-confirm";
 
   overlay.innerHTML = `
-    <div class="ft-box">
-      <h1>Shorts Blocked</h1>
-      <p id="ft-overlay-message">
+    <div class="ft-nudge-card">
+      <h1 style="font-size:24px;margin-bottom:16px;color:#fff;">Shorts Blocked</h1>
+      <p style="font-size:16px;margin-bottom:24px;color:#b3b3b3;line-height:1.5;">
         You have chosen to block Shorts for today and have chosen discipline. This decision will help you stay focused and productive.
       </p>
-      <div class="ft-button-container">
-        <button id="ft-continue" class="ft-button ft-button-primary">Continue</button>
+      <div style="display:flex;justify-content:center;">
+        <button id="ft-continue" style="padding:12px 24px;background:#e3093a;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:500;cursor:pointer;">Continue</button>
       </div>
     </div>
   `;
 
   // Continue button - dismiss overlay (user already on home)
   overlay.querySelector("#ft-continue").addEventListener("click", () => {
-    removeOverlay();
+    destroyTier2();
   });
 
   document.body.appendChild(overlay);
@@ -363,7 +361,7 @@ function showProManualBlockOverlay() {
  * @param {string} channelName - Name of the blocked channel
  */
 function showChannelBlockedOverlay(channelName) {
-  removeOverlay(); // ensure no duplicates
+  destroyTier2();
   
   // Pause and mute video before showing overlay
   pauseAndMuteVideo();
@@ -376,13 +374,12 @@ function showChannelBlockedOverlay(channelName) {
   }
 
   const overlay = document.createElement("div");
-  overlay.id = "ft-overlay";
-  overlay.className = "ft-channel-blocked-overlay";
+  overlay.id = "ft-overlay-channel-success";
 
   overlay.innerHTML = `
-    <div class="ft-box">
-      <h1>✅ Channel Blocked</h1>
-      <p id="ft-overlay-message">
+    <div class="ft-nudge-card">
+      <h1 style="font-size:24px;margin-bottom:16px;color:#fff;">✅ Channel Blocked</h1>
+      <p style="font-size:16px;color:#b3b3b3;line-height:1.5;">
         ${channelName} has been blocked to help you stay focused. Redirecting to YouTube home...
       </p>
     </div>
@@ -390,17 +387,786 @@ function showChannelBlockedOverlay(channelName) {
 
   document.body.appendChild(overlay);
 
-  // Auto-dismiss and redirect after 3 seconds
+  // Auto-dismiss and redirect after 2 seconds
   setTimeout(() => {
-    removeOverlay();
+    destroyTier2();
     window.location.href = "https://www.youtube.com/";
   }, 2000);
 }
 
-/** Removes the overlay if it exists */
-function removeOverlay() {
-  const el = document.getElementById("ft-overlay");
-  if (el) el.remove();
+
+// ─────────────────────────────────────────────────────────────
+// PHASE 3: OVERLAY TIER MANAGEMENT
+// ─────────────────────────────────────────────────────────────
+// Three-tier system:
+// TIER 1 - Ambient: watch time counter, shorts counter, search counter, trial banner
+// TIER 2 - Nudge: distracting/productive nudges, channel/shorts overlays, spiral toasts
+// TIER 3 - Block: hard block, daily limit, focus window (hide Tier 1, destroy Tier 2)
+
+/**
+ * Destroys all Tier 2 overlay elements
+ * Called before showing any new Tier 2 overlay, or before showing Tier 3 blocks
+ */
+function destroyTier2() {
+  const tier2Ids = [
+    'ft-overlay-nudge-distracting',
+    'ft-overlay-nudge-productive',
+    'ft-overlay-channel',
+    'ft-overlay-shorts',
+    'ft-toast-spiral',
+    'ft-overlay-onboarding',
+    'ft-overlay-shorts-confirm',
+    'ft-overlay-channel-success'
+  ];
+  
+  tier2Ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  });
+}
+
+/**
+ * Hides all Tier 1 ambient elements during Tier 3 blocks
+ * Does not destroy them - just hides with CSS class
+ */
+function hideTier1() {
+  const tier1Ids = [
+    'ft-counter-watchtime',
+    'ft-counter-shorts',
+    'ft-counter-search',
+    'ft-banner-trial'
+  ];
+  
+  tier1Ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('ft-tier1-hidden');
+  });
+}
+
+/**
+ * Restores all Tier 1 ambient elements after Tier 3 block ends
+ * Removes the hidden class to make them visible again
+ */
+function restoreTier1() {
+  const tier1Ids = [
+    'ft-counter-watchtime',
+    'ft-counter-shorts',
+    'ft-counter-search',
+    'ft-banner-trial'
+  ];
+  
+  tier1Ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('ft-tier1-hidden');
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// PHASE 3: DISTRACTING NUDGE OVERLAYS (TIER 2)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Shows distracting nudge overlay with countdown
+ * @param {number} seconds - Countdown duration (10 or 30)
+ */
+function showDistractingNudge(seconds) {
+  // Destroy any existing Tier 2 overlays first
+  destroyTier2();
+  
+  // Pause and mute video
+  pauseAndMuteVideo();
+  
+  const overlay = document.createElement('div');
+  overlay.id = 'ft-overlay-nudge-distracting';
+  
+  overlay.innerHTML = `
+    <div class="ft-nudge-card">
+      <div class="ft-countdown" id="ft-nudge-countdown">${seconds}</div>
+      <div class="ft-message">Are you sure you're not getting pulled off track?</div>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  
+  // Countdown timer
+  let remaining = seconds;
+  const countdownEl = document.getElementById('ft-nudge-countdown');
+  
+  const timer = setInterval(() => {
+    remaining--;
+    if (countdownEl) {
+      countdownEl.textContent = remaining;
+    }
+    
+    if (remaining <= 0) {
+      clearInterval(timer);
+      // Remove overlay
+      const el = document.getElementById('ft-overlay-nudge-distracting');
+      if (el) el.remove();
+      // Restore video state (muted state only, user must manually resume)
+      restoreVideoState();
+    }
+  }, 1000);
+}
+
+/**
+ * Shows hard block overlay (5 minutes) - Tier 3
+ * Counters do NOT reset after block ends
+ */
+function showHardBlock() {
+  // Destroy Tier 2, hide Tier 1
+  destroyTier2();
+  hideTier1();
+  
+  // Pause and mute video
+  pauseAndMuteVideo();
+  
+  const overlay = document.createElement('div');
+  overlay.id = 'ft-overlay-block-hard';
+  
+  const totalSeconds = 5 * 60; // 5 minutes
+  
+  overlay.innerHTML = `
+    <div class="ft-block-content">
+      <div class="ft-wordmark">FocusTube</div>
+      <div class="ft-message">Take a break. Come back in 5 minutes.</div>
+      <div class="ft-countdown" id="ft-block-countdown">5:00</div>
+      <div class="ft-countdown-label">Time Remaining</div>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  
+  // Countdown timer
+  let remaining = totalSeconds;
+  const countdownEl = document.getElementById('ft-block-countdown');
+  
+  const timer = setInterval(() => {
+    remaining--;
+    
+    const minutes = Math.floor(remaining / 60);
+    const seconds = remaining % 60;
+    const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
+    if (countdownEl) {
+      countdownEl.textContent = timeStr;
+    }
+    
+    if (remaining <= 0) {
+      clearInterval(timer);
+      // Remove overlay
+      const el = document.getElementById('ft-overlay-block-hard');
+      if (el) el.remove();
+      // Restore Tier 1 elements
+      restoreTier1();
+      // Restore video state
+      restoreVideoState();
+    }
+  }, 1000);
+}
+
+// ─────────────────────────────────────────────────────────────
+// PHASE 3: PRODUCTIVE NUDGE OVERLAYS (TIER 2 / TIER 3)
+// ─────────────────────────────────────────────────────────────
+
+function showProductiveNudge(seconds) {
+  destroyTier2();
+  const overlay = document.createElement('div');
+  overlay.id = 'ft-overlay-nudge-productive';
+  overlay.innerHTML = `
+    <div class="ft-nudge-card">
+      <div class="ft-countdown" id="ft-nudge-countdown-p">${seconds}</div>
+      <div class="ft-message">Time to apply what you've learned?</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  let remaining = seconds;
+  const countdownEl = document.getElementById('ft-nudge-countdown-p');
+  const timer = setInterval(() => {
+    remaining--;
+    if (countdownEl) countdownEl.textContent = remaining;
+    if (remaining <= 0) {
+      clearInterval(timer);
+      const el = document.getElementById('ft-overlay-nudge-productive');
+      if (el) el.remove();
+    }
+  }, 1000);
+}
+
+function showProductiveSoftBreak() {
+  hideTier1();
+  const totalSeconds = 5 * 60;
+  const overlay = document.createElement('div');
+  overlay.id = 'ft-overlay-block-productive';
+  overlay.innerHTML = `
+    <div class="ft-block-content">
+      <div class="ft-wordmark">FocusTube</div>
+      <div class="ft-message">Take a breather, keep going after!</div>
+      <div class="ft-countdown" id="ft-prod-break-countdown">5:00</div>
+      <div class="ft-countdown-label">Time Remaining</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  let remaining = totalSeconds;
+  const countdownEl = document.getElementById('ft-prod-break-countdown');
+  const timer = setInterval(async () => {
+    remaining--;
+    const mins = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    if (countdownEl) countdownEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    if (remaining <= 0) {
+      clearInterval(timer);
+      const el = document.getElementById('ft-overlay-block-productive');
+      if (el) el.remove();
+      await _p3ResetProductiveCounters();
+      restoreTier1();
+    }
+  }, 1000);
+}
+
+async function _p3ResetProductiveCounters() {
+  try {
+    const counters = await _ftLoadCounters();
+    counters.productive_videos = 0;
+    counters.productive_seconds = 0;
+    counters.total_seconds = counters.distracting_seconds + counters.neutral_seconds;
+    await _ftSaveCounters(counters);
+    const shown = await _p3GetNudgeShown();
+    await chrome.storage.local.set({ [FT_P3_NUDGE_KEY]: Object.assign(shown, { p5s: false, p30s: false, psoftbreak: false }) });
+  } catch (e) {
+    console.warn('[FT P3] Reset productive counters error:', e.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PHASE 3: DAILY LIMIT BLOCK (TIER 3)
+// ─────────────────────────────────────────────────────────────
+
+function showDailyLimitBlock() {
+  if (document.getElementById('ft-overlay-block-daily')) return;
+  destroyTier2();
+  hideTier1();
+  pauseAndMuteVideo();
+  const getResetTime = () => {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    const diff = midnight - now;
+    const h = Math.floor(diff / (1000 * 60 * 60));
+    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    return `${h}h ${m}m`;
+  };
+  const overlay = document.createElement('div');
+  overlay.id = 'ft-overlay-block-daily';
+  overlay.innerHTML = `
+    <div class="ft-block-content">
+      <div class="ft-wordmark">FocusTube</div>
+      <div class="ft-message">You've hit your daily limit. See you tomorrow.</div>
+      <div class="ft-reset-time" id="ft-daily-reset-time">Resets in ${getResetTime()}</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const resetTimer = setInterval(() => {
+    const el = document.getElementById('ft-daily-reset-time');
+    if (!el || !document.getElementById('ft-overlay-block-daily')) { clearInterval(resetTimer); return; }
+    el.textContent = `Resets in ${getResetTime()}`;
+  }, 60 * 1000);
+}
+
+// ─────────────────────────────────────────────────────────────
+// PHASE 3: FOCUS WINDOW BLOCK (TIER 3)
+// ─────────────────────────────────────────────────────────────
+
+function showFocusWindowBlock(unlockTime) {
+  if (document.getElementById('ft-overlay-block-focus')) return;
+  destroyTier2();
+  hideTier1();
+  pauseAndMuteVideo();
+  const overlay = document.createElement('div');
+  overlay.id = 'ft-overlay-block-focus';
+  overlay.innerHTML = `
+    <div class="ft-block-content">
+      <div class="ft-wordmark">FocusTube</div>
+      <div class="ft-message">Outside your focus hours. YouTube is blocked until ${unlockTime}.</div>
+      <div class="ft-unlock-time">Unlocks at ${unlockTime}</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+// ─────────────────────────────────────────────────────────────
+// PHASE 3: CHANNEL BLOCKING (TIER 2 + BLOCK BUTTON)
+// ─────────────────────────────────────────────────────────────
+
+function showP3ChannelBlockOverlay(channelName) {
+  if (document.getElementById('ft-overlay-channel')) return;
+  destroyTier2();
+  pauseAndMuteVideo();
+  const overlay = document.createElement('div');
+  overlay.id = 'ft-overlay-channel';
+  overlay.innerHTML = `
+    <div class="ft-nudge-card">
+      <button class="ft-close-btn" id="ft-channel-close">×</button>
+      <div class="ft-message">Channel blocked.</div>
+      <div style="font-size:13px;color:#999;margin-top:8px;">Redirecting in <span id="ft-channel-countdown">3</span>s...</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const redirect = () => {
+    const el = document.getElementById('ft-overlay-channel');
+    if (el) el.remove();
+    window.location.href = 'https://www.youtube.com/';
+  };
+  document.getElementById('ft-channel-close')?.addEventListener('click', redirect);
+  let count = 3;
+  const timer = setInterval(() => {
+    count--;
+    const el = document.getElementById('ft-channel-countdown');
+    if (el) el.textContent = count;
+    if (count <= 0) { clearInterval(timer); redirect(); }
+  }, 1000);
+}
+
+function injectBlockChannelButton(channelName) {
+  if (!channelName) return;
+  if (document.getElementById('ft-block-channel-btn')) return;
+  const ownerEl = document.querySelector('#owner, ytd-video-owner-renderer, #upload-info');
+  if (!ownerEl) return;
+  const btn = document.createElement('button');
+  btn.id = 'ft-block-channel-btn';
+  btn.className = 'ft-block-channel-btn';
+  btn.textContent = 'Block Channel';
+  btn.addEventListener('click', async () => {
+    if (!isChromeContextValid()) return;
+    try {
+      const { ft_blocked_channels = [] } = await chrome.storage.local.get(['ft_blocked_channels']);
+      const channels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
+      if (!channels.some(c => c.toLowerCase() === channelName.toLowerCase())) {
+        channels.push(channelName);
+        await chrome.storage.local.set({ ft_blocked_channels: channels });
+        chrome.runtime.sendMessage({ type: 'FT_BLOCK_CHANNEL', channelName, blockedChannels: channels }).catch(() => {});
+      }
+      btn.textContent = 'Channel blocked ✓';
+      btn.classList.add('blocked');
+      setTimeout(() => { btn.textContent = 'Block Channel'; btn.classList.remove('blocked'); }, 2000);
+    } catch (e) {
+      console.warn('[FT P3] Block channel error:', e.message);
+    }
+  });
+  ownerEl.appendChild(btn);
+}
+
+// ─────────────────────────────────────────────────────────────
+// PHASE 3: SHORTS HANDLING (TIER 2 + TIER 1)
+// ─────────────────────────────────────────────────────────────
+
+function showP3ShortsBlockOverlay() {
+  if (document.getElementById('ft-overlay-shorts')) return;
+  destroyTier2();
+  const overlay = document.createElement('div');
+  overlay.id = 'ft-overlay-shorts';
+  overlay.innerHTML = `
+    <div class="ft-nudge-card">
+      <button class="ft-close-btn" id="ft-shorts-close">×</button>
+      <div class="ft-message">Shorts blocked.</div>
+      <div style="font-size:13px;color:#999;margin-top:8px;">Redirecting in <span id="ft-shorts-countdown">3</span>s...</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const redirect = () => {
+    const el = document.getElementById('ft-overlay-shorts');
+    if (el) el.remove();
+    window.location.href = 'https://www.youtube.com/';
+  };
+  document.getElementById('ft-shorts-close')?.addEventListener('click', redirect);
+  let count = 3;
+  const timer = setInterval(() => {
+    count--;
+    const el = document.getElementById('ft-shorts-countdown');
+    if (el) el.textContent = count;
+    if (count <= 0) { clearInterval(timer); redirect(); }
+  }, 1000);
+}
+
+function showP3ShortsCounter(minutes, count) {
+  let el = document.getElementById('ft-counter-shorts');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ft-counter-shorts';
+    el.style.pointerEvents = 'auto';
+    el.addEventListener('mouseenter', () => {
+      el.style.opacity = '1';
+      el.textContent = `Shorts: ${parseInt(el.dataset.minutes || '0')}m · ${el.dataset.count} videos`;
+    });
+    el.addEventListener('mouseleave', () => {
+      el.style.opacity = '0.35';
+      el.textContent = `${parseInt(el.dataset.minutes || '0')}m · ${el.dataset.count}`;
+    });
+    document.body.appendChild(el);
+  }
+  el.dataset.minutes = minutes;
+  el.dataset.count = count;
+  el.textContent = `${minutes}m · ${count}`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// PHASE 3: WATCH TIME COUNTER (TIER 1 AMBIENT)
+// ─────────────────────────────────────────────────────────────
+
+function initP3WatchTimeCounter(seconds) {
+  let el = document.getElementById('ft-counter-watchtime');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ft-counter-watchtime';
+    el.style.pointerEvents = 'auto';
+    el.addEventListener('mouseenter', () => {
+      el.style.opacity = '1';
+      el.textContent = `Today: ${formatTimeLong(parseInt(el.dataset.seconds || '0'))}`;
+    });
+    el.addEventListener('mouseleave', () => {
+      el.style.opacity = '0.35';
+      el.textContent = formatTimeLong(parseInt(el.dataset.seconds || '0'));
+    });
+    document.body.appendChild(el);
+  }
+  el.dataset.seconds = seconds;
+  el.textContent = formatTimeLong(seconds);
+}
+
+function updateP3WatchTimeCounter(seconds) {
+  const el = document.getElementById('ft-counter-watchtime');
+  if (!el) return;
+  el.dataset.seconds = seconds;
+  if (el.style.opacity !== '1') {
+    el.textContent = formatTimeLong(seconds);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PHASE 3: SEARCH COUNTER (TIER 1 AMBIENT)
+// ─────────────────────────────────────────────────────────────
+
+function showP3SearchCounter(count, limit) {
+  let el = document.getElementById('ft-counter-search');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ft-counter-search';
+    document.body.appendChild(el);
+  }
+  el.textContent = `${count} / ${limit}`;
+  el.className = count >= limit ? 'blocked' : count >= limit - 2 ? 'warning' : '';
+  el.style.opacity = count >= limit - 2 ? '0.8' : '0.35';
+  // Set color to red when at limit
+  if (count >= limit) {
+    el.style.color = '#ff4444';
+  }
+}
+
+function hideP3SearchCounter() {
+  const el = document.getElementById('ft-counter-search');
+  if (el && !el.classList.contains('warning') && !el.classList.contains('blocked')) {
+    el.style.opacity = '0';
+  }
+}
+
+async function _p3IncrementSearchCount() {
+  if (!isChromeContextValid()) return;
+  try {
+    const todayKey = _ftTodayKey();
+    const { ft_search_count_today = 0, ft_search_count_date = '' } =
+      await chrome.storage.local.get(['ft_search_count_today', 'ft_search_count_date']);
+    const count = ft_search_count_date === todayKey ? ft_search_count_today + 1 : 1;
+    await chrome.storage.local.set({ ft_search_count_today: count, ft_search_count_date: todayKey });
+    showP3SearchCounter(count, 15);
+    if (count >= 15) {
+      // Block search input submission
+      document.querySelectorAll('input#search, input[name="search_query"]').forEach(input => {
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); }, { capture: true });
+      });
+      // Block search form submission
+      document.querySelectorAll('form#search-form, form[action*="/search"]').forEach(form => {
+        form.addEventListener('submit', e => { e.preventDefault(); e.stopPropagation(); }, { capture: true });
+      });
+      // Block search button clicks
+      document.querySelectorAll('button#search-icon-legacy, button[aria-label*="Search"]').forEach(btn => {
+        btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); }, { capture: true });
+      });
+    }
+  } catch (e) {
+    console.warn('[FT P3] Search count error:', e.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PHASE 3: CHANNEL SPIRAL SIGNALS (TIER 2 TOAST)
+// ─────────────────────────────────────────────────────────────
+
+async function _p3CheckChannelSpiral(channelName) {
+  if (!channelName || !isChromeContextValid()) return;
+  try {
+    const todayKey = _ftTodayKey();
+    const { ft_channel_counts = {} } = await chrome.storage.local.get(['ft_channel_counts']);
+    const data = ft_channel_counts[channelName] || { today: 0, todayKey: '', last7Days: [] };
+    if (data.todayKey !== todayKey) { data.today = 0; data.todayKey = todayKey; }
+    data.today += 1;
+    data.last7Days = (data.last7Days || []);
+    data.last7Days.push(todayKey);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 7);
+    const cutoffKey = cutoff.toISOString().slice(0, 10);
+    data.last7Days = data.last7Days.filter(d => d >= cutoffKey);
+    ft_channel_counts[channelName] = data;
+    await chrome.storage.local.set({ ft_channel_counts });
+    if (data.today === 3) {
+      showP3SpiralToast(`You've watched ${channelName} 3 times today.`);
+    } else if (data.last7Days.length >= 5 && data.today !== 3) {
+      const shownKey = `ft_spiral_shown_${channelName}_${todayKey}`;
+      const shownData = await chrome.storage.local.get([shownKey]);
+      if (!shownData[shownKey]) {
+        await chrome.storage.local.set({ [shownKey]: true });
+        showP3SpiralToast(`You keep coming back to ${channelName}. Intentional?`);
+      }
+    }
+  } catch (e) {
+    console.warn('[FT P3] Channel spiral error:', e.message);
+  }
+}
+
+function showP3SpiralToast(message) {
+  destroyTier2();
+  const toast = document.createElement('div');
+  toast.id = 'ft-toast-spiral';
+  toast.innerHTML = `
+    <button class="ft-toast-close" id="ft-spiral-close">×</button>
+    <div class="ft-toast-message">${message}</div>
+  `;
+  document.body.appendChild(toast);
+  const dismiss = () => { const el = document.getElementById('ft-toast-spiral'); if (el) el.remove(); };
+  document.getElementById('ft-spiral-close')?.addEventListener('click', dismiss);
+  setTimeout(dismiss, 5000);
+}
+
+// ─────────────────────────────────────────────────────────────
+// PHASE 3: TRIAL EXPIRY BANNER (TIER 1 AMBIENT)
+// ─────────────────────────────────────────────────────────────
+
+async function showP3TrialBanner(daysLeft) {
+  if (document.getElementById('ft-banner-trial')) return;
+  if (!isChromeContextValid()) return;
+  const todayKey = _ftTodayKey();
+  try {
+    const { ft_trial_nudge_dismissed_date } = await chrome.storage.local.get(['ft_trial_nudge_dismissed_date']);
+    if (ft_trial_nudge_dismissed_date === todayKey) return;
+  } catch (_) {}
+  const banner = document.createElement('div');
+  banner.id = 'ft-banner-trial';
+  banner.innerHTML = `<span>${daysLeft} days left</span><span class="ft-banner-close" id="ft-trial-close" style="margin-left:8px;cursor:pointer;">×</span>`;
+  banner.addEventListener('mouseenter', () => {
+    banner.innerHTML = `<span>Your trial ends in ${daysLeft} days. Upgrade to keep your focus.</span> <a href="#" id="ft-trial-upgrade" style="color:#eab308;font-weight:600;margin-left:8px;">Upgrade Now</a><span class="ft-banner-close" id="ft-trial-close" style="margin-left:8px;cursor:pointer;">×</span>`;
+    _p3AttachTrialBannerEvents(banner);
+  });
+  banner.addEventListener('mouseleave', () => {
+    banner.innerHTML = `<span>${daysLeft} days left</span><span class="ft-banner-close" id="ft-trial-close" style="margin-left:8px;cursor:pointer;">×</span>`;
+    _p3AttachTrialBannerEvents(banner);
+  });
+  _p3AttachTrialBannerEvents(banner);
+  document.body.appendChild(banner);
+}
+
+function _p3AttachTrialBannerEvents(banner) {
+  const closeBtn = document.getElementById('ft-trial-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      try { await chrome.storage.local.set({ ft_trial_nudge_dismissed_date: _ftTodayKey() }); } catch (_) {}
+      banner.remove();
+    });
+  }
+  const upgradeBtn = document.getElementById('ft-trial-upgrade');
+  if (upgradeBtn) {
+    upgradeBtn.addEventListener('click', e => { e.preventDefault(); openStripeCheckout('monthly').catch(() => {}); });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PHASE 3: THRESHOLD EVALUATION ENGINE
+// ─────────────────────────────────────────────────────────────
+
+const FT_P3_NUDGE_KEY = 'ft_p3_nudge_shown';
+
+async function _p3GetNudgeShown() {
+  try {
+    const data = await chrome.storage.local.get([FT_P3_NUDGE_KEY]);
+    return data[FT_P3_NUDGE_KEY] || { d10s: false, d30s: false, dhardblock: false, p5s: false, p30s: false, psoftbreak: false };
+  } catch (_) {
+    return { d10s: false, d30s: false, dhardblock: false, p5s: false, p30s: false, psoftbreak: false };
+  }
+}
+
+async function _p3SetNudgeShown(updates) {
+  try {
+    const current = await _p3GetNudgeShown();
+    await chrome.storage.local.set({ [FT_P3_NUDGE_KEY]: Object.assign(current, updates) });
+  } catch (e) {
+    console.warn('[FT P3] Nudge state save error:', e.message);
+  }
+}
+
+async function _p3EvalDistractingThresholds() {
+  if (!isChromeContextValid()) return;
+  if (document.getElementById('ft-overlay-block-hard') ||
+      document.getElementById('ft-overlay-block-daily') ||
+      document.getElementById('ft-overlay-block-focus')) return;
+  try {
+    const counters = await _ftLoadCounters();
+    const shown = await _p3GetNudgeShown();
+    const dc = counters.distracting_videos || 0;
+    const ds = counters.distracting_seconds || 0;
+    if ((dc >= 4 || ds >= 2700) && !shown.dhardblock) {
+      await _p3SetNudgeShown({ dhardblock: true, d30s: true, d10s: true });
+      showHardBlock();
+    } else if ((dc >= 3 || ds >= 1800) && !shown.d30s) {
+      await _p3SetNudgeShown({ d30s: true, d10s: true });
+      showDistractingNudge(30);
+    } else if ((dc >= 2 || ds >= 1200) && !shown.d10s) {
+      await _p3SetNudgeShown({ d10s: true });
+      showDistractingNudge(10);
+    }
+  } catch (e) {
+    console.warn('[FT P3] Distracting threshold eval error:', e.message);
+  }
+}
+
+async function _p3EvalProductiveThresholds() {
+  if (!isChromeContextValid()) return;
+  if (document.getElementById('ft-overlay-block-hard') ||
+      document.getElementById('ft-overlay-block-daily') ||
+      document.getElementById('ft-overlay-block-focus')) return;
+  try {
+    const counters = await _ftLoadCounters();
+    const shown = await _p3GetNudgeShown();
+    const pc = counters.productive_videos || 0;
+    const ps = counters.productive_seconds || 0;
+    if ((pc >= 7 || ps >= 5400) && !shown.psoftbreak) {
+      await _p3SetNudgeShown({ psoftbreak: true, p30s: true, p5s: true });
+      showProductiveSoftBreak();
+    } else if ((pc >= 5 || ps >= 3600) && !shown.p30s) {
+      await _p3SetNudgeShown({ p30s: true, p5s: true });
+      showProductiveNudge(30);
+    } else if ((pc >= 3 || ps >= 1800) && !shown.p5s) {
+      await _p3SetNudgeShown({ p5s: true });
+      showProductiveNudge(5);
+    }
+  } catch (e) {
+    console.warn('[FT P3] Productive threshold eval error:', e.message);
+  }
+}
+
+async function _p3CheckDailyLimit() {
+  if (!isChromeContextValid()) return;
+  if (document.getElementById('ft-overlay-block-daily')) return;
+  try {
+    const plan = await getEffectivePlan();
+    const { ft_extension_settings = {} } = await chrome.storage.local.get(['ft_extension_settings']);
+    const settings = computeEffectiveSettings(plan, ft_extension_settings);
+    const limitMin = settings.daily_limit_minutes;
+    if (!limitMin || limitMin <= 0) return;
+    const counters = await _ftLoadCounters();
+    if ((counters.total_seconds || 0) >= limitMin * 60) {
+      showDailyLimitBlock();
+    }
+  } catch (e) {
+    console.warn('[FT P3] Daily limit check error:', e.message);
+  }
+}
+
+async function _p3CheckFocusWindow() {
+  if (!isChromeContextValid()) return;
+  if (document.getElementById('ft-overlay-block-focus')) return;
+  try {
+    const { ft_focus_window_enabled, ft_focus_window_start, ft_focus_window_end } =
+      await chrome.storage.local.get(['ft_focus_window_enabled', 'ft_focus_window_start', 'ft_focus_window_end']);
+    if (!ft_focus_window_enabled) return;
+    const plan = await getEffectivePlan();
+    if (plan === 'free') return;
+    const now = new Date();
+    const pad = n => n.toString().padStart(2, '0');
+    const currentTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const startTime = ft_focus_window_start || '09:00';
+    const endTime = ft_focus_window_end || '17:00';
+    if (!(currentTime >= startTime && currentTime <= endTime)) {
+      const [endH, endM] = endTime.split(':').map(Number);
+      const period = endH >= 12 ? 'PM' : 'AM';
+      const h12 = endH % 12 || 12;
+      showFocusWindowBlock(`${h12}:${endM.toString().padStart(2, '0')} ${period}`);
+    }
+  } catch (e) {
+    console.warn('[FT P3] Focus window check error:', e.message);
+  }
+}
+
+async function _p3HandleShorts() {
+  if (!isChromeContextValid()) return;
+  try {
+    const plan = await getEffectivePlan();
+    const { ft_extension_settings = {} } = await chrome.storage.local.get(['ft_extension_settings']);
+    const settings = computeEffectiveSettings(plan, ft_extension_settings);
+    if (settings.block_shorts || settings.shorts_mode === 'hard') {
+      showP3ShortsBlockOverlay();
+    } else {
+      const { ft_shorts_seconds_today = 0, ft_shorts_engaged_today = 0 } =
+        await chrome.storage.local.get(['ft_shorts_seconds_today', 'ft_shorts_engaged_today']);
+      const shortsMinutes = Math.floor(ft_shorts_seconds_today / 60);
+      if (ft_shorts_engaged_today > 0) showP3ShortsCounter(shortsMinutes, ft_shorts_engaged_today);
+      const nudgeThresholds = [2, 5, 10, 20];
+      for (const threshold of nudgeThresholds) {
+        if (shortsMinutes >= threshold) {
+          const shownKey = `ft_shorts_nudge_${threshold}_${_ftTodayKey()}`;
+          const shownData = await chrome.storage.local.get([shownKey]);
+          if (!shownData[shownKey]) {
+            await chrome.storage.local.set({ [shownKey]: true });
+            showDistractingNudge(10);
+            break;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[FT P3] Shorts handling error:', e.message);
+  }
+}
+
+async function _p3InitOnPageLoad(pageType) {
+  if (!isChromeContextValid()) return;
+  await _p3CheckDailyLimit();
+  if (pageType !== 'HOME') await _p3CheckFocusWindow();
+  try {
+    const counters = await _ftLoadCounters();
+    initP3WatchTimeCounter(counters.total_seconds || 0);
+  } catch (_) {}
+  try {
+    const { ft_plan, ft_days_left } = await chrome.storage.local.get(['ft_plan', 'ft_days_left']);
+    if (ft_plan === 'trial' && typeof ft_days_left === 'number' && [7, 10, 11, 12, 13].includes(ft_days_left)) {
+      await showP3TrialBanner(ft_days_left);
+    }
+  } catch (_) {}
+  if (pageType === 'WATCH') {
+    setTimeout(() => {
+      const channel = extractChannelFast();
+      if (channel) {
+        injectBlockChannelButton(channel);
+        _p3CheckChannelSpiral(channel).catch(() => {});
+      }
+    }, 1500);
+  }
+  if (pageType === 'SHORTS') await _p3HandleShorts();
+  if (pageType === 'SEARCH') {
+    try {
+      const { ft_search_count_today = 0 } = await chrome.storage.local.get(['ft_search_count_today']);
+      showP3SearchCounter(ft_search_count_today, 15);
+      await _p3IncrementSearchCount();
+    } catch (_) {}
+  }
 }
 
 /** Pauses any active video on the page */
@@ -1151,7 +1917,7 @@ function getProductivityExamples(totalMinutes) {
  * Uses lastKnownBadgeValues as fallback if new values are invalid
  */
 async function updateShortsBadge(shortsEngaged, shortsScrolled, shortsSeconds) {
-  const badge = document.getElementById("ft-shorts-counter");
+  const badge = document.getElementById("ft-counter-shorts");
   if (!badge) return;
 
   // Use last known values as fallback if new values are invalid/undefined
@@ -1230,7 +1996,7 @@ async function updateShortsBadge(shortsEngaged, shortsScrolled, shortsSeconds) {
  * Removes the Shorts counter badge if it exists
  */
 function removeShortsBadge() {
-  const badge = document.getElementById("ft-shorts-counter");
+  const badge = document.getElementById("ft-counter-shorts");
   if (badge) badge.remove();
   
   // Stop time tracking
@@ -1249,27 +2015,7 @@ function removeShortsBadge() {
   shortsCurrentVideoId = null; // Clear video ID tracking
 }
 
-/**
- * Creates and shows the Pro Shorts counter badge
- * Uses last known values as fallback if provided values are 0 and we have stored values
- */
-async function showShortsBadge(shortsEngaged = 0, shortsScrolled = 0, shortsSeconds = 0) {
-  removeShortsBadge(); // ensure no duplicates
-
-  const badge = document.createElement("div");
-  badge.id = "ft-shorts-counter";
-  
-  // Append badge to DOM first so updateShortsBadge() can find it
-  document.body.appendChild(badge);
-  
-  // If all values are 0 and we have last known values, use those instead (prevents false 0,0 display)
-  const useEngaged = (shortsEngaged === 0 && lastKnownBadgeValues.engaged > 0) ? lastKnownBadgeValues.engaged : shortsEngaged;
-  const useScrolled = (shortsScrolled === 0 && lastKnownBadgeValues.scrolled > 0) ? lastKnownBadgeValues.scrolled : shortsScrolled;
-  const useSeconds = (shortsSeconds === 0 && lastKnownBadgeValues.seconds > 0) ? lastKnownBadgeValues.seconds : shortsSeconds;
-  
-  // Initialize badge with values (updateShortsBadge will handle fallback logic too)
-  await updateShortsBadge(useEngaged, useScrolled, useSeconds);
-}
+// REMOVED: Duplicate showShortsBadge - Phase 3 version at line 795 is canonical
 
 // ─────────────────────────────────────────────────────────────
 // SEARCH COUNTER BADGE
@@ -1279,32 +2025,13 @@ let searchCounterBadge = null;
 let lastSearchWarningAtMinus2 = false; // Track if warning shown for threshold - 2
 let lastSearchWarningAtMinus1 = false; // Track if warning shown for threshold - 1
 
-/**
- * Shows or updates the search counter badge
- * Displays "X/5 searches today" or "X/15 searches today" based on plan
- */
-async function showSearchCounter(searchesToday, searchLimit, plan) {
-  // Remove existing badge if present
-  const existing = document.getElementById("ft-search-counter");
-  if (existing) existing.remove();
-
-  // Don't show if not on search page
-  if (detectPageType() !== "SEARCH") return;
-
-  const badge = document.createElement("div");
-  badge.id = "ft-search-counter";
-  badge.className = "ft-search-counter";
-  badge.innerHTML = `<span class="ft-search-counter-text">${searchesToday}/${searchLimit} searches today</span>`;
-  
-  document.body.appendChild(badge);
-  searchCounterBadge = badge;
-}
+// REMOVED: Duplicate showSearchCounter - Phase 3 version at line 853 is canonical
 
 /**
  * Updates the search counter badge text
  */
 function updateSearchCounter(searchesToday, searchLimit) {
-  const badge = document.getElementById("ft-search-counter");
+  const badge = document.getElementById("ft-counter-search");
   if (!badge) return;
   
   const textEl = badge.querySelector(".ft-search-counter-text");
@@ -1317,7 +2044,7 @@ function updateSearchCounter(searchesToday, searchLimit) {
  * Removes the search counter badge
  */
 function removeSearchCounter() {
-  const badge = document.getElementById("ft-search-counter");
+  const badge = document.getElementById("ft-counter-search");
   if (badge) {
     badge.remove();
     searchCounterBadge = null;
@@ -1331,28 +2058,7 @@ function removeSearchCounter() {
 let globalTimeCounterBadge = null;
 let isFullscreen = false;
 
-/**
- * Shows or updates the global watch time counter
- * Shows total time watched today on all pages
- */
-async function showGlobalTimeCounter(watchSecondsToday) {
-  // Remove existing badge if present
-  const existing = document.getElementById("ft-global-time-counter");
-  if (existing) existing.remove();
-
-  const badge = document.createElement("div");
-  badge.id = "ft-global-time-counter";
-  badge.className = "ft-global-time-counter";
-  
-  // Format time
-  const timeText = formatTimeLong(watchSecondsToday);
-  
-  // Update badge content based on fullscreen state
-  updateGlobalTimeCounterContent(badge, timeText, isFullscreen);
-  
-  document.body.appendChild(badge);
-  globalTimeCounterBadge = badge;
-}
+// REMOVED: Duplicate showGlobalTimeCounter - Phase 3 version at line 820 is canonical
 
 /**
  * Formats seconds into long format (e.g., "1h 15m" or "45m")
@@ -1388,7 +2094,7 @@ function updateGlobalTimeCounterContent(badge, timeText, minimal = false) {
  * Updates the global counter badge text
  */
 function updateGlobalTimeCounter(watchSecondsToday) {
-  const badge = document.getElementById("ft-global-time-counter");
+  const badge = document.getElementById("ft-counter-watchtime");
   if (!badge) return;
   
   const timeText = formatTimeLong(watchSecondsToday);
@@ -1399,7 +2105,7 @@ function updateGlobalTimeCounter(watchSecondsToday) {
  * Removes the global counter badge
  */
 function removeGlobalTimeCounter() {
-  const badge = document.getElementById("ft-global-time-counter");
+  const badge = document.getElementById("ft-counter-watchtime");
   if (badge) {
     badge.remove();
     globalTimeCounterBadge = null;
@@ -1462,116 +2168,13 @@ function showSearchWarning(remaining, message) {
   }, 5000);
 }
 
-/**
- * Shows global time limit overlay with daily summary
- * Big visual overlay with bounce animation on lock icon
- */
-async function showGlobalLimitOverlay(plan, counters) {
-  removeOverlay(); // ensure no duplicates
-
-  // Get nudge style
-  const style = await getNudgeStyle();
-  const styleMessage = getNudgeMessage(style, "timeLimit");
-
-  const overlay = document.createElement("div");
-  overlay.id = "ft-overlay";
-  overlay.className = "ft-global-limit-overlay";
-
-  // Format time watched
-  const watchSeconds = counters.watchSeconds || 0;
-  const watchMinutes = Math.floor(watchSeconds / 60);
-  const timeText = watchMinutes < 1
-    ? "<1m"
-    : watchMinutes >= 60 
-    ? `${Math.floor(watchMinutes / 60)}h ${watchMinutes % 60}m`
-    : `${watchMinutes}m`;
-
-  // Get counters
-  const shortsViewed = counters.shortsEngaged || 0;
-  const searchesMade = counters.searches || 0;
-  const longFormVideos = counters.watchVisits || 0;
-
-  // Get button HTML based on plan
-  let buttonsHTML = '';
-    buttonsHTML = `
-      <button id="ft-check-usage" class="ft-button ft-button-primary">Check Your Usage</button>
-    <button id="ft-reset" class="ft-button ft-button-secondary" style="background: #ff6b6b; color: white;">Reset</button>
-  `;
-
-  overlay.innerHTML = `
-    <div class="ft-box ft-global-limit-box">
-      <div class="ft-global-limit-header">
-        <div class="ft-global-limit-lock">🔒</div>
-        <h1>FocusTube Limit Reached</h1>
-      </div>
-      <div class="ft-global-limit-body">
-        <p class="ft-global-limit-intro">You've hit your YouTube limit for the day. Time to reset your focus.</p>
-        <div class="ft-global-limit-stats">
-          <div class="ft-global-limit-stat">
-            <strong>Time watched today:</strong> ${timeText}
-          </div>
-          <div class="ft-global-limit-stat">
-            <strong>Shorts viewed:</strong> ${shortsViewed}
-          </div>
-          <div class="ft-global-limit-stat">
-            <strong>Long form videos watched:</strong> ${longFormVideos}
-          </div>
-          <div class="ft-global-limit-stat">
-            <strong>Searches made:</strong> ${searchesMade}
-          </div>
-        </div>
-        <p class="ft-global-limit-message">💬 "${styleMessage}"</p>
-        ${buttonsHTML ? `<div class="ft-button-container">${buttonsHTML}</div>` : ''}
-      </div>
-    </div>
-  `;
-
-  // Add button handlers
-  const checkUsageBtn = overlay.querySelector("#ft-check-usage");
-  if (checkUsageBtn) {
-    checkUsageBtn.addEventListener("click", () => {
-      // Open dashboard in new tab (matches settings link pattern)
-      window.open("https://focustube.co.uk/app/dashboard", "_blank");
-    });
-  }
-
-  const resetBtn = overlay.querySelector("#ft-reset");
-  if (resetBtn) {
-    resetBtn.addEventListener("click", async () => {
-      try {
-        if (!isChromeContextValid()) {
-          console.warn("[FT] Cannot reset - extension context invalidated");
-          return;
-        }
-        
-        const response = await chrome.runtime.sendMessage({ type: "FT_RESET_COUNTERS" });
-        if (chrome.runtime.lastError) {
-          console.warn("[FT] Failed to reset counters:", chrome.runtime.lastError.message);
-          alert("Failed to reset: " + chrome.runtime.lastError.message);
-          return;
-        }
-        
-        if (response?.ok) {
-        // Reload page to clear overlay and refresh counters
-        window.location.reload();
-        } else {
-          alert(response?.error || "Failed to reset counters");
-        }
-      } catch (e) {
-        console.warn("[FT] Error resetting counters:", e.message);
-        alert("Error resetting: " + e.message);
-      }
-    });
-  }
-
-  document.body.appendChild(overlay);
-}
+// REMOVED: Duplicate showGlobalLimitOverlay - Phase 3 version at line 660 is canonical
 
 /* COMMENTED OUT: Search block overlay - hidden per user request
  * Shows search block overlay with plan-specific buttons
  */
 async function showSearchBlockOverlay(plan) {
-  removeOverlay(); // ensure no duplicates
+  destroyTier2(); // ensure no duplicates
 
   const overlay = document.createElement("div");
   overlay.id = "ft-overlay";
@@ -1955,71 +2558,7 @@ function showBlockChannelConfirmation(channelName, onConfirm, onCancel) {
  * Show spiral detection nudge overlay
  * @param {Object} spiralInfo - Spiral detection info {channel, count, type, message}
  */
-/**
- * Show overlay when user is outside their focus window
- * @param {Object} focusWindowInfo - { start, end, current }
- */
-async function showFocusWindowOverlay(focusWindowInfo) {
-  const { start, end } = focusWindowInfo;
-  
-  console.log("[FT] 🕐 Showing focus window overlay:", focusWindowInfo);
-  
-  // Remove any existing overlay
-  const existing = document.getElementById("ft-focus-window-overlay");
-  if (existing) existing.remove();
-  
-  // Pause video before showing overlay
-  pauseAndMuteVideo();
-  
-  // Get nudge style
-  const style = await getNudgeStyle();
-  const styleMessage = getNudgeMessage(style, "focusWindow");
-  
-  // Convert 24h to 12h for display
-  const convert24hTo12h = (time24) => {
-    const [hours, minutes] = time24.split(':').map(Number);
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const hours12 = hours % 12 || 12;
-    return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
-  };
-  
-  const startDisplay = convert24hTo12h(start);
-  const endDisplay = convert24hTo12h(end);
-  
-  const overlay = document.createElement("div");
-  overlay.id = "ft-focus-window-overlay";
-  
-  // Hard block - no buttons, no way to skip
-  overlay.innerHTML = `
-    <div class="ft-milestone-box">
-      <h2>🕐 You're Outside Your Focus Window</h2>
-      <p class="ft-milestone-intro">
-        Your YouTube window is <strong>${startDisplay} - ${endDisplay}</strong>.
-      </p>
-      <p class="ft-milestone-intro" style="margin-top: 12px;">
-        ${styleMessage}
-      </p>
-    </div>
-  `;
-  
-  // Prevent scrolling/interactions behind overlay
-  document.body.style.overflow = "hidden";
-  document.documentElement.style.overflow = "hidden";
-
-  document.body.appendChild(overlay);
-  console.log("[FT] ✅ Focus window overlay added to DOM (hard block)");
-}
-
-function removeFocusWindowOverlay() {
-  const overlay = document.getElementById("ft-focus-window-overlay");
-  if (overlay) {
-    overlay.remove();
-    // Restore scroll
-    document.body.style.overflow = "";
-    document.documentElement.style.overflow = "";
-    console.log("[FT] ✅ Focus window overlay removed");
-  }
-}
+// REMOVED: Duplicate showFocusWindowOverlay and removeFocusWindowOverlay - Phase 3 version at line 686 is canonical
 
 /**
  * Start periodic focus window check during video playback
@@ -2054,11 +2593,11 @@ function startFocusWindowCheck() {
       if (!isWithinWindow) {
         // Outside window - show overlay
         const focusWindowInfo = { start: startTime, end: endTime, current: currentTime };
-        showFocusWindowOverlay(focusWindowInfo);
+        showFocusWindowBlock(endTime);
         pauseVideos();
       } else {
         // Inside window - remove overlay if present
-        removeFocusWindowOverlay();
+        document.getElementById('ft-overlay-block-focus')?.remove();
       }
     }
   }, 30000); // Check every 30 seconds
@@ -2091,7 +2630,7 @@ async function showSpiralNudge(spiralInfo) {
   const styleMessage = getNudgeMessage(style, "spiral");
   
   const overlay = document.createElement("div");
-  overlay.id = "ft-spiral-nudge";
+  overlay.id = "ft-toast-spiral";
   
   const timePeriod = type === "today" ? "today" : "this week";
   const timeText = spiralInfo.time_minutes ? ` (${spiralInfo.time_minutes} minutes)` : "";
@@ -2115,7 +2654,6 @@ async function showSpiralNudge(spiralInfo) {
       <div class="ft-milestone-buttons">
         <button id="ft-spiral-continue" class="ft-button ft-button-secondary">Continue</button>
         <button id="ft-spiral-journal" class="ft-button ft-button-outline">Journal</button>
-        <button id="ft-spiral-block-today" class="ft-button ft-button-warning">Block YouTube for Today</button>
         <button id="ft-spiral-block-permanent" class="ft-button ft-button-danger">Block Channel Permanently</button>
       </div>
     </div>
@@ -2145,7 +2683,6 @@ async function showSpiralNudge(spiralInfo) {
   // Button handlers
   const continueBtn = overlay.querySelector("#ft-spiral-continue");
   const journalBtn = overlay.querySelector("#ft-spiral-journal");
-  const blockTodayBtn = overlay.querySelector("#ft-spiral-block-today");
   const blockPermanentBtn = overlay.querySelector("#ft-spiral-block-permanent");
   
   if (journalBtn) {
@@ -2198,31 +2735,13 @@ async function showSpiralNudge(spiralInfo) {
     });
   }
   
-  if (blockTodayBtn) {
-    blockTodayBtn.addEventListener("click", () => {
-      clearInterval(timerInterval);
-      overlay.remove();
-      restoreVideoState();
-      chrome.runtime.sendMessage({
-        type: "FT_BLOCK_CHANNEL_TODAY",
-        channel: channel
-      }).then(() => {
-        console.log("[FT] Channel blocked for today:", channel);
-        // Redirect to home after blocking
-        window.location.href = "https://www.youtube.com/";
-      }).catch((err) => {
-        console.warn("[FT] Failed to block channel for today:", err);
-      });
-    });
-  }
-  
   if (blockPermanentBtn) {
     blockPermanentBtn.addEventListener("click", () => {
       clearInterval(timerInterval);
       overlay.remove();
       restoreVideoState();
       chrome.runtime.sendMessage({
-        type: "FT_BLOCK_CHANNEL_PERMANENT",
+        type: "FT_BLOCK_CHANNEL",
         channel: channel
       }).then(() => {
         console.log("[FT] Channel blocked permanently:", channel);
@@ -2489,134 +3008,7 @@ function setupButtonInjectionObserver(channelName = null) {
   }, 5500); // Slightly longer than fallback
 }
 
-/**
- * Injects "Block Channel" button on watch pages
- * @param {string} channelName - Name of channel to block
- * @param {number} retryCount - Current retry attempt (internal)
- */
-async function injectBlockChannelButton(channelName, retryCount = 0) {
-  // Always remove existing button first (to update channel name on navigation)
-  const existingBtn = document.getElementById("ft-block-channel-btn");
-  if (existingBtn) {
-    existingBtn.remove();
-    console.log("[FT] Removed existing button, injecting new one for:", channelName);
-  }
-  
-  // With fixed positioning, we don't need to find channel element
-  // Just verify we're on a watch page
-  const videoId = extractVideoIdFromUrl();
-  if (!videoId) {
-    console.warn("[FT] Not on watch page, skipping button injection");
-    return;
-  }
-  
-  console.log("[FT] ✅ Injecting Block Channel button for:", channelName);
-  
-  // Create button with fixed positioning (doesn't depend on container dimensions)
-  const button = document.createElement("button");
-  button.id = "ft-block-channel-btn";
-  button.className = "ft-block-channel-btn";
-  button.textContent = "Block Channel";
-  button.style.cssText = `
-    position: fixed;
-    top: 80px;
-    right: 20px;
-    z-index: 9999;
-    padding: 8px 16px;
-    background-color: #ff4444;
-    color: white;
-    border: none;
-    border-radius: 18px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    transition: background-color 0.2s;
-  `;
-  
-  button.addEventListener("mouseenter", () => {
-    button.style.backgroundColor = "#cc0000";
-  });
-  
-  button.addEventListener("mouseleave", () => {
-    button.style.backgroundColor = "#ff4444";
-  });
-  
-  button.addEventListener("click", async (e) => {
-    console.log("[FT] 🔴 Block Channel button clicked for:", channelName);
-    e.preventDefault();
-    e.stopPropagation();
-    
-    // Show confirmation dialog
-    showBlockChannelConfirmation(
-      channelName,
-      async () => {
-        // On confirm: block channel
-        console.log("[FT] 🔵 Starting channel blocking process for:", channelName);
-        try {
-          const { ft_blocked_channels = [], ft_user_email } = await chrome.storage.local.get([
-            "ft_blocked_channels",
-            "ft_user_email"
-          ]);
-          
-          console.log("[FT] Current blocked channels:", ft_blocked_channels);
-          console.log("[FT] User email:", ft_user_email ? "present" : "missing");
-          
-          // Add channel if not already in list
-          const channelLower = channelName.toLowerCase().trim();
-          const isAlreadyBlocked = Array.isArray(ft_blocked_channels) && 
-            ft_blocked_channels.some(b => b.toLowerCase().trim() === channelLower);
-          
-          if (!isAlreadyBlocked) {
-            const updatedBlocked = [...(ft_blocked_channels || []), channelName.trim()];
-            
-            console.log("[FT] Adding channel to blocklist:", channelName);
-            console.log("[FT] Updated blocklist:", updatedBlocked);
-            
-            // Save to server via background worker (correct format)
-            try {
-              const response = await chrome.runtime.sendMessage({
-                type: "FT_BLOCK_CHANNEL_PERMANENT",
-                channel: channelName
-              });
-              
-              if (response?.ok) {
-                console.log("[FT] ✅ Blocked channel saved to server:", channelName);
-              } else {
-                console.warn("[FT] ⚠️ Server save failed:", response?.error);
-              }
-            } catch (err) {
-              console.warn("[FT] ⚠️ Failed to save blocked channel to server:", err);
-            }
-            
-            // Show success notification
-            console.log(`[FT] ✅ Channel blocked: ${channelName}`);
-            
-            // Remove button and redirect immediately (no reload needed)
-            button.remove();
-            console.log("[FT] Redirecting to YouTube home...");
-            
-            // Small delay to ensure storage is saved, then redirect
-            await new Promise(resolve => setTimeout(resolve, 100));
-            window.location.href = "https://www.youtube.com/";
-          } else {
-            console.log("[FT] Channel already blocked, skipping");
-          }
-        } catch (error) {
-          console.error("[FT] ❌ Error blocking channel:", error);
-        }
-      },
-      () => {
-        // On cancel: do nothing
-        console.log("[FT] ❌ Block channel cancelled");
-      }
-    );
-  });
-  
-  // Append to body (fixed position, doesn't depend on container)
-  document.body.appendChild(button);
-  console.log("[FT] ✅ Block Channel button injected successfully (fixed position)");
-}
+// REMOVED: Duplicate injectBlockChannelButton - Phase 3 version at line 736 is canonical
 
 /**
  * Shows journal nudge popup (1 minute into distracting content)
@@ -3051,6 +3443,8 @@ async function startGlobalTimeTracking() {
     
     // Calculate current total watch time
     const currentTotalSeconds = globalBaseSeconds + elapsed;
+    // Phase 3: keep watch time counter in sync
+    updateP3WatchTimeCounter(currentTotalSeconds);
     
     // Check global time limit every second
     try {
@@ -3106,7 +3500,7 @@ async function startGlobalTimeTracking() {
             pauseVideos();
             
             // Show global limit overlay
-            await showGlobalLimitOverlay(plan, counters);
+            await showDailyLimitBlock(plan, counters);
             
             // Stop time tracking when overlay is shown (optional - or keep tracking)
             // For now, we'll keep tracking but overlay will block interaction
@@ -3340,7 +3734,7 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "FT_MODE_CHANGED" || msg?.type === "FT_PLAN_CHANGED") {
     console.log(`[FT content] Plan changed → ${msg.plan}`);
     // Clear overlays & force fresh navigation logic
-    removeOverlay();
+    destroyTier2();
     scheduleNav(0);
   }
 
@@ -4084,7 +4478,7 @@ async function showDistractingNudge(nudgeType, counters) {
   pauseAndMuteVideo();
   
   const overlay = document.createElement("div");
-  overlay.id = "ft-behavior-nudge";
+  overlay.id = "ft-overlay-nudge-distracting";
   
   let message = "";
   let duration = 10; // seconds
@@ -4259,7 +4653,7 @@ async function showProductiveNudge(nudgeType, counters) {
   pauseAndMuteVideo();
   
   const overlay = document.createElement("div");
-  overlay.id = "ft-behavior-nudge";
+  overlay.id = "ft-overlay-nudge-distracting";
   
   let message = "";
   let duration = 10; // seconds
@@ -4489,64 +4883,7 @@ function showJournalModal(distractionLevel, context) {
   console.log("[FT] ✅ Journal modal opened:", { distractionLevel, channel, videoTitle, isSpiral });
 }
 
-/**
- * Shows break lockout overlay with countdown timer
- * @param {number} remainingSeconds - Seconds remaining in break
- */
-async function showBreakLockoutOverlay(remainingSeconds) {
-  // Remove any existing overlay
-  const existing = document.getElementById("ft-break-overlay");
-  if (existing) existing.remove();
-  
-  pauseAndMuteVideo();
-  
-  const overlay = document.createElement("div");
-  overlay.id = "ft-break-overlay";
-  
-  overlay.innerHTML = `
-    <div class="ft-milestone-box">
-      <h2>⏸️ Take a Break</h2>
-      <p class="ft-milestone-intro">
-        You've been watching a lot today. Take a 10-minute break to reset your focus.
-      </p>
-      <div class="ft-spiral-timer">
-        <div class="ft-timer-circle">
-          <span id="ft-break-timer-count">${remainingSeconds}</span>
-        </div>
-      </div>
-      <p style="text-align: center; color: #666; font-size: 14px; margin-top: 16px;">
-        Time remaining: <span id="ft-break-time-text">${Math.floor(remainingSeconds / 60)}:${String(remainingSeconds % 60).padStart(2, '0')}</span>
-      </p>
-    </div>
-  `;
-  
-  // Update countdown timer
-  let timeLeft = remainingSeconds;
-  const timerEl = overlay.querySelector("#ft-break-timer-count");
-  const timeTextEl = overlay.querySelector("#ft-break-time-text");
-  
-  const timerInterval = setInterval(() => {
-    timeLeft--;
-    if (timerEl) {
-      timerEl.textContent = timeLeft;
-    }
-    if (timeTextEl) {
-      const minutes = Math.floor(timeLeft / 60);
-      const seconds = timeLeft % 60;
-      timeTextEl.textContent = `${minutes}:${String(seconds).padStart(2, '0')}`;
-    }
-    
-    if (timeLeft <= 0) {
-      clearInterval(timerInterval);
-      overlay.remove();
-      restoreVideoState();
-      // Break is over - user can watch again
-    }
-  }, 1000);
-  
-  document.body.appendChild(overlay);
-  console.log("[FT] ✅ Popup added to DOM: BREAK LOCKOUT", { remainingSeconds });
-}
+// REMOVED: Duplicate showBreakLockoutOverlay - Phase 3 version at line 525 is canonical
 
 /**
  * Saves journal entry to Supabase
@@ -4670,89 +5007,7 @@ async function shouldShowTrialExpiringBanner() {
   }
 }
 
-/**
- * Shows trial expiring banner (small, non-intrusive, auto-dismisses after 10s)
- * @param {number} daysLeft - Days remaining in trial (7, 4, 3, 2, or 1)
- */
-function showTrialExpiringBanner(daysLeft) {
-  // Remove any existing banner
-  const existing = document.getElementById("ft-trial-expiring-banner");
-  if (existing) existing.remove();
-  
-  const banner = document.createElement("div");
-  banner.id = "ft-trial-expiring-banner";
-  banner.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: #ff4444;
-    color: white;
-    padding: 12px 20px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    z-index: 10000;
-    font-size: 14px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    max-width: 300px;
-    animation: slideIn 0.3s ease-out;
-  `;
-  
-  const message = daysLeft === 0 
-    ? "Your trial expires today! Don't lose Pro features — upgrade now."
-    : "Your trial expires tomorrow! Upgrade to keep Pro features.";
-  
-  banner.innerHTML = `
-    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
-      <span>${message}</span>
-      <button id="ft-trial-banner-close" style="
-        background: transparent;
-        border: none;
-        color: white;
-        cursor: pointer;
-        font-size: 18px;
-        padding: 0;
-        width: 20px;
-        height: 20px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      ">×</button>
-    </div>
-  `;
-  
-  // Close button handler
-  const closeBtn = banner.querySelector("#ft-trial-banner-close");
-  closeBtn.addEventListener("click", () => {
-    saveBannerDismissal();
-    banner.remove();
-  });
-  
-  // Click banner to go to upgrade page
-  banner.style.cursor = "pointer";
-  banner.addEventListener("click", (e) => {
-    if (e.target !== closeBtn) {
-      window.open("https://focustube.co.uk/app/pricing", "_blank");
-      saveBannerDismissal();
-      banner.remove();
-    }
-  });
-  
-  document.body.appendChild(banner);
-  
-  // Auto-dismiss after 10 seconds
-  setTimeout(() => {
-    if (banner.parentNode) {
-      saveBannerDismissal();
-      banner.remove();
-    }
-  }, 10000);
-  
-  // Save that we showed it
-  chrome.storage.local.set({ 
-    ft_trial_banner_last_shown: Date.now(),
-    ft_trial_banner_dismissed_today: false 
-  });
-}
+// REMOVED: Duplicate showTrialExpiringBanner - Phase 3 version at line 949 is canonical
 
 /**
  * Saves banner dismissal timestamp
@@ -4799,7 +5054,7 @@ async function handleNavigation() {
       
       if (pageType === "WATCH" || pageType === "SHORTS") {
         // Show break overlay and redirect
-        await showBreakLockoutOverlay(remainingSeconds);
+        showHardBlock();
         pauseAndMuteVideo();
         // Redirect to home after a moment
         setTimeout(() => {
@@ -4858,7 +5113,7 @@ async function handleNavigation() {
           // Check timing rules (once per day, optionally again after 6 hours)
           const shouldShow = await shouldShowTrialExpiringBanner();
           if (shouldShow) {
-            showTrialExpiringBanner(ft_days_left);
+            showP3TrialBanner(ft_days_left);
           }
         }
       }
@@ -5378,7 +5633,7 @@ async function handleNavigation() {
 
   // Handle global watch time counter (show on all pages)
   const watchSecondsToday = resp.counters?.watchSeconds || 0;
-  await showGlobalTimeCounter(watchSecondsToday);
+  initP3WatchTimeCounter(watchSecondsToday);
 
   // Handle search counter badge (show on all search pages)
   if (pageType === "SEARCH") {
@@ -5387,7 +5642,7 @@ async function handleNavigation() {
     const searchesToday = resp.counters?.searches || 0;
     
     // Show or update search counter
-    await showSearchCounter(searchesToday, searchLimit, resp.plan);
+    showP3SearchCounter(searchesToday, searchLimit);
     
     // Check for warning at threshold - 2
     await checkAndShowSearchWarning(searchesToday, searchLimit);
@@ -5399,6 +5654,36 @@ async function handleNavigation() {
   } else {
     // Remove search counter when not on search page
     removeSearchCounter();
+  }
+
+  // ISSUE 4: Check blocked channels for SHORTS page type
+  if (pageType === "SHORTS") {
+    try {
+      const { ft_blocked_channels = [] } = await chrome.storage.local.get(["ft_blocked_channels"]);
+      const blockedChannels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
+      
+      if (blockedChannels.length > 0) {
+        // Extract channel from Shorts page
+        const channel = extractChannelFast();
+        
+        if (channel) {
+          const channelLower = channel.toLowerCase().trim();
+          const isBlocked = blockedChannels.some(blocked => {
+            const blockedLower = blocked.toLowerCase().trim();
+            return blockedLower === channelLower;
+          });
+          
+          if (isBlocked) {
+            console.log("[FT] 🚫 Channel blocked on Shorts page:", channel);
+            pauseAndMuteVideo();
+            showP3ChannelBlockOverlay(channel);
+            return; // Stop processing, don't show counter
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[FT] Error checking blocked channels on Shorts:", e.message);
+    }
   }
 
   // Handle Pro plan Shorts counter badge (only on Shorts pages, not blocked)
@@ -5522,7 +5807,7 @@ async function handleNavigation() {
   // Handle focus window blocking (before other checks)
   if (resp.blocked && resp.reason === "outside_focus_window" && resp.focusWindowInfo) {
     console.log("[FT] 🕐 Outside focus window, showing overlay");
-    showFocusWindowOverlay(resp.focusWindowInfo);
+    showFocusWindowBlock(resp.focusWindowInfo.end || resp.focusWindowInfo);
     pauseVideos();
     await stopShortsTimeTracking();
     // Start periodic check to catch time changes during video playback
@@ -5530,7 +5815,7 @@ async function handleNavigation() {
     return; // Don't continue with other blocking logic
   } else {
     // User is no longer outside focus window - remove overlay and restore scroll
-    removeFocusWindowOverlay();
+    document.getElementById('ft-overlay-block-focus')?.remove();
     // If on WATCH page, start periodic check to catch time changes
     if (pageType === "WATCH") {
       startFocusWindowCheck();
@@ -5598,11 +5883,11 @@ async function handleNavigation() {
     */
     // Global blocking: show global limit overlay with daily summary
     if (resp.scope === "global" && !document.getElementById("ft-overlay")) {
-      await showGlobalLimitOverlay(resp.plan || "free", resp.counters || {});
+      await showDailyLimitBlock(resp.plan || "free", resp.counters || {});
     }
   } else {
-    removeOverlay(); // clear if allowed
-    removeFocusWindowOverlay(); // Also remove focus window overlay if present
+    destroyTier2(); // clear if allowed
+    document.getElementById('ft-overlay-block-focus')?.remove(); // Also remove focus window overlay if present
   }
 
   // Inject "Block Channel" button on watch pages (if channel is not already blocked)
@@ -5623,6 +5908,15 @@ async function handleNavigation() {
       console.warn("[FT] Error setting up button injection observer:", e.message);
     }
   }
+
+  // Phase 2: run tracker check (classification + counter engine)
+  _ftRunTrackerCheck(pageType, videoMetadata).catch(e => {
+    console.warn("[FT] Phase 2 tracker error:", e.message);
+  });
+  // Phase 3: init page-level features (counters, blocks, banners)
+  _p3InitOnPageLoad(pageType).catch(e => {
+    console.warn("[FT] Phase 3 init error:", e.message);
+  });
 }
 
 async function updateDevPanelStatus(panel, aiClassificationFromResponse = null) {
@@ -5990,7 +6284,7 @@ function setupFullscreenDetection() {
                         document.msFullscreenElement);
       
       // Hide search counter in fullscreen
-      const searchCounter = document.getElementById("ft-search-counter");
+      const searchCounter = document.getElementById("ft-counter-search");
       if (searchCounter) {
         if (isFullscreen) {
           searchCounter.style.display = 'none';
@@ -6000,7 +6294,7 @@ function setupFullscreenDetection() {
       }
       
       // Switch global time counter to minimal format in fullscreen
-      const globalCounter = document.getElementById("ft-global-time-counter");
+      const globalCounter = document.getElementById("ft-counter-watchtime");
       if (globalCounter) {
         try {
           if (!isChromeContextValid()) return;
@@ -6096,7 +6390,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
   
   // Update global time counter if watch time changed
   if (changes.ft_watch_seconds_today) {
-    const badge = document.getElementById("ft-global-time-counter");
+    const badge = document.getElementById("ft-counter-watchtime");
     if (badge) {
       if (!isChromeContextValid()) return;
       
@@ -6115,7 +6409,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
   
   // Update search counter if searches changed
   if (changes.ft_searches_today) {
-    const badge = document.getElementById("ft-search-counter");
+    const badge = document.getElementById("ft-counter-search");
     if (badge && detectPageType() === "SEARCH") {
       if (!isChromeContextValid()) return;
       
@@ -6140,7 +6434,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
   
   // Update badge if Shorts counters changed
   if (changes.ft_shorts_engaged_today || changes.ft_short_visits_today || changes.ft_shorts_seconds_today) {
-    const badge = document.getElementById("ft-shorts-counter");
+    const badge = document.getElementById("ft-counter-shorts");
     if (badge) {
       // Badge exists - get current values and update
       try {
@@ -6182,7 +6476,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
 // PAGE MONITORING (for YouTube's dynamic navigation)
 // ─────────────────────────────────────────────────────────────
 // Remove overlay when user navigates via browser back/forward
-window.addEventListener("popstate", removeOverlay);
+window.addEventListener("popstate", destroyTier2);
 
 // Save accumulated time when page is about to close or becomes hidden
 window.addEventListener("beforeunload", () => {
@@ -6282,6 +6576,427 @@ history.replaceState = function(...args) {
   originalReplaceState.apply(history, args);
   scheduleNav(150);
 };
+
+// ─────────────────────────────────────────────────────────────
+// PHASE 2: CLASSIFICATION & COUNTER ENGINE
+// Tracks ft_daily_counters, calls /ai/classify after 30s,
+// syncs to server every 3 mins or every 10 video events.
+// No overlays, nudges, or blocks — tracking only.
+// ─────────────────────────────────────────────────────────────
+
+const FT_COUNTERS_KEY = "ft_daily_counters";
+const FT_SYNC_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
+const FT_SYNC_EVENT_THRESHOLD = 10;        // sync after 10 video events
+const FT_CLASSIFY_TRIGGER_MS = 30 * 1000; // 30 seconds
+
+let _ftClassifyTimer = null;       // 30s timer for current video
+let _ftCurrentTrackingId = null;   // video_id being tracked
+let _ftVideoStartTime = null;      // when current video started
+let _ftVideoEventCount = 0;        // video events since last sync
+let _ftSyncInterval = null;        // 3-minute sync interval
+
+/**
+ * Returns today's date key YYYY-MM-DD in local time.
+ */
+function _ftTodayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Loads ft_daily_counters from storage, resetting if date has changed.
+ */
+async function _ftLoadCounters() {
+  try {
+    const storage = await chrome.storage.local.get([FT_COUNTERS_KEY]);
+    const today = _ftTodayKey();
+    const saved = storage[FT_COUNTERS_KEY];
+    if (saved && saved.date === today) {
+      return saved;
+    }
+    // New day — return zeroed counters
+    return {
+      date: today,
+      distracting_videos: 0, distracting_seconds: 0,
+      neutral_videos: 0,    neutral_seconds: 0,
+      productive_videos: 0, productive_seconds: 0,
+      total_seconds: 0
+    };
+  } catch (e) {
+    console.warn("[FocusTube] Error loading counters:", e.message);
+    return {
+      date: _ftTodayKey(),
+      distracting_videos: 0, distracting_seconds: 0,
+      neutral_videos: 0,    neutral_seconds: 0,
+      productive_videos: 0, productive_seconds: 0,
+      total_seconds: 0
+    };
+  }
+}
+
+/**
+ * Saves ft_daily_counters to storage.
+ */
+async function _ftSaveCounters(counters) {
+  try {
+    await chrome.storage.local.set({ [FT_COUNTERS_KEY]: counters });
+  } catch (e) {
+    console.warn("[FocusTube] Error saving counters:", e.message);
+  }
+}
+
+/**
+ * Increments the appropriate counter bucket based on classification.
+ * Also records the watch_seconds for the current video.
+ */
+async function _ftIncrementCounter(classification, watchSeconds) {
+  const counters = await _ftLoadCounters();
+  const cat = (classification || "neutral").toLowerCase();
+  const secs = Math.max(0, Math.round(watchSeconds || 0));
+
+  if (cat === "distracting") {
+    counters.distracting_videos += 1;
+    counters.distracting_seconds += secs;
+  } else if (cat === "productive") {
+    counters.productive_videos += 1;
+    counters.productive_seconds += secs;
+  } else {
+    counters.neutral_videos += 1;
+    counters.neutral_seconds += secs;
+  }
+  counters.total_seconds = counters.distracting_seconds + counters.neutral_seconds + counters.productive_seconds;
+  counters.date = _ftTodayKey();
+
+  await _ftSaveCounters(counters);
+  console.log(`[FocusTube] Counter incremented: ${cat} +${secs}s`, {
+    distracting: counters.distracting_videos,
+    neutral: counters.neutral_videos,
+    productive: counters.productive_videos
+  });
+
+  _ftVideoEventCount++;
+  if (_ftVideoEventCount >= FT_SYNC_EVENT_THRESHOLD) {
+    _ftVideoEventCount = 0;
+    _ftSyncCountersToServer();
+  }
+}
+
+/**
+ * Syncs ft_daily_counters to POST /extension/save-timer.
+ * Uses message passing to background worker (content scripts cannot call localhost).
+ */
+async function _ftSyncCountersToServer() {
+  if (!isChromeContextValid()) return;
+  try {
+    const { ft_user_email } = await chrome.storage.local.get(["ft_user_email"]);
+    if (!ft_user_email) return;
+
+    const counters = await _ftLoadCounters();
+
+    console.log('[FocusTube] Sending FT_PHASE2_SYNC_COUNTERS message...');
+    const resp = await chrome.runtime.sendMessage({
+      type: "FT_PHASE2_SYNC_COUNTERS",
+      email: ft_user_email,
+      date: counters.date,
+      distracting_videos:  counters.distracting_videos,
+      distracting_seconds: counters.distracting_seconds,
+      neutral_videos:      counters.neutral_videos,
+      neutral_seconds:     counters.neutral_seconds,
+      productive_videos:   counters.productive_videos,
+      productive_seconds:  counters.productive_seconds,
+      total_seconds:       counters.total_seconds
+    });
+
+    if (chrome.runtime.lastError) {
+      console.error('[FocusTube] Counter sync message error:', chrome.runtime.lastError.message);
+      return;
+    }
+
+    if (resp?.ok) {
+      console.log("[FocusTube] Counters synced to server");
+    } else {
+      console.warn("[FocusTube] Counter sync failed:", resp?.error);
+    }
+  } catch (e) {
+    console.warn("[FocusTube] Counter sync error:", e.message);
+  }
+}
+
+/**
+ * Saves a completed watch session to POST /video/update-watch-time.
+ * Uses message passing to background worker (content scripts cannot call localhost).
+ */
+async function _ftSaveWatchSession(videoId, videoTitle, channelName, classification, watchSeconds) {
+  if (!isChromeContextValid()) return;
+  if (!videoId || watchSeconds < 1) return;
+  try {
+    const { ft_user_email } = await chrome.storage.local.get(["ft_user_email"]);
+    if (!ft_user_email) return;
+
+    console.log('[FocusTube] Sending FT_PHASE2_SAVE_WATCH_SESSION message...');
+    const resp = await chrome.runtime.sendMessage({
+      type: "FT_PHASE2_SAVE_WATCH_SESSION",
+      email: ft_user_email,
+      video_id: videoId,
+      video_title: videoTitle || null,
+      channel_name: channelName || null,
+      classification: classification || "neutral",
+      watch_seconds: Math.round(watchSeconds)
+    });
+
+    if (chrome.runtime.lastError) {
+      console.error('[FocusTube] Watch session message error:', chrome.runtime.lastError.message);
+      return;
+    }
+
+    if (resp?.ok) {
+      console.log(`[FocusTube] Watch session saved: ${videoId} (${classification}, ${Math.round(watchSeconds)}s)`);
+    } else {
+      console.warn('[FocusTube] Watch session save failed:', resp?.error);
+    }
+  } catch (e) {
+    console.warn("[FocusTube] Watch session save error:", e.message);
+  }
+}
+
+/**
+ * Calls POST /ai/classify for the current video.
+ * Returns classification string: "productive"|"neutral"|"distracting".
+ * Defaults to "neutral" on failure.
+ * Uses message passing to background worker (content scripts cannot call localhost).
+ */
+async function _ftClassifyVideo(meta) {
+  if (!isChromeContextValid()) return "neutral";
+  try {
+    const { ft_user_email } = await chrome.storage.local.get(["ft_user_email"]);
+    if (!ft_user_email) return "neutral";
+
+    // Shorts are always distracting — skip AI call
+    if (meta.is_shorts || location.pathname.startsWith("/shorts/")) {
+      console.log("[FocusTube] Shorts detected — classifying as distracting (fast-path)");
+      return "distracting";
+    }
+
+    console.log('[FocusTube] Sending FT_PHASE2_CLASSIFY message for:', meta.video_id);
+    const resp = await chrome.runtime.sendMessage({
+      type: "FT_PHASE2_CLASSIFY",
+      email: ft_user_email,
+      video_id: meta.video_id,
+      title: meta.title || "",
+      channel_name: meta.channel || "",
+      description: meta.description || "",
+      tags: meta.tags || []
+    });
+
+    if (chrome.runtime.lastError) {
+      console.error('[FocusTube] Classification message error:', chrome.runtime.lastError.message);
+      return "neutral";
+    }
+
+    if (!resp?.ok) {
+      console.warn("[FocusTube] Classification failed:", resp?.error, "— defaulting neutral");
+      return resp?.classification || "neutral";
+    }
+
+    const classification = resp.classification || "neutral";
+    const cached = resp.cached ? " (cached)" : "";
+    const model = resp.model ? ` [${resp.model}]` : "";
+    const conf = resp.confidence != null ? ` ${Math.round(resp.confidence * 100)}%` : "";
+    console.log(`[FocusTube] Classification: ${classification}${conf}${model}${cached}`);
+    return classification;
+  } catch (e) {
+    console.warn("[FocusTube] Classification error — defaulting neutral:", e.message);
+    return "neutral";
+  }
+}
+
+/**
+ * Starts the 30-second classification trigger for the given video.
+ * Clears any previous timer. On completion, increments counters
+ * and optionally stores classification in ft_current_video_classification.
+ */
+function _ftStartClassifyTimer(videoId, meta) {
+  if (_ftClassifyTimer) clearTimeout(_ftClassifyTimer);
+  _ftCurrentTrackingId = videoId;
+  _ftVideoStartTime = Date.now();
+
+  _ftClassifyTimer = setTimeout(async () => {
+    if (_ftCurrentTrackingId !== videoId) return; // user navigated away
+    console.log(`[FocusTube] 30s trigger — classifying ${videoId}`);
+
+    const classification = await _ftClassifyVideo(meta);
+
+    // Store classification for this video with metadata for finalization
+    try {
+      await chrome.storage.local.set({ 
+        ft_current_video_classification: { 
+          video_id: videoId, 
+          classification,
+          video_title: meta.title,
+          channel_name: meta.channel
+        } 
+      });
+    } catch (_) {}
+
+    // Increment counter at 30s mark (session will be saved on navigation with final time)
+    const watchSecs = _ftVideoStartTime ? Math.round((Date.now() - _ftVideoStartTime) / 1000) : 30;
+    await _ftIncrementCounter(classification, watchSecs);
+    // Phase 3: evaluate distracting thresholds mid-video
+    if (classification === 'distracting') {
+      _p3EvalDistractingThresholds().catch(() => {});
+    }
+  }, FT_CLASSIFY_TRIGGER_MS);
+}
+
+/**
+ * Stops the classify timer and clears tracking state.
+ * If video was already classified, save final watch session with actual elapsed time.
+ */
+async function _ftStopClassifyTimer() {
+  if (_ftClassifyTimer) {
+    clearTimeout(_ftClassifyTimer);
+    _ftClassifyTimer = null;
+  }
+  
+  // If we were tracking a video and it was classified, save final watch time
+  if (_ftCurrentTrackingId && _ftVideoStartTime) {
+    const watchSecs = Math.round((Date.now() - _ftVideoStartTime) / 1000);
+    
+    // Only save if we watched for at least 30 seconds (classification happened)
+    if (watchSecs >= 30) {
+      try {
+        const { ft_current_video_classification } = await chrome.storage.local.get(['ft_current_video_classification']);
+        if (ft_current_video_classification?.classification) {
+          const classification = ft_current_video_classification.classification;
+          const videoId = _ftCurrentTrackingId;
+          const videoTitle = ft_current_video_classification.video_title || null;
+          const channelName = ft_current_video_classification.channel_name || null;
+          
+          console.log(`[FocusTube] Finalizing watch session: ${videoId} (${watchSecs}s)`);
+          await _ftSaveWatchSession(videoId, videoTitle, channelName, classification, watchSecs);
+          // Phase 3: evaluate productive thresholds after navigation
+          if (classification === 'productive') {
+            _p3EvalProductiveThresholds().catch(() => {});
+          }
+        }
+      } catch (e) {
+        console.warn('[FocusTube] Error finalizing watch session:', e.message);
+      }
+    }
+  }
+  
+  _ftCurrentTrackingId = null;
+  _ftVideoStartTime = null;
+}
+
+/**
+ * Called on each navigation to WATCH page.
+ * Restarts the 30s classification clock.
+ */
+function _ftHandleWatchNavigation(videoId, meta) {
+  if (!videoId) return;
+  // Don't restart for the same video
+  if (videoId === _ftCurrentTrackingId) return;
+  _ftStopClassifyTimer();
+  _ftStartClassifyTimer(videoId, meta || { video_id: videoId, is_shorts: false });
+}
+
+/**
+ * Called on navigation to SHORTS page.
+ * Immediately classifies as distracting (no 30s wait).
+ */
+async function _ftHandleShortsNavigation(videoId) {
+  if (!videoId) return;
+  if (videoId === _ftCurrentTrackingId) return;
+  _ftStopClassifyTimer();
+  _ftCurrentTrackingId = videoId;
+  _ftVideoStartTime = Date.now();
+  console.log(`[FocusTube] Shorts fast-path: ${videoId} → distracting`);
+  try {
+    await chrome.storage.local.set({ ft_current_video_classification: { video_id: videoId, classification: "distracting" } });
+  } catch (_) {}
+  await _ftIncrementCounter("distracting", 0);
+  await _ftSaveWatchSession(videoId, null, null, "distracting", 0);
+}
+
+/**
+ * Starts the 3-minute periodic sync interval.
+ */
+function _ftStartSyncInterval() {
+  if (_ftSyncInterval) return;
+  _ftSyncInterval = setInterval(() => {
+    _ftSyncCountersToServer();
+  }, FT_SYNC_INTERVAL_MS);
+}
+
+/**
+ * Checks if ft_daily_counters needs a midnight reset and resets if so.
+ */
+async function _ftMidnightReset() {
+  try {
+    const storage = await chrome.storage.local.get([FT_COUNTERS_KEY]);
+    const saved = storage[FT_COUNTERS_KEY];
+    const today = _ftTodayKey();
+    if (saved && saved.date !== today) {
+      console.log(`[FocusTube] Daily reset: ${saved.date} → ${today}`);
+      await chrome.storage.local.set({
+        [FT_COUNTERS_KEY]: {
+          date: today,
+          distracting_videos: 0, distracting_seconds: 0,
+          neutral_videos: 0,    neutral_seconds: 0,
+          productive_videos: 0, productive_seconds: 0,
+          total_seconds: 0
+        },
+        // Phase 3: reset nudge-shown state daily
+        [FT_P3_NUDGE_KEY]: { d10s: false, d30s: false, dhardblock: false, p5s: false, p30s: false, psoftbreak: false }
+      });
+    }
+  } catch (e) {
+    console.warn("[FocusTube] Midnight reset error:", e.message);
+  }
+}
+
+// Check for midnight reset every minute
+setInterval(_ftMidnightReset, 60 * 1000);
+
+/**
+ * Called at the end of handleNavigation to run Phase 2 tracker logic.
+ * @param {string} pageType - Detected page type (WATCH, SHORTS, etc.)
+ * @param {Object|null} videoMetadata - Metadata already extracted in handleNavigation
+ */
+async function _ftRunTrackerCheck(pageType, videoMetadata) {
+  if (!isChromeContextValid()) return;
+  if (pageType === "WATCH") {
+    const vid = videoMetadata?.video_id || extractVideoIdFromUrl();
+    if (vid) {
+      const meta = {
+        video_id: vid,
+        title: videoMetadata?.title ||
+               document.querySelector('meta[property="og:title"]')?.getAttribute("content") ||
+               window.ytInitialPlayerResponse?.videoDetails?.title || "",
+        channel: videoMetadata?.channel ||
+                 extractChannelFast() ||
+                 window.ytInitialPlayerResponse?.videoDetails?.author || "",
+        description: videoMetadata?.description ||
+                     window.ytInitialPlayerResponse?.videoDetails?.shortDescription?.substring(0, 500) || "",
+        tags: videoMetadata?.tags ||
+              window.ytInitialPlayerResponse?.videoDetails?.keywords || [],
+        is_shorts: false
+      };
+      _ftHandleWatchNavigation(vid, meta);
+    }
+  } else if (pageType === "SHORTS") {
+    const vid = getShortsVideoId() || extractVideoIdFromUrl();
+    if (vid) await _ftHandleShortsNavigation(vid);
+  } else {
+    _ftStopClassifyTimer();
+  }
+}
+
+// Boot the Phase 2 engine
+_ftMidnightReset();
+_ftStartSyncInterval();
+console.log("[FocusTube] Phase 2 counter engine started");
 
 // Initialize global time tracking (tracks time on all YouTube pages)
 // Start tracking immediately when script loads

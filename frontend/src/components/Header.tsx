@@ -98,20 +98,14 @@ const Header = () => {
   const handleLogout = async () => {
     try {
       // Clear Supabase session
-      const { error: signOutError } = await supabase.auth.signOut();
+      await supabase.auth.signOut();
       
-      if (signOutError) {
-        console.error("Logout error:", signOutError);
-        toast({
-          title: "Error",
-          description: "Failed to log out. Please try again.",
-          variant: "destructive",
-        });
-        return;
-      }
-
       // Clear chrome.storage (for extension)
       await removeEmailFromExtension();
+
+      // Clear all browser storage
+      localStorage.clear();
+      sessionStorage.clear();
 
       // Redirect to login
       navigate("/login");

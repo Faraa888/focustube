@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,18 +9,42 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Chrome, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { storeEmailForExtension } from "@/lib/extensionStorage";
+import { validateEmail } from "@/lib/emailValidation";
 
 const Signup = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [emailConfirmationSent, setEmailConfirmationSent] = useState(false);
   const [userEmail, setUserEmail] = useState("");
 
+  // Check for existing valid session on page load
+  useEffect(() => {
+    const checkExistingSession = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      // If there's a valid session and no error, redirect to dashboard
+      if (session && !error) {
+        console.log('[Signup] Valid session found, redirecting to dashboard');
+        navigate("/app/dashboard");
+      }
+    };
+    
+    checkExistingSession();
+  }, [navigate]);
+
   // Debug: Log when component mounts
   useEffect(() => {
     console.log("✅ [SIGNUP] Component mounted - Signup page loaded");
-  }, []);
+    
+    // Check for error from OAuth redirect
+    const errorParam = searchParams.get('error');
+    if (errorParam) {
+      setError(decodeURIComponent(errorParam));
+      console.error("🔴 [SIGNUP] OAuth error:", errorParam);
+    }
+  }, [searchParams]);
 
   const handleGoogleSignup = async () => {
     setLoading(true);
@@ -58,6 +82,17 @@ const Signup = () => {
     const name = formData.get("name") as string;
 
     console.log("🚀 [SIGNUP] Form data extracted:", { email, name, hasPassword: !!password });
+
+    // Validate email before attempting signup
+    console.log("🚀 [SIGNUP] Validating email...");
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.isValid) {
+      console.error("🔴 [SIGNUP] Email validation failed:", emailValidation.error);
+      setError(emailValidation.error || "Invalid email address");
+      setLoading(false);
+      return;
+    }
+    console.log("✅ [SIGNUP] Email validation passed");
 
     try {
       console.log("🚀 [SIGNUP] Calling supabase.auth.signUp...");
@@ -114,7 +149,6 @@ const Signup = () => {
       const { data: userData, error: dbError } = await supabase.from("users").upsert({
         email: authData.user.email,
         plan: "trial",
-        trial_started_at: trialStart.toISOString(),
         trial_expires_at: trialEnd.toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

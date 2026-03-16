@@ -8,8 +8,10 @@
  * @returns {string} Server URL
  */
 export function getServerUrl() {
-  // Production backend URL
-  return 'https://focustube-backend-4xah.onrender.com';
+  // Backend URL from environment variable (injected at build time)
+  // DO NOT HARDCODE - use BACKEND_URL env var
+  // Fallback to localhost for development testing
+  return typeof BACKEND_URL !== 'undefined' ? BACKEND_URL : 'http://localhost:3000';
 }
 
 /**
@@ -18,7 +20,9 @@ export function getServerUrl() {
  * @returns {string} Server URL
  */
 export function getServerUrlForBackground() {
-  // Production backend URL
-  return 'https://focustube-backend-4xah.onrender.com';
+  // Backend URL from environment variable (injected at build time)
+  // DO NOT HARDCODE - use BACKEND_URL env var
+  // Fallback to localhost for development testing
+  return typeof BACKEND_URL !== 'undefined' ? BACKEND_URL : 'http://localhost:3000';
 }
 

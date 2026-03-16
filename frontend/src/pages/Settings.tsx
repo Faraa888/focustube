@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { removeEmailFromExtension } from "@/lib/extensionStorage";
+import { getApiUrl } from "@/lib/api";
 import { X, Plus } from "lucide-react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 
@@ -71,7 +72,7 @@ const Settings = () => {
 
         // Check plan via /license/verify to get can_record flag
         const planResponse = await fetch(
-          `https://focustube-backend-4xah.onrender.com/license/verify?email=${encodeURIComponent(user.email)}`
+          `${getApiUrl('/license/verify')}?email=${encodeURIComponent(user.email)}`
         );
         if (planResponse.ok) {
           const planData = await planResponse.json();
@@ -85,7 +86,7 @@ const Settings = () => {
         // Get user plan and goals
         const { data: userData } = await supabase
           .from("users")
-          .select("plan, goals, anti_goals")
+          .select("plan, goals, pitfalls")
           .eq("email", user.email)
           .single();
         
@@ -95,7 +96,7 @@ const Settings = () => {
             setUserPlan(userData.plan || "free");
           }
           
-          // Parse goals and anti-goals from JSON (show exact saved, no defaults)
+          // Parse goals and pitfalls from JSON (show exact saved, no defaults)
           if (userData.goals) {
             try {
               const parsed = JSON.parse(userData.goals);
@@ -107,9 +108,9 @@ const Settings = () => {
             setGoals([]);
           }
           
-          if (userData.anti_goals) {
+          if (userData.pitfalls) {
             try {
-              const parsed = JSON.parse(userData.anti_goals);
+              const parsed = JSON.parse(userData.pitfalls);
               setAntiGoals(Array.isArray(parsed) ? parsed : []);
             } catch {
               setAntiGoals([]);
@@ -121,7 +122,7 @@ const Settings = () => {
 
         // Get extension data (blocked channels, settings)
         const response = await fetch(
-          `https://focustube-backend-4xah.onrender.com/extension/get-data?email=${encodeURIComponent(user.email)}`
+          `${getApiUrl('/extension/get-data')}?email=${encodeURIComponent(user.email)}`
         );
 
         if (response.ok) {
@@ -337,7 +338,7 @@ const Settings = () => {
         .from("users")
         .update({
           goals: JSON.stringify(goals),
-          anti_goals: JSON.stringify(antiGoals),
+          pitfalls: JSON.stringify(antiGoals),
           updated_at: new Date().toISOString(),
         })
         .eq("email", user.email);
@@ -401,7 +402,7 @@ const Settings = () => {
       // Normalize all channel names
       console.log("[Settings] 🔄 Starting normalization for channels:", blockedChannels);
       
-      const normalizeResponse = await fetch("https://focustube-backend-4xah.onrender.com/ai/normalize-channels", {
+      const normalizeResponse = await fetch(getApiUrl('/ai/normalize-channels'), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ channel_names: blockedChannels }),
@@ -451,7 +452,7 @@ const Settings = () => {
       }
 
       // Save normalized channels
-      const response = await fetch("https://focustube-backend-4xah.onrender.com/extension/save-data", {
+      const response = await fetch(getApiUrl('/extension/save-data'), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -574,7 +575,7 @@ const Settings = () => {
         nudge_style: nudgeStyle,
       };
 
-      const response = await fetch("https://focustube-backend-4xah.onrender.com/extension/save-data", {
+      const response = await fetch(getApiUrl('/extension/save-data'), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
+import { getApiUrl } from "@/lib/api";
 import { useState, useEffect } from "react";
 
 interface Channel {
@@ -33,7 +34,7 @@ export default function ChannelAudit({ channels }: ChannelAuditProps) {
         }
 
         const response = await fetch(
-          `https://focustube-backend-4xah.onrender.com/extension/get-data?email=${encodeURIComponent(user.email)}`
+          `${getApiUrl('/extension/get-data')}?email=${encodeURIComponent(user.email)}`
         );
 
         if (response.ok) {
@@ -67,7 +68,7 @@ export default function ChannelAudit({ channels }: ChannelAuditProps) {
 
       // Get current blocked channels
       const response = await fetch(
-        `https://focustube-backend-4xah.onrender.com/extension/get-data?email=${encodeURIComponent(user.email)}`
+        `${getApiUrl('/extension/get-data')}?email=${encodeURIComponent(user.email)}`
       );
 
       if (!response.ok) {
@@ -95,7 +96,7 @@ export default function ChannelAudit({ channels }: ChannelAuditProps) {
       const updatedBlocked = [...currentBlocked, channelName];
 
       const saveResponse = await fetch(
-        "https://focustube-backend-4xah.onrender.com/extension/save-data",
+        getApiUrl('/extension/save-data'),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

@@ -60,6 +60,9 @@ const AppRoutes = () => {
     return () => window.removeEventListener('message', handleMessage);
   }, [navigate]);
 
+  // Note: Extension clearing is handled by Header component's logout handler
+  // We don't need a global SIGNED_OUT listener here as it causes infinite loops
+
   return (
         <Routes>
           <Route path="/" element={<Home />} />
