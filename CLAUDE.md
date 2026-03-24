@@ -14,6 +14,16 @@ If you need to know what variables exist, read server/.env.example instead.
 
 ---
 
+## UI Skills
+Before building any frontend component or page, read:
+- .claude/skills/design-for-ai.md — use APPLIER mode when building, CHECKER mode when reviewing
+- .claude/skills/ui-ux-pro-max.md — run pre-delivery checklist before completing any page
+
+FocusTube is dark theme only. Serious tone. No playful or generic AI aesthetics.
+No emojis. No glassmorphism. No purple gradients.
+
+---
+
 ## Source of Truth
 Three spec docs govern everything. Read the relevant one before any task.
 - docs/PRODUCT_SPEC.md — what it does, plans, features, copy
