@@ -76,8 +76,8 @@ const DEFAULTS = {
   
   // Focus Window (time-based blocking)
   ft_focus_window_enabled: false,    // false = focus window disabled by default
-  ft_focus_window_start: "13:00",    // Start time in 24h format (1:00 PM)
-  ft_focus_window_end: "21:00",      // End time in 24h format (9:00 PM)
+  ft_focus_window_start: "08:00",    // Start time in 24h format (8:00 AM)
+  ft_focus_window_end: "22:00",      // End time in 24h format (10:00 PM)
   
   // Spiral detection
   ft_blocked_channels_today: [],     // Temporary blocks (reset at midnight)
@@ -856,8 +856,8 @@ export async function saveExtensionDataToServer(data = null) {
       ft_user_pitfalls = [],
       ft_channel_lifetime_stats = {},
       ft_focus_window_enabled = false,
-      ft_focus_window_start = "13:00",
-      ft_focus_window_end = "18:00",
+      ft_focus_window_start = "08:00",
+      ft_focus_window_end = "22:00",
       ft_spiral_events = [],
       ft_distracting_count_global = 0,
       ft_distracting_time_global = 0,
@@ -1040,8 +1040,8 @@ export function getEffectiveSettings(plan, rawSettings = {}) {
     // Apply all other settings from rawSettings
     effective.nudge_style = rawSettings.nudge_style || "firm";
     effective.focus_window_enabled = rawSettings.focus_window_enabled ?? false;
-    effective.focus_window_start = rawSettings.focus_window_start || "13:00";
-    effective.focus_window_end = rawSettings.focus_window_end || "21:00";
+    effective.focus_window_start = rawSettings.focus_window_start || "08:00";
+    effective.focus_window_end = rawSettings.focus_window_end || "22:00";
     effective.spiral_events = rawSettings.spiral_events || [];
   } else {
     // Test plan or unknown: use raw settings as-is (with conversions applied)

@@ -3913,25 +3913,25 @@ function calculateEffectiveDistracting(counters) {
 function checkDistractingThresholds(effectiveCount, effectiveTime, isVideoEnd = false) {
   // Distracting nudges show during video (not at end)
   if (isVideoEnd) return null;
-  
-  // Break: 5 videos OR 60 minutes
-  if (effectiveCount >= 5 || effectiveTime >= 3600) {
+
+  // Hard block: 4 videos OR 45 minutes (2700s) per PRODUCT_SPEC 7.1
+  if (effectiveCount >= 4 || effectiveTime >= 2700) {
     console.log("[FT] 🔍 Limit check: DISTRACTING BREAK", { count: effectiveCount, time: Math.floor(effectiveTime / 60) + "m" });
     return "break";
   }
-  
-  // Nudge 2: 4 videos OR 40 minutes
-  if (effectiveCount >= 4 || effectiveTime >= 2400) {
+
+  // Nudge 2: 3 videos OR 30 minutes (1800s) per PRODUCT_SPEC 7.1
+  if (effectiveCount >= 3 || effectiveTime >= 1800) {
     console.log("[FT] 🔍 Limit check: DISTRACTING NUDGE2", { count: effectiveCount, time: Math.floor(effectiveTime / 60) + "m" });
     return "nudge2";
   }
-  
-  // Nudge 1: 3 videos OR 20 minutes
-  if (effectiveCount >= 3 || effectiveTime >= 1200) {
+
+  // Nudge 1: 2 videos OR 20 minutes (1200s) per PRODUCT_SPEC 7.1
+  if (effectiveCount >= 2 || effectiveTime >= 1200) {
     console.log("[FT] 🔍 Limit check: DISTRACTING NUDGE1", { count: effectiveCount, time: Math.floor(effectiveTime / 60) + "m" });
     return "nudge1";
   }
-  
+
   return null;
 }
 

@@ -37,7 +37,7 @@ export const MSG_DEBUG       = "FT_DEBUG";         // used for internal dev/test
 // ─────────────────────────────────────────────────────────────
 // DEBUGGING / FEATURE FLAGS
 // ─────────────────────────────────────────────────────────────
-export const DEBUG_MODE = true;     // toggles extra console logs
+export const DEBUG_MODE = false;    // toggles extra console logs
 export const TEST_MODE  = false;    // when true, disables blocking for QA/dev
 
 // ─────────────────────────────────────────────────────────────

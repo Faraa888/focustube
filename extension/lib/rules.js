@@ -120,7 +120,7 @@ const dailyLimitMin = ctx.effectiveSettings?.daily_time_limit_minutes !== undefi
     ? Number(ctx.effectiveSettings.daily_time_limit_minutes)
     : (ctx.ft_extension_settings?.daily_time_limit_minutes !== undefined
       ? Number(ctx.ft_extension_settings.daily_time_limit_minutes)
-      : (plan === "free" ? 60 : 90));
+      : 0);
   if (dailyLimitMin > 0) {
     const limitSeconds = dailyLimitMin * 60;
     if (watchSecondsToday >= limitSeconds) {
