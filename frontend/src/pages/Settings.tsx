@@ -39,13 +39,12 @@ const Settings = () => {
   
   // Controls state
   const [blockShorts, setBlockShorts] = useState(false);
-  const [hideRecommendations, setHideRecommendations] = useState(true);
+  const [hideRecommendations, setHideRecommendations] = useState(false);
   const [dailyLimit, setDailyLimit] = useState([60]);
-  const [focusWindowEnabled, setFocusWindowEnabled] = useState(true);
-  const [focusWindowStart, setFocusWindowStart] = useState("1:00 PM");
-  const [focusWindowEnd, setFocusWindowEnd] = useState("9:00 PM");
+  const [focusWindowEnabled, setFocusWindowEnabled] = useState(false);
+  const [focusWindowStart, setFocusWindowStart] = useState("8:00 AM");
+  const [focusWindowEnd, setFocusWindowEnd] = useState("10:00 PM");
   const [focusWindowError, setFocusWindowError] = useState<string | null>(null);
-  const [nudgeStyle, setNudgeStyle] = useState<"gentle" | "direct" | "firm">("firm");
   const [savingSettings, setSavingSettings] = useState(false);
   
   const [userPlan, setUserPlan] = useState<"free" | "pro" | "trial">("free");
@@ -140,17 +139,17 @@ const Settings = () => {
             if (settings.focus_window_enabled !== undefined) {
               setFocusWindowEnabled(settings.focus_window_enabled);
             } else {
-              setFocusWindowEnabled(true); // Default to enabled
+              setFocusWindowEnabled(false);
             }
             if (settings.focus_window_start) {
               setFocusWindowStart(convert24hTo12h(settings.focus_window_start));
             } else {
-              setFocusWindowStart("1:00 PM"); // Default to 1pm
+              setFocusWindowStart("8:00 AM");
             }
             if (settings.focus_window_end) {
               setFocusWindowEnd(convert24hTo12h(settings.focus_window_end));
             } else {
-              setFocusWindowEnd("9:00 PM"); // Default to 9pm
+              setFocusWindowEnd("10:00 PM");
             }
             if (settings.block_shorts !== undefined) {
               setBlockShorts(settings.block_shorts);
@@ -158,17 +157,12 @@ const Settings = () => {
             if (settings.hide_recommendations !== undefined) {
               setHideRecommendations(settings.hide_recommendations);
             } else {
-              setHideRecommendations(true); // Default to enabled
+              setHideRecommendations(false);
             }
-            if (settings.daily_limit) {
-              setDailyLimit([settings.daily_limit]);
+            if (settings.daily_limit_minutes !== undefined) {
+              setDailyLimit([settings.daily_limit_minutes]);
             } else {
-              setDailyLimit([60]); // Default to 60 minutes
-            }
-            if (settings.nudge_style) {
-              setNudgeStyle(settings.nudge_style);
-            } else {
-              setNudgeStyle("firm"); // Default only if not set
+              setDailyLimit([0]);
             }
           }
         }
@@ -204,11 +198,12 @@ const Settings = () => {
     return `${hours24.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   };
 
-  // Helper: Generate time options in 15-minute increments (12h format)
+  // Helper: Generate time options in 15-minute increments (12h format), 08:00–22:00 only
   const generateTimeOptions = (): string[] => {
     const options: string[] = [];
-    for (let hour = 0; hour < 24; hour++) {
+    for (let hour = 8; hour <= 22; hour++) {
       for (let minute = 0; minute < 60; minute += 15) {
+        if (hour === 22 && minute > 0) break;
         const period = hour >= 12 ? 'PM' : 'AM';
         const hour12 = hour % 12 || 12;
         const timeStr = `${hour12}:${minute.toString().padStart(2, '0')} ${period}`;
@@ -235,8 +230,8 @@ const Settings = () => {
     
     const durationHours = (endMinutes - startMinutes) / 60;
     
-    if (durationHours > 8) {
-      return "Focus window cannot exceed 8 hours";
+    if (durationHours > 6) {
+      return "Focus window cannot exceed 6 hours";
     }
     
     return null;
@@ -571,8 +566,7 @@ const Settings = () => {
         focus_window_end: convert12hTo24h(focusWindowEnd),
         block_shorts: blockShorts,
         hide_recommendations: hideRecommendations,
-        daily_limit: dailyLimit[0],
-        nudge_style: nudgeStyle,
+        daily_limit_minutes: dailyLimit[0],
       };
 
       const response = await fetch(getApiUrl('/extension/save-data'), {
@@ -688,9 +682,9 @@ const Settings = () => {
         <Tabs defaultValue="goals" className="space-y-6" style={{ pointerEvents: isFreeMode ? "none" : "auto", opacity: isFreeMode ? 0.5 : 1 }}>
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="goals">Goals</TabsTrigger>
-            <TabsTrigger value="blocked">Blocked Channels</TabsTrigger>
+            <TabsTrigger value="blocked">Channels</TabsTrigger>
             <TabsTrigger value="controls">Controls</TabsTrigger>
-            <TabsTrigger value="account">Account</TabsTrigger>
+            <TabsTrigger value="account">Plan</TabsTrigger>
           </TabsList>
 
           {/* Goals Tab */}
@@ -937,17 +931,17 @@ const Settings = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <Label>Daily limit</Label>
-                    <Badge variant="secondary">{dailyLimit[0]} minutes</Badge>
+                    <Badge variant="secondary">{dailyLimit[0] === 0 ? "Disabled" : `${dailyLimit[0]} minutes`}</Badge>
                   </div>
                   <Slider
                     value={dailyLimit}
                     onValueChange={setDailyLimit}
-                    min={1}
+                    min={0}
                     max={120}
                     step={1}
                   />
                   <p className="text-xs text-muted-foreground">
-                    You'll receive gentle nudges when approaching this limit
+                    0 = disabled. You'll receive nudges when approaching this limit.
                   </p>
                 </div>
               </CardContent>
@@ -1017,44 +1011,10 @@ const Settings = () => {
                       <p className="text-sm text-destructive">{focusWindowError}</p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      Maximum window width is 8 hours
+                      Maximum window is 6 hours. Times between 08:00–22:00 only.
                     </p>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Nudge Style</CardTitle>
-                <CardDescription>
-                  How should FocusTube remind you?
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-3">
-                  <Button
-                    variant={nudgeStyle === "gentle" ? "default" : "outline"}
-                    className="justify-start"
-                    onClick={() => setNudgeStyle("gentle")}
-                  >
-                    <span className="flex-1 text-left">Gentle — "Still learning?"</span>
-                  </Button>
-                  <Button
-                    variant={nudgeStyle === "direct" ? "default" : "outline"}
-                    className="justify-start"
-                    onClick={() => setNudgeStyle("direct")}
-                  >
-                    <span className="flex-1 text-left">Direct — "Check your goals"</span>
-                  </Button>
-                  <Button
-                    variant={nudgeStyle === "firm" ? "default" : "outline"}
-                    className="justify-start"
-                    onClick={() => setNudgeStyle("firm")}
-                  >
-                    <span className="flex-1 text-left">Firm — "Time's up, no more watching"</span>
-                  </Button>
-                </div>
               </CardContent>
             </Card>
 
