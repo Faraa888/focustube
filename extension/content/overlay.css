@@ -1,11 +1,11 @@
 /* content/overlay.css */
-/* Phase 3: FocusTube Overlay Styles - Three-Tier Design Philosophy */
+/* Phase 3.5: FocusTube Overlay Styles - Visual Polish */
 /* Tier 1: Ambient (low opacity, hover-reveal) */
 /* Tier 2: Nudge (intentional interruption, countdown-based) */
 /* Tier 3: Block (fully invasive, user-defined rules) */
 
 /* ═══════════════════════════════════════════════════════════════ */
-/* TIER 1: AMBIENT ELEMENTS (never destroyed except by Tier 3) */
+/* TIER 1: AMBIENT ELEMENTS (never destroyed except by Tier 3)    */
 /* ═══════════════════════════════════════════════════════════════ */
 
 /* Watch Time Counter - bottom-right, ambient */
@@ -14,14 +14,16 @@
   bottom: 20px;
   right: 20px;
   z-index: 2147483647;
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 6px;
-  padding: 4px 10px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 6px 14px;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
   color: #b3b3b3;
   opacity: 0.35;
-  transition: opacity 150ms ease;
+  transition: opacity 150ms ease, transform 150ms ease;
   pointer-events: none;
   user-select: none;
   font-variant-numeric: tabular-nums;
@@ -29,22 +31,25 @@
 
 #ft-counter-watchtime:hover {
   opacity: 1;
+  transform: scale(1.02);
 }
 
-/* Shorts Counter - same style as watch time */
+/* Shorts Counter - same style as watch time, only visible on /shorts/ */
 #ft-counter-shorts {
   position: fixed;
   bottom: 20px;
   right: 20px;
   z-index: 2147483647;
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 6px;
-  padding: 4px 10px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 6px 14px;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
   color: #b3b3b3;
   opacity: 0.35;
-  transition: opacity 150ms ease;
+  transition: opacity 150ms ease, transform 150ms ease;
   pointer-events: none;
   user-select: none;
   font-variant-numeric: tabular-nums;
@@ -52,6 +57,7 @@
 
 #ft-counter-shorts:hover {
   opacity: 1;
+  transform: scale(1.02);
 }
 
 /* Search Counter - appears below search input */
@@ -61,10 +67,11 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 2147483647;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(18, 18, 18, 0.95);
+  border: 1px solid #333333;
   border-radius: 6px;
   padding: 4px 10px;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, "DejaVu Sans Mono", monospace;
   font-size: 11px;
   color: #b3b3b3;
   opacity: 0.35;
@@ -95,15 +102,15 @@
   bottom: 20px;
   left: 20px;
   z-index: 2147483647;
-  background: rgba(234, 179, 8, 0.15);
-  border: 1px solid rgba(234, 179, 8, 0.3);
-  border-radius: 6px;
-  padding: 6px 12px;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.25);
+  border-radius: 8px;
+  padding: 8px 14px;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 11px;
+  font-size: 12px;
   color: #eab308;
   opacity: 0.5;
-  transition: opacity 150ms ease, padding 150ms ease;
+  transition: all 200ms ease;
   cursor: pointer;
   user-select: none;
   max-width: 120px;
@@ -133,8 +140,41 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════ */
-/* TIER 2: NUDGE OVERLAYS (intentional interruption) */
+/* TIER 2: NUDGE OVERLAYS (intentional interruption)              */
 /* ═══════════════════════════════════════════════════════════════ */
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes cardSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes spiralToastIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes countdownPulse {
+  0%   { opacity: 1;   }
+  50%  { opacity: 0.7; }
+  100% { opacity: 1;   }
+}
 
 /* Distracting Nudge Overlay (10s / 30s) */
 #ft-overlay-nudge-distracting {
@@ -144,56 +184,51 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(6px);
   animation: overlayFadeIn 200ms ease-out;
 }
 
-@keyframes overlayFadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 #ft-overlay-nudge-distracting .ft-nudge-card {
-  background: #212121;
-  border: 1px solid #333333;
-  border-radius: 12px;
-  padding: 32px 40px;
-  max-width: 500px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+  padding: 40px 48px;
+  max-width: 420px;
   text-align: center;
-  animation: cardSlideIn 200ms ease-out;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  animation: cardSlideIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes cardSlideIn {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+#ft-overlay-nudge-distracting .ft-wordmark {
+  font-size: 13px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #444444;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 24px;
 }
 
 #ft-overlay-nudge-distracting .ft-countdown {
   font-size: 72px;
-  font-weight: bold;
+  font-weight: 800;
   color: #e3093a;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+  font-family: monospace;
   font-variant-numeric: tabular-nums;
-  margin-bottom: 24px;
+  letter-spacing: -2px;
   line-height: 1;
 }
 
 #ft-overlay-nudge-distracting .ft-message {
-  font-size: 14px;
-  color: #b3b3b3;
+  font-size: 15px;
+  color: #888888;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  margin-top: 16px;
   line-height: 1.5;
+  max-width: 280px;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
 }
 
 /* Productive Nudge Overlay (5s / 30s / 5-min soft break) */
@@ -204,93 +239,111 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(6px);
   animation: overlayFadeIn 200ms ease-out;
 }
 
 #ft-overlay-nudge-productive .ft-nudge-card {
-  background: #212121;
-  border: 1px solid #333333;
-  border-radius: 12px;
-  padding: 32px 40px;
-  max-width: 500px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+  padding: 40px 48px;
+  max-width: 420px;
   text-align: center;
-  animation: cardSlideIn 200ms ease-out;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  animation: cardSlideIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#ft-overlay-nudge-productive .ft-wordmark {
+  font-size: 13px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #444444;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 24px;
 }
 
 #ft-overlay-nudge-productive .ft-countdown {
   font-size: 72px;
-  font-weight: bold;
+  font-weight: 800;
   color: #00bb13;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+  font-family: monospace;
   font-variant-numeric: tabular-nums;
-  margin-bottom: 24px;
+  letter-spacing: -2px;
   line-height: 1;
 }
 
 #ft-overlay-nudge-productive .ft-message {
-  font-size: 14px;
-  color: #b3b3b3;
+  font-size: 15px;
+  color: #888888;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  margin-top: 16px;
   line-height: 1.5;
+  max-width: 280px;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
 }
 
-/* Channel Spiral Overlay - centered modal with backdrop */
+/* Channel Spiral Toast - fixed bottom-right corner widget */
 #ft-toast-spiral {
   position: fixed;
-  inset: 0;
+  bottom: 72px;
+  right: 20px;
   z-index: 2147483647;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.75);
-  animation: overlayFadeIn 200ms ease-out;
+  width: 300px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  animation: spiralToastIn 200ms ease-out;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-/* Shared inner card — used by spiral, distracting nudge, productive nudge, behavior loops */
+/* Shared inner card — used by spiral, behavior loops */
 .ft-milestone-box {
-  background: #212121;
-  border: 1px solid #333333;
-  border-radius: 16px;
-  padding: 36px 40px 32px;
-  max-width: 480px;
-  width: 90%;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  max-width: 100%;
+  width: 100%;
   text-align: center;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-  animation: cardSlideIn 200ms ease-out;
+  box-shadow: none;
+  animation: none;
 }
 
 .ft-milestone-box h2 {
-  margin: 0 0 16px;
-  font-size: 20px;
+  margin: 0 0 10px;
+  font-size: 15px;
   font-weight: 600;
   color: #fff;
 }
 
 .ft-milestone-intro {
-  font-size: 14px;
-  color: #b3b3b3;
-  line-height: 1.6;
+  font-size: 13px;
+  color: #888888;
+  line-height: 1.5;
   margin: 0;
 }
 
 .ft-spiral-timer {
   display: flex;
   justify-content: center;
-  margin: 20px 0;
+  margin: 12px 0;
 }
 
 .ft-timer-circle {
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 2px solid #444;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   color: #fff;
   font-variant-numeric: tabular-nums;
@@ -299,8 +352,8 @@
 .ft-milestone-buttons {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 20px;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 /* Shared button base */
@@ -356,36 +409,46 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(6px);
   animation: overlayFadeIn 200ms ease-out;
 }
 
 #ft-overlay-channel .ft-nudge-card {
-  background: #212121;
-  border: 1px solid #333333;
-  border-radius: 12px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
   padding: 32px 40px;
-  max-width: 500px;
+  max-width: 420px;
   text-align: center;
   position: relative;
-  animation: cardSlideIn 200ms ease-out;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  animation: cardSlideIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 #ft-overlay-channel .ft-close-btn {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  background: transparent;
+  top: 16px;
+  right: 16px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
   border: none;
-  color: #999;
-  font-size: 24px;
+  color: #666666;
+  font-size: 16px;
   cursor: pointer;
-  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
+  padding: 0;
+  transition: all 150ms ease;
 }
 
 #ft-overlay-channel .ft-close-btn:hover {
-  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
 
 #ft-overlay-channel .ft-message {
@@ -403,36 +466,46 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(6px);
   animation: overlayFadeIn 200ms ease-out;
 }
 
 #ft-overlay-shorts .ft-nudge-card {
-  background: #212121;
-  border: 1px solid #333333;
-  border-radius: 12px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
   padding: 32px 40px;
-  max-width: 500px;
+  max-width: 420px;
   text-align: center;
   position: relative;
-  animation: cardSlideIn 200ms ease-out;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  animation: cardSlideIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 #ft-overlay-shorts .ft-close-btn {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  background: transparent;
+  top: 16px;
+  right: 16px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
   border: none;
-  color: #999;
-  font-size: 24px;
+  color: #666666;
+  font-size: 16px;
   cursor: pointer;
-  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
+  padding: 0;
+  transition: all 150ms ease;
 }
 
 #ft-overlay-shorts .ft-close-btn:hover {
-  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
 
 #ft-overlay-shorts .ft-message {
@@ -450,20 +523,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(6px);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   animation: overlayFadeIn 200ms ease-out;
 }
 
 #ft-overlay-onboarding .ft-nudge-card {
-  background: #212121;
-  border: 1px solid #333333;
-  border-radius: 12px;
-  padding: 32px;
-  max-width: 500px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+  padding: 32px 40px;
+  max-width: 420px;
   text-align: center;
-  animation: cardSlideIn 200ms ease-out;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  animation: cardSlideIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Shorts Confirmation Overlay */
@@ -474,20 +548,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(6px);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   animation: overlayFadeIn 200ms ease-out;
 }
 
 #ft-overlay-shorts-confirm .ft-nudge-card {
-  background: #212121;
-  border: 1px solid #333333;
-  border-radius: 12px;
-  padding: 32px;
-  max-width: 500px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+  padding: 32px 40px;
+  max-width: 420px;
   text-align: center;
-  animation: cardSlideIn 200ms ease-out;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  animation: cardSlideIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Channel Success Overlay */
@@ -498,24 +573,25 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(6px);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   animation: overlayFadeIn 200ms ease-out;
 }
 
 #ft-overlay-channel-success .ft-nudge-card {
-  background: #212121;
-  border: 1px solid #333333;
-  border-radius: 12px;
-  padding: 32px;
-  max-width: 500px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+  padding: 32px 40px;
+  max-width: 420px;
   text-align: center;
-  animation: cardSlideIn 200ms ease-out;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  animation: cardSlideIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ═══════════════════════════════════════════════════════════════ */
-/* TIER 3: BLOCK OVERLAYS (fully invasive, user-defined rules) */
+/* TIER 3: BLOCK OVERLAYS (fully invasive, user-defined rules)    */
 /* ═══════════════════════════════════════════════════════════════ */
 
 /* Hard Block Overlay (4+ distracting videos / 45+ mins) */
@@ -526,45 +602,51 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #121212;
+  background: #0d0d0d;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 #ft-overlay-block-hard .ft-block-content {
   text-align: center;
-  max-width: 600px;
+  max-width: 480px;
   padding: 40px;
 }
 
 #ft-overlay-block-hard .ft-wordmark {
-  font-size: 32px;
-  font-weight: bold;
-  color: #fff;
-  margin-bottom: 32px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #333333;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 48px;
 }
 
 #ft-overlay-block-hard .ft-message {
-  font-size: 24px;
-  color: #fff;
-  margin-bottom: 40px;
-  line-height: 1.4;
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 8px;
+  line-height: 1.3;
 }
 
 #ft-overlay-block-hard .ft-countdown {
-  font-size: 96px;
-  font-weight: bold;
+  font-size: 80px;
+  font-weight: 800;
   color: #e3093a;
   font-family: monospace;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -3px;
   margin-bottom: 24px;
   line-height: 1;
+  animation: countdownPulse 2s ease-in-out infinite;
 }
 
 #ft-overlay-block-hard .ft-countdown-label {
-  font-size: 16px;
-  color: #999;
+  font-size: 13px;
+  color: #555555;
   text-transform: uppercase;
   letter-spacing: 2px;
+  margin-top: 8px;
 }
 
 /* Daily Limit Block Overlay */
@@ -575,34 +657,38 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #121212;
+  background: #0d0d0d;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 #ft-overlay-block-daily .ft-block-content {
   text-align: center;
-  max-width: 600px;
+  max-width: 480px;
   padding: 40px;
 }
 
 #ft-overlay-block-daily .ft-wordmark {
-  font-size: 32px;
-  font-weight: bold;
-  color: #fff;
-  margin-bottom: 32px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #333333;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 48px;
 }
 
 #ft-overlay-block-daily .ft-message {
-  font-size: 24px;
-  color: #fff;
-  margin-bottom: 24px;
-  line-height: 1.4;
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 8px;
+  line-height: 1.3;
 }
 
 #ft-overlay-block-daily .ft-reset-time {
-  font-size: 18px;
-  color: #999;
-  margin-top: 16px;
+  font-size: 14px;
+  color: #555555;
+  margin-top: 0;
+  margin-bottom: 40px;
 }
 
 /* Focus Window Block Overlay */
@@ -613,34 +699,38 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #121212;
+  background: #0d0d0d;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 #ft-overlay-block-focus .ft-block-content {
   text-align: center;
-  max-width: 600px;
+  max-width: 480px;
   padding: 40px;
 }
 
 #ft-overlay-block-focus .ft-wordmark {
-  font-size: 32px;
-  font-weight: bold;
-  color: #fff;
-  margin-bottom: 32px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #333333;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 48px;
 }
 
 #ft-overlay-block-focus .ft-message {
-  font-size: 24px;
-  color: #fff;
-  margin-bottom: 24px;
-  line-height: 1.4;
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 8px;
+  line-height: 1.3;
 }
 
 #ft-overlay-block-focus .ft-unlock-time {
-  font-size: 18px;
-  color: #999;
-  margin-top: 16px;
+  font-size: 14px;
+  color: #555555;
+  margin-top: 0;
+  margin-bottom: 40px;
 }
 
 /* Productive Soft Break Overlay */
@@ -651,49 +741,55 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #121212;
+  background: #0d0d0d;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 #ft-overlay-block-productive .ft-block-content {
   text-align: center;
-  max-width: 600px;
+  max-width: 480px;
   padding: 40px;
 }
 
 #ft-overlay-block-productive .ft-wordmark {
-  font-size: 32px;
-  font-weight: bold;
-  color: #fff;
-  margin-bottom: 32px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #333333;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 48px;
 }
 
 #ft-overlay-block-productive .ft-message {
-  font-size: 24px;
-  color: #fff;
-  margin-bottom: 40px;
-  line-height: 1.4;
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 8px;
+  line-height: 1.3;
 }
 
 #ft-overlay-block-productive .ft-countdown {
-  font-size: 96px;
-  font-weight: bold;
+  font-size: 80px;
+  font-weight: 800;
   color: #00bb13;
   font-family: monospace;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -3px;
   margin-bottom: 24px;
   line-height: 1;
+  animation: countdownPulse 2s ease-in-out infinite;
 }
 
 #ft-overlay-block-productive .ft-countdown-label {
-  font-size: 16px;
-  color: #999;
+  font-size: 13px;
+  color: #555555;
   text-transform: uppercase;
   letter-spacing: 2px;
+  margin-top: 8px;
 }
 
 /* ═══════════════════════════════════════════════════════════════ */
-/* UTILITY STYLES */
+/* UTILITY STYLES                                                  */
 /* ═══════════════════════════════════════════════════════════════ */
 
 /* Block Channel Button (injected into YouTube UI) */
@@ -721,7 +817,7 @@
 }
 
 /* ─────────────────────────────────────────────────────────────── */
-/* SHORTS BADGE CONTENT CLASSES */
+/* SHORTS BADGE CONTENT CLASSES                                   */
 /* ─────────────────────────────────────────────────────────────── */
 
 /* A single line of text inside the Shorts counter badge */
@@ -766,7 +862,7 @@
 }
 
 /* ─────────────────────────────────────────────────────────────── */
-/* WATCH-TIME COUNTER CONTENT CLASSES */
+/* WATCH-TIME COUNTER CONTENT CLASSES                             */
 /* ─────────────────────────────────────────────────────────────── */
 
 /* Full format: "Total time: 1h 15m" */
@@ -805,7 +901,7 @@
 }
 
 /* ─────────────────────────────────────────────────────────────── */
-/* SEARCH WARNING TOAST */
+/* SEARCH WARNING TOAST                                           */
 /* ─────────────────────────────────────────────────────────────── */
 
 #ft-search-warning,
