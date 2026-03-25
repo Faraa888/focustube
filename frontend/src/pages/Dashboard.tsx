@@ -105,70 +105,135 @@ const Dashboard = () => {
     return null;
   }
 
+  // Placeholder bar heights simulating a typical evening-heavy usage pattern
+  const placeholderBars = [2,1,1,0,0,0,1,3,5,7,6,5,4,5,6,7,8,9,10,9,8,6,4,2];
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
-      
-      <main className="flex-1 container mx-auto px-4 py-8 mt-16">
-        {/* Upgrade Banner */}
-        {showUpgradeBanner && (
-          <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-center justify-between gap-4">
-            <span className="text-yellow-500 font-medium">
-              Tracking paused — Upgrade to Pro to resume logging your sessions
-            </span>
-            <Button
-              onClick={() => window.open("/pricing", "_blank")}
-              size="sm"
-              className="bg-yellow-500 hover:bg-yellow-600 text-black"
-            >
-              Upgrade
-            </Button>
-          </div>
-        )}
+
+      <main className="flex-1 container mx-auto px-4 py-8 mt-16 max-w-6xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Your Stats</h1>
           <p className="text-muted-foreground">
-            Track your YouTube habits and stay focused
+            Your distraction profile — last 60 days, hour by hour
           </p>
         </div>
 
-        {statsError && (
-          <Card className="mb-8 border-destructive/50 bg-destructive/5">
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
-                <AlertCircle className="h-6 w-6 text-destructive flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <h3 className="font-semibold mb-1">Error loading dashboard</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {statsError}
-                  </p>
-                  <Button onClick={() => window.location.reload()}>
-                    Retry
-                  </Button>
-                </div>
+        {/* Free / expired user — blurred placeholder */}
+        {showUpgradeBanner && (
+          <>
+            <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-center justify-between gap-4">
+              <span className="text-yellow-500 font-medium">
+                Your trial has ended. Upgrade to Pro to see your focus data.
+              </span>
+              <Button
+                onClick={() => window.open("/pricing", "_blank")}
+                size="sm"
+                className="bg-yellow-500 hover:bg-yellow-600 text-black shrink-0"
+              >
+                Upgrade to Pro — $5/month
+              </Button>
+            </div>
+
+            <div className="blur-sm pointer-events-none select-none">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <Card>
+                  <CardHeader><CardTitle>Focus Score</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="text-5xl font-bold text-green-500">73%</div>
+                    <p className="text-sm text-muted-foreground mt-1">Last 60 days</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader><CardTitle>Total Watch Time</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="text-5xl font-bold">14h 22m</div>
+                    <p className="text-sm text-muted-foreground mt-1">This week</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader><CardTitle>Peak Hours</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">9–11pm</div>
+                    <p className="text-sm text-muted-foreground mt-1">Most active window</p>
+                  </CardContent>
+                </Card>
               </div>
-            </CardContent>
-          </Card>
+
+              <Card className="mb-8">
+                <CardHeader>
+                  <CardTitle>Watch time by hour</CardTitle>
+                  <CardDescription>Last 60 days · productive / neutral / distracting</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-40 flex items-end gap-0.5">
+                    {placeholderBars.map((h, i) => (
+                      <div key={i} className="flex-1 flex flex-col gap-0.5 justify-end">
+                        <div style={{ height: `${h * 4}px` }} className="bg-green-500/70 rounded-sm" />
+                        <div style={{ height: `${Math.max(h - 3, 0) * 2}px` }} className="bg-yellow-500/70 rounded-sm" />
+                        <div style={{ height: `${Math.max(h - 5, 0) * 3}px` }} className="bg-red-500/70 rounded-sm" />
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-6 md:grid-cols-2">
+                <Card>
+                  <CardHeader><CardTitle>Most Watched</CardTitle></CardHeader>
+                  <CardContent className="space-y-3">
+                    {[["TED", "42m"], ["Kurzgesagt", "31m"], ["3Blue1Brown", "28m"], ["Lex Fridman", "19m"]].map(([ch, t]) => (
+                      <div key={ch} className="flex justify-between items-center">
+                        <span className="text-sm">{ch}</span>
+                        <span className="text-xs text-muted-foreground">{t}</span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader><CardTitle>Biggest Distractions</CardTitle></CardHeader>
+                  <CardContent className="space-y-3">
+                    {[["MrBeast", "38m"], ["Sidemen", "22m"], ["PewDiePie", "15m"]].map(([ch, t]) => (
+                      <div key={ch} className="flex justify-between items-center">
+                        <span className="text-sm">{ch}</span>
+                        <span className="text-xs text-muted-foreground">{t}</span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </>
         )}
 
-        {!isExtensionConnected && !statsLoading && !statsError && (
-          <Card className="mb-8 border-primary/50 bg-primary/5">
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
-                <AlertCircle className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <h3 className="font-semibold mb-1">Extension not connected</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Install and connect the FocusTube extension to see your data
-                  </p>
-                  <Button asChild data-evt="dashboard_install">
-                    <Link to="/download">Install Extension</Link>
-                  </Button>
-                </div>
+        {!showUpgradeBanner && (
+          <>
+            {statsError && (
+              <Card className="mb-8 border-destructive/50 bg-destructive/5">
+                <CardContent className="pt-6">
+                  <div className="flex items-start gap-4">
+                    <AlertCircle className="h-6 w-6 text-destructive flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold mb-1">Error loading dashboard</h3>
+                      <p className="text-sm text-muted-foreground mb-4">{statsError}</p>
+                      <Button onClick={() => window.location.reload()}>Retry</Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {!isExtensionConnected && !statsLoading && !statsError && (
+              <div className="text-center py-16">
+                <p className="text-sm text-muted-foreground mb-4">
+                  Start watching to see your focus patterns here.
+                </p>
+                <Link to="/download" className="text-sm text-primary hover:underline">
+                  Install the extension
+                </Link>
               </div>
-            </CardContent>
-          </Card>
-        )}
+            )}
 
         {statsLoading && (
           <div className="text-center py-12">
@@ -348,6 +413,8 @@ const Dashboard = () => {
             )}
 
             {/* Cleanup Suggestion - Removed "Block All Distractions" button per user request */}
+          </>
+        )}
           </>
         )}
 
