@@ -79,9 +79,8 @@ const Signup = () => {
     const formData = new FormData(e.currentTarget);
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
-    const name = formData.get("name") as string;
 
-    console.log("🚀 [SIGNUP] Form data extracted:", { email, name, hasPassword: !!password });
+    console.log("🚀 [SIGNUP] Form data extracted:", { email, hasPassword: !!password });
 
     // Validate email before attempting signup
     console.log("🚀 [SIGNUP] Validating email...");
@@ -100,11 +99,6 @@ const Signup = () => {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: {
-            name: name,
-          },
-        },
       });
 
       console.log("🚀 [SIGNUP] Supabase response:", { 
@@ -204,7 +198,7 @@ const Signup = () => {
           </Link>
           <CardTitle className="text-2xl text-center">Create your account</CardTitle>
           <CardDescription className="text-center">
-            Start your free trial
+            Start your 14-day free trial
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -262,16 +256,6 @@ const Signup = () => {
                   </Alert>
                 )}
 
-            <div className="space-y-2">
-              <Label htmlFor="name">Full name</Label>
-              <Input
-                id="name"
-                name="name"
-                type="text"
-                placeholder="John Doe"
-                required
-              />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
