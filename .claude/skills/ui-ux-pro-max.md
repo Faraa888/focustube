@@ -39,15 +39,7 @@
 
 ## Interaction States (CRITICAL)
 
-Every interactive element must have:
-- Default
-- Hover
-- Focus
-- Active/pressed
-- Disabled (opacity 0.4, no pointer events)
-- Loading (spinner or skeleton)
-- Error
-- Success
+Every interactive element needs: Default, Hover, Focus, Active, Disabled (opacity-40, no pointer-events), Loading (skeleton), Error, Success.
 
 ---
 
