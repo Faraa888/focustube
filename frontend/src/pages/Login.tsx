@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Chrome as ChromeIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Chrome as ChromeIcon, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { storeEmailForExtension } from "@/lib/extensionStorage";
 import { validateEmail } from "@/lib/emailValidation";
@@ -13,11 +14,15 @@ import { validateEmail } from "@/lib/emailValidation";
 // Type declaration for Chrome extension API
 declare const chrome: any;
 
+type ForgotState = "login" | "forgot" | "sent";
+
 const Login = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [forgotState, setForgotState] = useState<ForgotState>("login");
+  const [forgotEmail, setForgotEmail] = useState("");
   const returnToExtension = searchParams.get('return') === 'extension';
 
   // Check for existing valid session on page load
@@ -236,6 +241,30 @@ const Login = () => {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: `${window.location.origin}/login`,
+      });
+
+      if (resetError) {
+        setError(resetError.message);
+        setLoading(false);
+        return;
+      }
+
+      setForgotState("sent");
+    } catch (err) {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
@@ -243,76 +272,133 @@ const Login = () => {
           <Link to="/" className="text-2xl font-bold text-primary text-center mb-4 block">
             FocusTube
           </Link>
-          <CardTitle className="text-2xl text-center">Welcome back</CardTitle>
+          <CardTitle className="text-2xl text-center">
+            {forgotState === "login" ? "Welcome back" : "Reset your password"}
+          </CardTitle>
           <CardDescription className="text-center">
-            Sign in to access your dashboard
+            {forgotState === "login" ? "Sign in to your account" : "Enter your email to receive a reset link"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Google OAuth - Disabled for MVP, will enable later */}
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={handleGoogleLogin}
-            disabled={loading}
-            data-evt="login_google"
-          >
-            <ChromeIcon className="mr-2 h-5 w-5" />
-            {loading ? "Loading..." : "Continue with Google"}
-          </Button>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <Separator />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">Or continue with email</span>
-            </div>
-          </div>
+          {/* Forgot password — sent state */}
+          {forgotState === "sent" && (
+            <>
+              <Alert className="border-green-500/50 bg-green-950/20">
+                <CheckCircle2 className="h-5 w-5 text-green-400" />
+                <AlertTitle className="text-green-100">Check your email</AlertTitle>
+                <AlertDescription className="text-green-200">
+                  We've sent a password reset link to <strong>{forgotEmail}</strong>. Click it to set a new password. Check your spam folder if it doesn't arrive within a minute.
+                </AlertDescription>
+              </Alert>
+              <button
+                type="button"
+                onClick={() => { setForgotState("login"); setError(""); }}
+                className="w-full text-sm text-primary hover:underline text-center block"
+              >
+                Back to sign in
+              </button>
+            </>
+          )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="text-sm text-red-500 text-center">{error}</div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="you@example.com"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link
-                  to="/forgot-password"
-                  className="text-sm text-primary hover:underline"
-                >
-                  Forgot?
-                </Link>
+          {/* Forgot password — email input state */}
+          {forgotState === "forgot" && (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              {error && (
+                <div className="text-sm text-red-500 text-center">{error}</div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="forgot-email">Email</Label>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  required
+                />
               </div>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                required
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={loading} data-evt="login_email">
-              {loading ? "Signing in..." : "Sign in"}
-            </Button>
-          </form>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Sending..." : "Send reset link"}
+              </Button>
+              <button
+                type="button"
+                onClick={() => { setForgotState("login"); setError(""); }}
+                className="w-full text-sm text-muted-foreground hover:text-foreground text-center block"
+              >
+                Back to sign in
+              </button>
+            </form>
+          )}
 
-          <p className="text-center text-sm text-muted-foreground">
-            Don't have an account?{" "}
-            <Link to="/signup" className="text-primary hover:underline font-medium">
-              Sign up
-            </Link>
-          </p>
+          {/* Normal login state */}
+          {forgotState === "login" && (
+            <>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleGoogleLogin}
+                disabled={loading}
+                data-evt="login_google"
+              >
+                <ChromeIcon className="mr-2 h-5 w-5" />
+                {loading ? "Loading..." : "Continue with Google"}
+              </Button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <Separator />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">Or continue with email</span>
+                </div>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {error && (
+                  <div className="text-sm text-red-500 text-center">{error}</div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                    <button
+                      type="button"
+                      onClick={() => { setForgotState("forgot"); setError(""); }}
+                      className="text-sm text-primary hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={loading} data-evt="login_email">
+                  {loading ? "Signing in..." : "Sign in"}
+                </Button>
+              </form>
+
+              <p className="text-center text-sm text-muted-foreground">
+                Don't have an account?{" "}
+                <Link to="/signup" className="text-primary hover:underline font-medium">
+                  Start free trial
+                </Link>
+              </p>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
