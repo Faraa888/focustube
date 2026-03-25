@@ -1,11 +1,9 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Check, Shield, Zap } from "lucide-react";
 import {
   Accordion,
@@ -15,13 +13,6 @@ import {
 } from "@/components/ui/accordion";
 
 const Pricing = () => {
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("yearly");
-  
-  const pricing = {
-    monthly: { price: 4.99, total: 4.99 },
-    yearly: { price: 4.20, total: 50 },
-  };
-
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
@@ -38,23 +29,6 @@ const Pricing = () => {
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Start free, upgrade when you're ready. Cancel anytime.
           </p>
-        </div>
-
-        {/* Billing Toggle */}
-        <div className="flex justify-center mb-12">
-          <Tabs
-            value={billingPeriod}
-            onValueChange={(value) => setBillingPeriod(value as "monthly" | "yearly")}
-            className="w-auto"
-          >
-            <TabsList>
-              <TabsTrigger value="monthly">Monthly</TabsTrigger>
-              <TabsTrigger value="yearly">
-                Yearly
-                <Badge variant="secondary" className="ml-2">Save 17%</Badge>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
         </div>
 
         {/* Pricing Cards */}
@@ -103,15 +77,8 @@ const Pricing = () => {
                 Built for deep work and distraction recovery
               </CardDescription>
               <div className="pt-4">
-                <span className="text-5xl font-bold">
-                  ${pricing[billingPeriod].price}
-                </span>
+                <span className="text-5xl font-bold">$5</span>
                 <span className="text-muted-foreground text-lg">/month</span>
-                {billingPeriod === "yearly" && (
-                  <div className="text-sm text-muted-foreground mt-1">
-                    Billed $50/year
-                  </div>
-                )}
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -169,10 +136,6 @@ const Pricing = () => {
             <Zap className="h-5 w-5" />
             <span className="text-sm">Cancel anytime</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Check className="h-5 w-5" />
-            <span className="text-sm">30-day money back</span>
-          </div>
         </div>
 
         {/* FAQ Section */}
@@ -184,37 +147,25 @@ const Pricing = () => {
             <AccordionItem value="item-1">
               <AccordionTrigger>What happens after the free trial?</AccordionTrigger>
               <AccordionContent>
-                After 30 days, you move to the Free plan automatically. No charge. Upgrade anytime to keep Pro features.
+                After 14 days, you move to the Free plan automatically. No charge. Upgrade anytime to keep Pro features.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-2">
-              <AccordionTrigger>Can I switch between plans?</AccordionTrigger>
+              <AccordionTrigger>Can I cancel anytime?</AccordionTrigger>
               <AccordionContent>
-                Yes! Upgrade or downgrade anytime. If you downgrade, you'll keep Pro features until the end of your billing period.
+                Yes. Cancel anytime from your account. You'll keep Pro access until the end of your billing period.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-3">
-              <AccordionTrigger>Do you offer refunds?</AccordionTrigger>
-              <AccordionContent>
-                Yes, we offer a 30-day money-back guarantee on annual plans.
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="item-4">
-              <AccordionTrigger>Is there a student discount?</AccordionTrigger>
-              <AccordionContent>
-                Yes! Students get 25% off Lifetime Access. Email us from your .edu address to verify and get your discount code.
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="item-5">
               <AccordionTrigger>What payment methods do you accept?</AccordionTrigger>
               <AccordionContent>
                 Stripe handles our payments — Visa, Mastercard, Amex. All payments are secure and encrypted.
               </AccordionContent>
             </AccordionItem>
-            <AccordionItem value="item-6">
+            <AccordionItem value="item-4">
               <AccordionTrigger>Can I use one subscription on multiple devices?</AccordionTrigger>
               <AccordionContent>
-                Yes! Your Pro subscription works across all your devices where you're signed in to Chrome.
+                Yes. Your Pro subscription works across all your devices where you're signed in to Chrome.
               </AccordionContent>
             </AccordionItem>
           </Accordion>
