@@ -12,463 +12,231 @@
     }
 
     body {
-      width: 380px;
-      min-height: 200px;
-      max-height: 600px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background: #0f0f0f;
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #121212;
       color: #ffffff;
-      padding: 0;
       overflow-y: auto;
     }
 
-    .container {
-      display: flex;
-      flex-direction: column;
-    }
-
+    /* Header */
     .header {
-      text-align: center;
-      padding: 20px 20px 16px;
-      border-bottom: 1px solid #303030;
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid #333333;
     }
 
-    .header h1 {
-      font-size: 24px;
-      font-weight: 600;
-      color: #3ea6ff;
-      margin-bottom: 4px;
+    .brand {
+      font-size: 18px;
+      font-weight: 700;
+      color: #e3093a;
+      letter-spacing: -0.3px;
     }
 
-    .header p {
-      font-size: 14px;
-      color: #aaaaaa;
-    }
-
+    /* Content wrapper */
     .content {
       padding: 20px;
-    }
-
-    /* Onboarding Section */
-    .onboarding {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-
-    .welcome-text {
-      text-align: center;
-      color: #ffffff;
-      font-size: 16px;
-      font-weight: 500;
-    }
-
-    .features-list {
-      background: #181818;
-      border: 1px solid #303030;
-      border-radius: 8px;
-      padding: 16px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-
-    .feature-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
-      font-size: 13px;
-      color: #ffffff;
-    }
-
-    .feature-icon {
-      width: 18px;
-      height: 18px;
-      min-width: 18px;
-      border-radius: 4px;
-      background: #3ea6ff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #ffffff;
-      font-size: 11px;
-      font-weight: 600;
-      margin-top: 2px;
-    }
-
-    .feature-text {
-      flex: 1;
-      line-height: 1.4;
-    }
-
-    .cta-buttons {
       display: flex;
       flex-direction: column;
       gap: 10px;
     }
 
+    /* Buttons */
     button {
       width: 100%;
-      padding: 12px 16px;
+      padding: 11px 16px;
       border: none;
       border-radius: 6px;
       font-size: 14px;
       font-weight: 500;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: background 0.15s, border-color 0.15s;
+      font-family: inherit;
+      text-align: center;
     }
 
     .btn-primary {
-      background: #3ea6ff;
+      background: #e3093a;
       color: #ffffff;
     }
-
-    .btn-primary:hover:not(:disabled) {
-      background: #2d7fc7;
-    }
-
-    .btn-secondary {
-      background: #181818;
-      color: #ffffff;
-      border: 1px solid #303030;
-    }
-
-    .btn-secondary:hover:not(:disabled) {
-      background: #252525;
-      border-color: #404040;
-    }
+    .btn-primary:hover { background: #c80833; }
 
     .btn-outline {
       background: transparent;
-      color: #aaaaaa;
-      border: 1px solid #303030;
-    }
-
-    .btn-outline:hover:not(:disabled) {
-      background: #181818;
       color: #ffffff;
-      border-color: #404040;
+      border: 1px solid #333333;
     }
+    .btn-outline:hover { background: #1e1e1e; border-color: #555555; }
 
-    button:disabled {
-      background: #303030;
-      color: #888888;
-      cursor: not-allowed;
-      opacity: 0.6;
-    }
-
-    /* Login Form */
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    label {
-      font-size: 14px;
-      font-weight: 500;
-      color: #ffffff;
-    }
-
-    input[type="email"] {
-      width: 100%;
-      padding: 10px 12px;
-      background: #181818;
-      border: 1px solid #303030;
-      border-radius: 6px;
-      color: #ffffff;
-      font-size: 14px;
-      transition: border-color 0.2s;
-    }
-
-    input[type="email"]:focus {
-      outline: none;
-      border-color: #3ea6ff;
-    }
-
-    .divider {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin: 16px 0;
-      color: #888888;
-      font-size: 12px;
-    }
-
-    .divider::before,
-    .divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: #303030;
-    }
-
-    /* Status Container */
-    .status {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 16px;
-      background: #181818;
-      border: 1px solid #303030;
-      border-radius: 8px;
-      font-size: 14px;
-    }
-
-    .status-icon {
-      width: 20px;
-      height: 20px;
-      min-width: 20px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
+    .btn-yellow {
+      background: #eab308;
+      color: #000000;
       font-weight: 600;
     }
+    .btn-yellow:hover { background: #ca9a07; }
 
-    .status-icon.connected {
-      background: #22c55e;
-      color: #ffffff;
+    .btn-ghost {
+      background: transparent;
+      color: #b3b3b3;
+      border: none;
+      font-size: 13px;
+      padding: 8px 16px;
     }
+    .btn-ghost:hover { color: #ffffff; }
 
-    .status-icon.disconnected {
-      background: #ef4444;
-      color: #ffffff;
-    }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    .status-info {
-      flex: 1;
-    }
-
-    .status-email {
-      font-weight: 500;
-      color: #ffffff;
-      margin-bottom: 4px;
-    }
-
-    .status-plan {
-      font-size: 12px;
-      color: #aaaaaa;
-    }
-
-    .trial-banner {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-top: 12px;
+    /* User info row */
+    .user-row {
+      background: #1e1e1e;
+      border: 1px solid #333333;
+      border-radius: 8px;
       padding: 12px 14px;
-      background: rgba(62, 166, 255, 0.12);
-      border: 1px solid rgba(62, 166, 255, 0.35);
-      border-radius: 8px;
-    }
-
-    .trial-banner.hidden {
-      display: none;
-    }
-
-    .trial-banner-copy {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 3px;
+    }
+
+    .user-email {
       font-size: 13px;
-      color: #dbeafe;
-    }
-
-    .trial-banner-copy strong {
-      font-size: 13px;
-      color: #bfdbfe;
-    }
-
-    .trial-banner-button {
-      padding: 8px 14px;
-      border-radius: 6px;
-      border: 1px solid #3ea6ff;
-      background: #3ea6ff;
-      color: #0f0f0f;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.2s, border 0.2s;
-    }
-
-    .trial-banner-button:hover {
-      background: #60b7ff;
-      border-color: #60b7ff;
-    }
-
-    .btn-danger {
-      background: #dc2626;
+      font-weight: 500;
       color: #ffffff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
-    .btn-danger:hover:not(:disabled) {
-      background: #b91c1c;
-    }
-
-    /* Messages */
-    .message {
-      padding: 12px;
-      border-radius: 6px;
-      font-size: 13px;
-      text-align: center;
-      margin-top: 12px;
-    }
-
-    .message.success {
-      background: #1a5f1a;
-      color: #4ade80;
-      border: 1px solid #22c55e;
-    }
-
-    .message.error {
-      background: #5f1a1a;
-      color: #f87171;
-      border: 1px solid #ef4444;
-    }
-
-    .message.info {
-      background: #1a3a5f;
-      color: #60a5fa;
-      border: 1px solid #3b82f6;
-    }
-
-    .link {
-      color: #3ea6ff;
-      text-decoration: none;
-      font-size: 13px;
-    }
-
-    .link:hover {
-      text-decoration: underline;
-    }
-
-    .hidden {
-      display: none;
-    }
-
-    .text-center {
-      text-align: center;
-    }
-
-    .text-muted {
-      color: #888888;
+    .user-plan {
       font-size: 12px;
+      color: #b3b3b3;
     }
+
+    .user-plan.pro  { color: #00bb13; }
+    .user-plan.trial { color: #eab308; }
+
+    /* Upgrade nudge banner (trial days 7, 10, 11, 12, 13) */
+    .nudge-banner {
+      background: rgba(234, 179, 8, 0.08);
+      border: 1px solid rgba(234, 179, 8, 0.3);
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .nudge-copy {
+      font-size: 13px;
+      color: #eab308;
+      line-height: 1.45;
+    }
+
+    .nudge-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .nudge-actions .btn-yellow {
+      flex: 1;
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+
+    .nudge-actions .btn-ghost {
+      flex: 0;
+      padding: 8px 12px;
+      font-size: 13px;
+      width: auto;
+    }
+
+    /* Expired copy */
+    .expired-heading {
+      font-size: 15px;
+      font-weight: 600;
+      color: #ffffff;
+      line-height: 1.3;
+    }
+
+    .expired-stats {
+      font-size: 13px;
+      color: #b3b3b3;
+      line-height: 1.5;
+    }
+
+    /* Welcome copy */
+    .welcome-copy {
+      font-size: 14px;
+      color: #b3b3b3;
+      line-height: 1.5;
+    }
+
+    /* Loading */
+    #state-loading {
+      padding: 28px 20px;
+      font-size: 13px;
+      color: #b3b3b3;
+    }
+
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>FocusTube</h1>
-      <p id="headerSubtitle">Connect your account</p>
-    </div>
-
-    <div class="content">
-      <!-- Onboarding (shown when no email) -->
-      <div id="onboarding" class="onboarding hidden">
-        <div class="welcome-text">
-          Welcome to FocusTube. Start with full access — no card required. Try Pro free for 30 days. No pressure. Just focus.
-        </div>
-
-        <div class="features-list">
-          <div class="feature-item">
-            <div class="feature-icon">✓</div>
-            <div class="feature-text">Smart AI Filtering</div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">✓</div>
-            <div class="feature-text">Targetted Channel Blocking</div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">✓</div>
-            <div class="feature-text">30-Day Free Trial</div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">✓</div>
-            <div class="feature-text">Insight Dashboard</div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">✓</div>
-            <div class="feature-text">Custom Focus Goals</div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">✓</div>
-            <div class="feature-text">Flexible Time Limits</div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">✓</div>
-            <div class="feature-text">Stronger Shorts & Feed Control</div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">✓</div>
-            <div class="feature-text">More Searches</div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">✓</div>
-            <div class="feature-text">Private Journal System</div>
-          </div>
-        </div>
-
-        <div class="cta-buttons">
-          <button id="signupBtn" class="btn-primary">Start 14- Day Trial</button>
-          <button id="signinBtn" class="btn-secondary">Sign in</button>
-          <button id="continueFreeBtn" class="btn-outline">Continue with Free</button>
-        </div>
-      </div>
-
-      <!-- Sign In Form (shown when user clicks "Sign in") -->
-      <div id="loginForm" class="form-group hidden">
-        <label for="email">Email address</label>
-        <input 
-          type="email" 
-          id="email" 
-          placeholder="you@example.com" 
-          required
-          autocomplete="email"
-        />
-        <button id="loginBtn" class="btn-primary">Connect Account</button>
-        <p class="text-center text-muted">
-          Don't have an account? 
-          <a href="#" id="signupLink" target="_blank" class="link">Sign up</a>
-        </p>
-        <button id="backToOnboardingBtn" class="btn-outline" style="margin-top: 8px;">Back</button>
-      </div>
-
-      <!-- Status (shown when logged in) -->
-      <div id="statusContainer" class="hidden">
-        <div class="status">
-          <div class="status-icon" id="statusIcon"></div>
-          <div class="status-info">
-            <div class="status-email" id="statusEmail"></div>
-            <div class="status-plan" id="statusPlan"></div>
-          </div>
-        </div>
-        <div id="trialBanner" class="trial-banner hidden">
-          <div class="trial-banner-copy">
-            <strong id="trialBannerTitle">Pro trial: X day(s) left</strong>
-            <span id="trialBannerSubtitle">Keep AI filtering, channel blocking and insights by upgrading.</span>
-          </div>
-          <button id="trialUpgradeBtn" class="trial-banner-button">Upgrade</button>
-        </div>
-        <div id="upgradeMessage" class="trial-banner hidden" style="background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.35);">
-          <div class="trial-banner-copy">
-            <strong>Tracking paused</strong>
-            <span>Upgrade to Pro to resume logging your sessions</span>
-          </div>
-          <button id="upgradeBtn" class="trial-banner-button" style="background: #ef4444; border-color: #ef4444;">Upgrade</button>
-        </div>
-        <div style="display: flex; gap: 8px; margin-top: 12px;">
-          <button id="refreshPlanBtn" class="btn-outline" style="flex: 1;">Refresh Plan</button>
-          <button id="manageAccountBtn" class="btn-secondary" style="flex: 1;">Manage Account</button>
-        </div>
-      </div>
-
-      <div id="message" class="message hidden"></div>
-    </div>
+  <div class="header">
+    <div class="brand">FocusTube</div>
   </div>
 
-  <script type="module" src="popup.js"></script>
+  <!-- Loading -->
+  <div id="state-loading" class="content">
+    <span>Loading...</span>
+  </div>
+
+  <!-- State 1: Logged Out -->
+  <div id="state-loggedout" class="content hidden">
+    <p class="welcome-copy">
+      Sign in or start your free trial to take back control over YouTube.
+    </p>
+    <button id="btn-signup" class="btn-primary">Start Free Trial</button>
+    <button id="btn-signin" class="btn-outline">Sign In</button>
+  </div>
+
+  <!-- State 2: Trial -->
+  <div id="state-trial" class="content hidden">
+    <!-- Upgrade nudge — shown on days 7, 10, 11, 12, 13 -->
+    <div id="upgrade-nudge" class="nudge-banner hidden">
+      <p id="nudge-copy" class="nudge-copy"></p>
+      <div class="nudge-actions">
+        <button id="btn-nudge-upgrade" class="btn-yellow">Upgrade Now</button>
+        <button id="btn-nudge-dismiss" class="btn-ghost">Dismiss</button>
+      </div>
+    </div>
+
+    <div class="user-row">
+      <div class="user-email" id="trial-email"></div>
+      <div class="user-plan trial" id="trial-days"></div>
+    </div>
+
+    <button id="btn-trial-upgrade" class="btn-yellow">Upgrade to Pro</button>
+    <button id="btn-trial-dashboard" class="btn-outline">View Dashboard</button>
+    <button id="btn-trial-settings" class="btn-outline">Settings</button>
+  </div>
+
+  <!-- State 3: Pro -->
+  <div id="state-pro" class="content hidden">
+    <div class="user-row">
+      <div class="user-email" id="pro-email"></div>
+      <div class="user-plan pro">Pro plan &#10003;</div>
+    </div>
+    <button id="btn-pro-dashboard" class="btn-outline">View Dashboard</button>
+    <button id="btn-pro-settings" class="btn-outline">Settings</button>
+  </div>
+
+  <!-- State 4: Expired -->
+  <div id="state-expired" class="content hidden">
+    <div class="expired-heading">Your 14-day trial has ended.</div>
+    <div class="expired-stats" id="expired-stats"></div>
+    <button id="btn-expired-upgrade" class="btn-primary">Upgrade to Pro &#8212; $5/month</button>
+    <button id="btn-expired-uninstall" class="btn-ghost">No thanks, uninstall</button>
+  </div>
+
+  <script src="popup.js"></script>
 </body>
 </html>
