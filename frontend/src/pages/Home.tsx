@@ -23,20 +23,20 @@ const Home = () => {
         <div className="container mx-auto max-w-6xl">
           <div className="text-center mb-12">
             <Badge variant="secondary" className="mb-4">
-              Free for 30 days • No card needed
+              Free for 14 days • No card needed
             </Badge>
             <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
-              YouTube without the spiral.
+              No More YouTube Spirals
             </h1>
             <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto mb-8">
-              FocusTube filters out distractions, sets smart limits, and nudges you back to your goals — so you stop spiraling and start doing.
+              FocusTube adds friction where you spiral and clarity when you drift — so YouTube stops wasting your time and you remain in control.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button size="lg" asChild data-evt="start_trial">
                 <Link to="/signup">Start Free Trial</Link>
               </Button>
               <Button size="lg" variant="outline" asChild>
-                <Link to="/download">Install Extension</Link>
+                <a href="#how-it-works">See How It Works</a>
               </Button>
             </div>
           </div>
@@ -59,17 +59,17 @@ const Home = () => {
             You don't need more willpower.
           </h2>
           <p className="text-xl text-muted-foreground mb-8">
-            You've deleted the app. You've blocked Shorts. You've unsubscribed from channels.
+            Deleted the app. Blocked Shorts. Unsubscribed. Logged out.
             <br />
-            And yet, you still fall down the rabbit hole.
-            <br />
-            FocusTube helps you break the cycle — with smarter limits and actual accountability.
+            And yet — 40 minutes gone on a Tuesday night watching something you didn't plan to watch.
+            <br /><br />
+            The problem isn't you. It's that YouTube is built to pull you in. FocusTube adds the friction YouTube won't.
           </p>
         </div>
       </section>
 
       {/* How It Works */}
-      <section className="py-20 px-4 bg-card/30">
+      <section id="how-it-works" className="py-20 px-4 bg-card/30">
         <div className="container mx-auto max-w-6xl">
           <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">
             How it works
@@ -220,7 +220,7 @@ const Home = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-5 w-5 text-green-500" />
-                  <span>Full dahsboard & insights</span>
+                  <span>Full dashboard & insights</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-5 w-5 text-green-500" />
@@ -265,7 +265,7 @@ const Home = () => {
             <AccordionItem value="item-3">
               <AccordionTrigger>How much does Pro cost?</AccordionTrigger>
               <AccordionContent>
-                $4.99/month or $49.99/year. Cancel Anytime
+                $5/month. Cancel anytime.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-4">
