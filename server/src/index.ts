@@ -2619,6 +2619,124 @@ app.post("/admin/set-plan", async (req, res) => {
   }
 });
 
+/**
+ * Admin endpoint: full extension reset for test users
+ * POST /admin/reset-extension
+ *
+ * Clears today's video_sessions and video_classifications,
+ * resets extension_data.settings to clean defaults,
+ * and sets _pending_full_reset flag so the extension wipes
+ * local counter state on its next /extension/get-data poll.
+ *
+ * Rate limit: 10 calls/hour per IP.
+ * Logs every call with timestamp and email.
+ */
+app.post("/admin/reset-extension", async (req, res) => {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+
+  if (!checkAdminRateLimit(ip)) {
+    return res.status(429).json({ success: false, error: "Too many requests. Max 10 calls per hour." });
+  }
+
+  const xSecret = req.headers["x-admin-secret"] as string;
+  const authHeader = req.headers["authorization"] as string;
+  const bearerSecret = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const adminSecret = xSecret || bearerSecret;
+
+  if (!adminSecret || !process.env.ADMIN_SECRET || adminSecret !== process.env.ADMIN_SECRET) {
+    return res.status(403).json({ success: false, error: "Unauthorized - invalid or missing ADMIN_SECRET" });
+  }
+
+  const { email } = req.body;
+  if (!email || typeof email !== "string") {
+    return res.status(400).json({ success: false, error: "Email is required" });
+  }
+
+  const userEmail = email.toLowerCase().trim();
+  console.log(`[Admin Reset Extension] ${new Date().toISOString()} — ${userEmail} — from ${ip}`);
+
+  try {
+    const { data: users, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("email", userEmail)
+      .limit(1);
+
+    if (userError || !users || users.length === 0) {
+      return res.status(404).json({ success: false, error: "User not found" });
+    }
+
+    const userId = users[0].id;
+
+    // Delete today's video_sessions
+    const today = new Date().toISOString().split("T")[0];
+    const todayStart = `${today}T00:00:00.000Z`;
+    const todayEnd = `${today}T23:59:59.999Z`;
+
+    const { count: sessionCount, error: sessionError } = await supabase
+      .from("video_sessions")
+      .delete({ count: "exact" })
+      .eq("user_id", userId)
+      .gte("watched_at", todayStart)
+      .lte("watched_at", todayEnd);
+
+    if (sessionError) {
+      console.error("[Admin Reset Extension] Failed to delete video_sessions:", sessionError);
+      return res.status(500).json({ success: false, error: "Failed to delete video sessions" });
+    }
+
+    // Delete today's video_classifications
+    const { count: classCount, error: classError } = await supabase
+      .from("video_classifications")
+      .delete({ count: "exact" })
+      .eq("user_id", userId)
+      .gte("classified_at", todayStart)
+      .lte("classified_at", todayEnd);
+
+    if (classError) {
+      console.error("[Admin Reset Extension] Failed to delete video_classifications:", classError);
+      return res.status(500).json({ success: false, error: "Failed to delete video classifications" });
+    }
+
+    // Reset extension_data.settings to clean defaults + set pending reset flag
+    const cleanSettings = {
+      block_shorts: false,
+      hide_recommendations: false,
+      daily_limit_minutes: 0,
+      focus_window_enabled: false,
+      focus_window_start: "08:00",
+      focus_window_end: "22:00",
+      _pending_full_reset: true,
+    };
+
+    const { error: updateError } = await supabase
+      .from("extension_data")
+      .upsert(
+        { user_id: userId, settings: cleanSettings, updated_at: new Date().toISOString() },
+        { onConflict: "user_id" }
+      );
+
+    if (updateError) {
+      console.error("[Admin Reset Extension] Failed to update extension_data:", updateError);
+      return res.status(500).json({ success: false, error: "Failed to reset settings" });
+    }
+
+    console.log(`[Admin Reset Extension] ✅ Done — ${userEmail} — sessions: ${sessionCount ?? 0}, classifications: ${classCount ?? 0}`);
+
+    res.json({
+      success: true,
+      reset: {
+        video_sessions_deleted: sessionCount ?? 0,
+        video_classifications_deleted: classCount ?? 0,
+        settings_reset: true,
+      },
+    });
+  } catch (error: any) {
+    console.error("[Admin Reset Extension] Error:", error);
+    res.status(500).json({ success: false, error: error.message || "Internal server error" });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────
 // ERROR HANDLING
 // ─────────────────────────────────────────────────────────────
@@ -2787,124 +2905,6 @@ app.get("/checkout-cancel", (req, res) => {
 </body>
 </html>
   `);
-});
-
-/**
- * Admin endpoint: full extension reset for test users
- * POST /admin/reset-extension
- *
- * Clears today's video_sessions and video_classifications,
- * resets extension_data.settings to clean defaults,
- * and sets _pending_full_reset flag so the extension wipes
- * local counter state on its next /extension/get-data poll.
- *
- * Rate limit: 10 calls/hour per IP.
- * Logs every call with timestamp and email.
- */
-app.post("/admin/reset-extension", async (req, res) => {
-  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
-
-  if (!checkAdminRateLimit(ip)) {
-    return res.status(429).json({ success: false, error: "Too many requests. Max 10 calls per hour." });
-  }
-
-  const xSecret = req.headers["x-admin-secret"] as string;
-  const authHeader = req.headers["authorization"] as string;
-  const bearerSecret = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  const adminSecret = xSecret || bearerSecret;
-
-  if (!adminSecret || !process.env.ADMIN_SECRET || adminSecret !== process.env.ADMIN_SECRET) {
-    return res.status(403).json({ success: false, error: "Unauthorized - invalid or missing ADMIN_SECRET" });
-  }
-
-  const { email } = req.body;
-  if (!email || typeof email !== "string") {
-    return res.status(400).json({ success: false, error: "Email is required" });
-  }
-
-  const userEmail = email.toLowerCase().trim();
-  console.log(`[Admin Reset Extension] ${new Date().toISOString()} — ${userEmail} — from ${ip}`);
-
-  try {
-    const { data: users, error: userError } = await supabase
-      .from("users")
-      .select("id")
-      .eq("email", userEmail)
-      .limit(1);
-
-    if (userError || !users || users.length === 0) {
-      return res.status(404).json({ success: false, error: "User not found" });
-    }
-
-    const userId = users[0].id;
-
-    // Delete today's video_sessions
-    const today = new Date().toISOString().split("T")[0];
-    const todayStart = `${today}T00:00:00.000Z`;
-    const todayEnd = `${today}T23:59:59.999Z`;
-
-    const { count: sessionCount, error: sessionError } = await supabase
-      .from("video_sessions")
-      .delete({ count: "exact" })
-      .eq("user_id", userId)
-      .gte("watched_at", todayStart)
-      .lte("watched_at", todayEnd);
-
-    if (sessionError) {
-      console.error("[Admin Reset Extension] Failed to delete video_sessions:", sessionError);
-      return res.status(500).json({ success: false, error: "Failed to delete video sessions" });
-    }
-
-    // Delete today's video_classifications
-    const { count: classCount, error: classError } = await supabase
-      .from("video_classifications")
-      .delete({ count: "exact" })
-      .eq("user_id", userId)
-      .gte("classified_at", todayStart)
-      .lte("classified_at", todayEnd);
-
-    if (classError) {
-      console.error("[Admin Reset Extension] Failed to delete video_classifications:", classError);
-      return res.status(500).json({ success: false, error: "Failed to delete video classifications" });
-    }
-
-    // Reset extension_data.settings to clean defaults + set pending reset flag
-    const cleanSettings = {
-      block_shorts: false,
-      hide_recommendations: false,
-      daily_limit_minutes: 0,
-      focus_window_enabled: false,
-      focus_window_start: "08:00",
-      focus_window_end: "22:00",
-      _pending_full_reset: true,
-    };
-
-    const { error: updateError } = await supabase
-      .from("extension_data")
-      .upsert(
-        { user_id: userId, settings: cleanSettings, updated_at: new Date().toISOString() },
-        { onConflict: "user_id" }
-      );
-
-    if (updateError) {
-      console.error("[Admin Reset Extension] Failed to update extension_data:", updateError);
-      return res.status(500).json({ success: false, error: "Failed to reset settings" });
-    }
-
-    console.log(`[Admin Reset Extension] ✅ Done — ${userEmail} — sessions: ${sessionCount ?? 0}, classifications: ${classCount ?? 0}`);
-
-    res.json({
-      success: true,
-      reset: {
-        video_sessions_deleted: sessionCount ?? 0,
-        video_classifications_deleted: classCount ?? 0,
-        settings_reset: true,
-      },
-    });
-  } catch (error: any) {
-    console.error("[Admin Reset Extension] Error:", error);
-    res.status(500).json({ success: false, error: error.message || "Internal server error" });
-  }
 });
 
 // ─────────────────────────────────────────────────────────────
