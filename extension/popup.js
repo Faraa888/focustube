@@ -5,7 +5,7 @@ const SERVER_URL = typeof BACKEND_URL !== 'undefined' ? BACKEND_URL : 'http://lo
 const FRONTEND_URL_VAL = typeof FRONTEND_URL_VAR !== 'undefined' ? FRONTEND_URL_VAR : 'http://localhost:8080';
 
 // Days of trial remaining on which the upgrade nudge is shown
-const NUDGE_DAYS = [7, 10, 11, 12, 13];
+const NUDGE_DAYS = [1, 2, 3, 4, 7];
 
 // ─── State panels ────────────────────────────────────────────────────────────
 

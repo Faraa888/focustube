@@ -1095,7 +1095,7 @@ async function _p3InitOnPageLoad(pageType) {
   } catch (_) {}
   try {
     const { ft_plan, ft_days_left } = await chrome.storage.local.get(['ft_plan', 'ft_days_left']);
-    if (ft_plan === 'trial' && typeof ft_days_left === 'number' && [7, 10, 11, 12, 13].includes(ft_days_left)) {
+    if (ft_plan === 'trial' && typeof ft_days_left === 'number' && [1, 2, 3, 4, 7].includes(ft_days_left)) {
       await showP3TrialBanner(ft_days_left);
     }
   } catch (_) {}
