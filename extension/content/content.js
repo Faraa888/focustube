@@ -1033,10 +1033,11 @@ async function _p3CheckFocusWindow() {
     const startTime = ft_focus_window_start || '09:00';
     const endTime = ft_focus_window_end || '17:00';
     if (!(currentTime >= startTime && currentTime <= endTime)) {
-      const [endH, endM] = endTime.split(':').map(Number);
-      const period = endH >= 12 ? 'PM' : 'AM';
-      const h12 = endH % 12 || 12;
-      showFocusWindowBlock(`${h12}:${endM.toString().padStart(2, '0')} ${period}`);
+      // Show when the focus window OPENS next (start time), not when it ends
+      const [startH, startM] = startTime.split(':').map(Number);
+      const period = startH >= 12 ? 'PM' : 'AM';
+      const h12 = startH % 12 || 12;
+      showFocusWindowBlock(`${h12}:${startM.toString().padStart(2, '0')} ${period}`);
     }
   } catch (e) {
     console.warn('[FT P3] Focus window check error:', e.message);
