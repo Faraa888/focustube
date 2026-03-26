@@ -2472,6 +2472,7 @@ app.post("/admin/reset-counters", async (req, res) => {
     const updatedSettings = {
       ...currentSettings,
       daily_limit_minutes: 0,
+      focus_window_enabled: false,
     };
 
     const { error: updateError } = await supabase
@@ -2518,6 +2519,56 @@ app.post("/admin/reset-counters", async (req, res) => {
       success: false,
       error: error.message || "Internal server error",
     });
+  }
+});
+
+/**
+ * Admin endpoint to set a user's plan for testing
+ * POST /admin/set-plan
+ *
+ * Accepts X-Admin-Secret or Authorization: Bearer <secret>
+ * Body: { "email": "user@example.com", "plan": "free" | "trial" | "pro" }
+ */
+app.post("/admin/set-plan", async (req, res) => {
+  try {
+    // Accept both X-Admin-Secret and Authorization: Bearer <secret>
+    const xSecret = req.headers['x-admin-secret'] as string;
+    const authHeader = req.headers['authorization'] as string;
+    const bearerSecret = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const adminSecret = xSecret || bearerSecret;
+
+    if (!adminSecret || !process.env.ADMIN_SECRET || adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(403).json({
+        success: false,
+        error: "Unauthorized - invalid or missing ADMIN_SECRET",
+      });
+    }
+
+    const { email, plan } = req.body;
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ success: false, error: "Email is required" });
+    }
+    if (!plan || !["free", "trial", "pro"].includes(plan)) {
+      return res.status(400).json({ success: false, error: "Plan must be free, trial, or pro" });
+    }
+
+    const userEmail = email.toLowerCase().trim();
+
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ plan, updated_at: new Date().toISOString() })
+      .eq("email", userEmail);
+
+    if (updateError) {
+      console.error("[Admin Set Plan] Failed to update plan:", updateError);
+      return res.status(500).json({ success: false, error: "Failed to update plan" });
+    }
+
+    console.log(`[Admin Set Plan] ✅ Set plan for ${userEmail} to ${plan}`);
+    res.json({ success: true, email: userEmail, plan });
+  } catch (error: any) {
+    console.error("[Admin Set Plan] Error:", error);
+    res.status(500).json({ success: false, error: error.message || "Internal server error" });
   }
 });
 

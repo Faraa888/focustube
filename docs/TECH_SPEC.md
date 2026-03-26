@@ -402,7 +402,7 @@ Admin-only. Protected by `ADMIN_SECRET` header. Updates a user's plan.
 
 ### Admin Endpoints
 
-All admin endpoints require `Authorization: Bearer ADMIN_SECRET` header. Return `403` if missing or incorrect. Never expose these URLs publicly.
+All admin endpoints accept either `X-Admin-Secret: ADMIN_SECRET` or `Authorization: Bearer ADMIN_SECRET` header. Return `403` if missing or incorrect. Never expose these URLs publicly.
 
 #### `POST /admin/set-trial`
 Manually set a user's trial expiry. Used for testing trial expiry and upgrade flows.
@@ -458,6 +458,25 @@ Fetch full user record for debugging.
   "trial_started_at": "...",
   "trial_expires_at": "...",
   "created_at": "..."
+}
+```
+
+#### `POST /admin/reset-counters`
+Resets all blocking state for a user for testing. Clears `daily_limit_minutes` and `focus_window_enabled` in `extension_data.settings`, and deletes today's `video_sessions`.
+
+**Note:** Chrome local storage (`ft_watch_seconds_today`, `ft_daily_counters`, `ft_focus_window_enabled`) must be cleared separately via the console reset snippet — the backend cannot reach the extension's local storage.
+
+**Request body:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true
 }
 ```
 
