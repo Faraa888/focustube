@@ -37,6 +37,32 @@ async function clearUserScopedData() {
     ft_user_distraction_channels: [],
     ft_watch_event_queue: [],
     ft_data_owner_email: null,
+    // Daily counters (content.js counter system)
+    ft_daily_counters: null,
+    // Behavior loop counters (state.js counter system)
+    ft_distracting_count_global: 0,
+    ft_distracting_time_global: 0,
+    ft_productive_count_global: 0,
+    ft_productive_time_global: 0,
+    ft_neutral_count_global: 0,
+    ft_neutral_time_global: 0,
+    // Search and Shorts counters
+    ft_search_count_today: 0,
+    ft_search_count_date: "",
+    ft_shorts_time_today: 0,
+    ft_shorts_count_today: 0,
+    // Other per-user state
+    ft_channel_counts: {},
+    ft_break_lockout_until: 0,
+    ft_last_reset_key: "",
+    ft_blocked_today: false,
+    ft_watch_seconds_today: 0,
+    ft_searches_today: 0,
+    ft_short_visits_today: 0,
+    ft_watch_visits_today: 0,
+    ft_shorts_engaged_today: 0,
+    ft_shorts_seconds_today: 0,
+    ft_trial_nudge_dismissed_date: "",
   });
 }
 

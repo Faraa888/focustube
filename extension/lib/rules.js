@@ -116,10 +116,10 @@ export function evaluateBlock(ctx) {
 
   // Global daily time limit - read from effective settings (plan-aware)
   // Note: effectiveSettings should be computed by caller using getEffectiveSettings()
-const dailyLimitMin = ctx.effectiveSettings?.daily_time_limit_minutes !== undefined
-    ? Number(ctx.effectiveSettings.daily_time_limit_minutes)
-    : (ctx.ft_extension_settings?.daily_time_limit_minutes !== undefined
-      ? Number(ctx.ft_extension_settings.daily_time_limit_minutes)
+  const dailyLimitMin = ctx.effectiveSettings?.daily_limit_minutes !== undefined
+    ? Number(ctx.effectiveSettings.daily_limit_minutes)
+    : (ctx.ft_extension_settings?.daily_limit_minutes !== undefined
+      ? Number(ctx.ft_extension_settings.daily_limit_minutes)
       : 0);
   if (dailyLimitMin > 0) {
     const limitSeconds = dailyLimitMin * 60;

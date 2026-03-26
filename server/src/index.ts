@@ -2473,6 +2473,17 @@ app.post("/admin/reset-counters", async (req, res) => {
       ...currentSettings,
       daily_limit_minutes: 0,
       focus_window_enabled: false,
+      // Clear all counter data so stale values don't trigger blocks
+      total_seconds: 0,
+      distracting_seconds: 0,
+      distracting_videos: 0,
+      neutral_seconds: 0,
+      neutral_videos: 0,
+      productive_seconds: 0,
+      productive_videos: 0,
+      watch_seconds_today: 0,
+      timer_date: null,
+      timer_synced_at: null,
     };
 
     const { error: updateError } = await supabase
