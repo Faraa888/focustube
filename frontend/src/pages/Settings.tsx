@@ -38,6 +38,7 @@ const Settings = () => {
   // Controls state
   const [blockShorts, setBlockShorts] = useState(false);
   const [hideRecommendations, setHideRecommendations] = useState(false);
+  const [dailyLimitEnabled, setDailyLimitEnabled] = useState(false);
   const [dailyLimit, setDailyLimit] = useState([60]);
   const [focusWindowEnabled, setFocusWindowEnabled] = useState(false);
   const [focusWindowStart, setFocusWindowStart] = useState("8:00 AM");
@@ -158,9 +159,12 @@ const Settings = () => {
               setHideRecommendations(false);
             }
             if (settings.daily_limit_minutes !== undefined) {
-              setDailyLimit([settings.daily_limit_minutes]);
+              const val = settings.daily_limit_minutes;
+              setDailyLimitEnabled(val > 0);
+              setDailyLimit([val > 0 ? val : 60]);
             } else {
-              setDailyLimit([0]);
+              setDailyLimitEnabled(false);
+              setDailyLimit([60]);
             }
           }
         }
@@ -416,7 +420,7 @@ const Settings = () => {
         focus_window_end: convert12hTo24h(focusWindowEnd),
         block_shorts: blockShorts,
         hide_recommendations: hideRecommendations,
-        daily_limit_minutes: dailyLimit[0],
+        daily_limit_minutes: dailyLimitEnabled ? dailyLimit[0] : 0,
       };
 
       const response = await fetch(getApiUrl('/extension/save-data'), {
@@ -755,19 +759,36 @@ const Settings = () => {
               <CardContent className="space-y-6">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <Label>Daily limit</Label>
-                    <Badge variant="secondary">{dailyLimit[0] === 0 ? "Disabled" : `${dailyLimit[0]} minutes`}</Badge>
+                    <Label htmlFor="daily-limit-toggle">Enable daily watch limit</Label>
+                    <Switch
+                      id="daily-limit-toggle"
+                      checked={dailyLimitEnabled}
+                      onCheckedChange={(checked) => {
+                        setDailyLimitEnabled(checked);
+                        if (checked && dailyLimit[0] === 0) setDailyLimit([60]);
+                      }}
+                    />
                   </div>
-                  <Slider
-                    value={dailyLimit}
-                    onValueChange={setDailyLimit}
-                    min={0}
-                    max={120}
-                    step={1}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    0 = disabled. You'll receive nudges when approaching this limit.
-                  </p>
+                  {dailyLimitEnabled && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <Label>Daily watch limit</Label>
+                        <Badge variant="secondary">{dailyLimit[0]} minutes</Badge>
+                      </div>
+                      <Slider
+                        value={dailyLimit}
+                        onValueChange={setDailyLimit}
+                        min={1}
+                        max={120}
+                        step={1}
+                      />
+                    </>
+                  )}
+                  {!dailyLimitEnabled && (
+                    <p className="text-xs text-muted-foreground">
+                      No daily limit set. Enable to restrict your daily YouTube watch time.
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

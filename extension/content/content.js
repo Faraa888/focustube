@@ -6533,6 +6533,36 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     }
   }
   
+  // Re-check daily limit when settings change (user increased limit)
+  if (changes.ft_extension_settings) {
+    const overlay = document.getElementById('ft-overlay-block-daily');
+    if (overlay) {
+      // Settings changed while daily limit block is showing — re-check
+      _p3CheckDailyLimit().then(() => {
+        // If the overlay is still there but limit is no longer exceeded, remove it
+        const stillThere = document.getElementById('ft-overlay-block-daily');
+        if (stillThere) {
+          (async () => {
+            try {
+              const plan = await getEffectivePlan();
+              const { ft_extension_settings: s = {} } = await chrome.storage.local.get(['ft_extension_settings']);
+              const settings = computeEffectiveSettings(plan, s);
+              const limitMin = settings.daily_limit_minutes;
+              if (!limitMin || limitMin <= 0) {
+                stillThere.remove(); restoreTier1(); restoreVideoState();
+              } else {
+                const counters = await _ftLoadCounters();
+                if ((counters.total_seconds || 0) < limitMin * 60) {
+                  stillThere.remove(); restoreTier1(); restoreVideoState();
+                }
+              }
+            } catch (_) {}
+          })();
+        }
+      });
+    }
+  }
+
   // Detect daily reset - if reset key changed, reset the global time tracker
   if (changes.ft_last_reset_key) {
     const todayKey = new Date().toISOString().split('T')[0]; // YYYY-MM-DD

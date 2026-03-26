@@ -360,8 +360,10 @@ Right — **Biggest distractions:**
 **Tab 3: Controls**
 - Block Shorts toggle (Switch) — label: "Block Shorts entirely"
 - Hide recommendations toggle (Switch) — label: "Hide YouTube recommendations"
-- Daily time limit slider (0–120 mins, 0 = disabled) — label: "Daily watch limit"
-  - Shows: "Disabled" when 0, "X minutes" when set
+- "Enable daily watch limit" toggle (Switch, off by default for new users)
+  - When off: daily_limit_minutes = 0 (disabled), slider hidden
+  - When on: slider visible, default 60 minutes, range 1–120
+  - Label: "Daily watch limit", Badge shows "X minutes"
 - Focus Window section:
   - Enabled toggle (Switch)
   - Start time Select (15-min increments, 08:00–22:00)
