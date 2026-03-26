@@ -475,45 +475,47 @@ function restoreTier1() {
  * Shows hard block overlay (5 minutes) - Tier 3
  * Counters do NOT reset after block ends
  */
-function showHardBlock() {
+function showHardBlock(remainingOverride) {
   // Destroy Tier 2, hide Tier 1
   destroyTier2();
   hideTier1();
-  
+
   // Pause and mute video
   pauseAndMuteVideo();
-  
+
+  if (document.getElementById('ft-overlay-block-hard')) return;
+
+  const totalSeconds = typeof remainingOverride === 'number' && remainingOverride > 0
+    ? remainingOverride
+    : 5 * 60; // default 5 minutes
+
+  const fmtTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
   const overlay = document.createElement('div');
   overlay.id = 'ft-overlay-block-hard';
-  
-  const totalSeconds = 5 * 60; // 5 minutes
-  
+
   overlay.innerHTML = `
     <div class="ft-block-content">
       <div class="ft-wordmark">FocusTube</div>
       <div class="ft-message">Take a break. Come back in 5 minutes.</div>
-      <div class="ft-countdown" id="ft-block-countdown">5:00</div>
+      <div class="ft-countdown" id="ft-block-countdown">${fmtTime(totalSeconds)}</div>
       <div class="ft-countdown-label">Time Remaining</div>
     </div>
   `;
-  
+
   document.body.appendChild(overlay);
-  
+
   // Countdown timer
   let remaining = totalSeconds;
   const countdownEl = document.getElementById('ft-block-countdown');
-  
+
   const timer = setInterval(() => {
     remaining--;
-    
-    const minutes = Math.floor(remaining / 60);
-    const seconds = remaining % 60;
-    const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    
+
     if (countdownEl) {
-      countdownEl.textContent = timeStr;
+      countdownEl.textContent = fmtTime(remaining);
     }
-    
+
     if (remaining <= 0) {
       clearInterval(timer);
       // Remove overlay
@@ -1074,6 +1076,17 @@ async function _p3HandleShorts() {
 
 async function _p3InitOnPageLoad(pageType) {
   if (!isChromeContextValid()) return;
+  // Check break lockout first — survives page refresh
+  try {
+    const { ft_break_lockout_until } = await chrome.storage.local.get(['ft_break_lockout_until']);
+    if (ft_break_lockout_until && Date.now() < ft_break_lockout_until) {
+      const remainingSec = Math.ceil((ft_break_lockout_until - Date.now()) / 1000);
+      if (remainingSec > 0 && (pageType === 'WATCH' || pageType === 'SHORTS')) {
+        showHardBlock(remainingSec);
+        return; // Don't init anything else while break is active
+      }
+    }
+  } catch (_) {}
   await _p3CheckDailyLimit();
   if (pageType !== 'HOME') await _p3CheckFocusWindow();
   try {
@@ -1251,6 +1264,7 @@ let behaviorLoopCurrentClassification = null; // Current video classification (d
 let behaviorLoopNudgeShown = false; // Whether a nudge has been shown for current video
 let behaviorLoopLastUpdateTime = null; // Last time we updated counters (to track incremental time)
 let behaviorLoopAccumulatedTime = 0; // Total time accumulated for current video (to avoid double-counting)
+const _ftFinalizedVideoIds = new Set(); // Tracks video IDs whose count has been finalized to prevent double-counting
 
 /**
  * Extracts video ID from YouTube Shorts URL
@@ -4323,17 +4337,22 @@ async function stopBehaviorLoopTracking() {
     }
     
     // Update counters with final watch time (add remaining time that wasn't counted in 60s updates)
+    // Dedup: only increment video COUNT once per video ID per session
+    const videoId = currentWatchVideoId;
+    const alreadyFinalized = videoId && _ftFinalizedVideoIds.has(videoId);
+    if (videoId) _ftFinalizedVideoIds.add(videoId);
+
     const updates = {};
-    
+
     if (classification === "distracting") {
-      updates.ft_distracting_count_global = (counters.ft_distracting_count_global || 0) + 1;
+      if (!alreadyFinalized) updates.ft_distracting_count_global = (counters.ft_distracting_count_global || 0) + 1;
       updates.ft_distracting_time_global = (counters.ft_distracting_time_global || 0) + remainingTime;
     } else if (classification === "productive") {
-      updates.ft_productive_count_global = (counters.ft_productive_count_global || 0) + 1;
+      if (!alreadyFinalized) updates.ft_productive_count_global = (counters.ft_productive_count_global || 0) + 1;
       updates.ft_productive_time_global = (counters.ft_productive_time_global || 0) + remainingTime;
       
       // Check productive thresholds at video end
-      const newCount = updates.ft_productive_count_global;
+      const newCount = updates.ft_productive_count_global ?? (counters.ft_productive_count_global || 0);
       const newTime = updates.ft_productive_time_global;
       const nudgeType = checkProductiveThresholds(newCount, newTime, true);
       
@@ -4348,7 +4367,7 @@ async function stopBehaviorLoopTracking() {
         });
       }
     } else if (classification === "neutral") {
-      updates.ft_neutral_count_global = (counters.ft_neutral_count_global || 0) + 1;
+      if (!alreadyFinalized) updates.ft_neutral_count_global = (counters.ft_neutral_count_global || 0) + 1;
       updates.ft_neutral_time_global = (counters.ft_neutral_time_global || 0) + remainingTime;
       
       // Check if neutral excess triggers distracting nudge
@@ -6892,8 +6911,21 @@ async function _ftMidnightReset() {
           total_seconds: 0
         },
         // Phase 3: reset nudge-shown state daily
-        [FT_P3_NUDGE_KEY]: { d10s: false, d30s: false, dhardblock: false, p5s: false, p30s: false, psoftbreak: false }
+        [FT_P3_NUDGE_KEY]: { d10s: false, d30s: false, dhardblock: false, p5s: false, p30s: false, psoftbreak: false },
+        // Reset behavior loop counters (state.js global counters)
+        ft_distracting_count_global: 0,
+        ft_distracting_time_global: 0,
+        ft_productive_count_global: 0,
+        ft_productive_time_global: 0,
+        ft_neutral_count_global: 0,
+        ft_neutral_time_global: 0,
+        ft_break_lockout_until: 0,
+        ft_search_count_today: 0,
+        ft_search_count_date: "",
+        ft_blocked_today: false,
       });
+      // Clear in-memory finalized set
+      _ftFinalizedVideoIds.clear();
     }
   } catch (e) {
     console.warn("[FocusTube] Midnight reset error:", e.message);
