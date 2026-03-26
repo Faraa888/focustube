@@ -1083,9 +1083,10 @@ app.get("/extension/get-data", async (req, res) => {
       .single();
 
     // Get user goals from users table (using email)
+    // blocked_channels lives in extension_data only — not read from users table
     const { data: userData, error: userError } = await supabase
       .from("users")
-      .select("goals, pitfalls, blocked_channels")
+      .select("goals, pitfalls")
       .eq("email", userEmail)
       .single();
 
@@ -1115,19 +1116,6 @@ app.get("/extension/get-data", async (req, res) => {
       }
     }
 
-    // Parse blocked_channels (stored as TEXT in database, should be JSON array)
-    let blocked_channels: string[] = [];
-    if (userData?.blocked_channels) {
-      try {
-        blocked_channels = typeof userData.blocked_channels === "string"
-          ? JSON.parse(userData.blocked_channels)
-          : (Array.isArray(userData.blocked_channels) ? userData.blocked_channels : []);
-      } catch (e) {
-        console.warn("[Extension Data] Failed to parse blocked_channels:", e);
-        blocked_channels = [];
-      }
-    }
-
     if (extensionError && extensionError.code !== "PGRST116") {
       // PGRST116 = no rows found (acceptable)
       console.error("[Extension Data] Error fetching extension_data:", extensionError);
@@ -1148,7 +1136,6 @@ app.get("/extension/get-data", async (req, res) => {
           settings: {},
           goals: goals,
           pitfalls: pitfalls,
-          user_blocked_channels: blocked_channels,
         },
       });
     }
@@ -1182,7 +1169,6 @@ app.get("/extension/get-data", async (req, res) => {
         settings: cleanedSettings,
         goals: goals,
         pitfalls: pitfalls,
-        user_blocked_channels: blocked_channels,
       },
     });
   } catch (error) {
@@ -1231,20 +1217,8 @@ app.post("/extension/save-data", async (req, res) => {
     }
 
     // Check if user can record data (Pro or active Trial only)
+    // Note: blocked_channels is exempt — it's a core free-tier feature
     const canRecord = await canUserRecord(userEmail);
-    if (!canRecord) {
-      // Block all writes for free users (settings, goals, behavior loop counters)
-      // Still allow blocked_channels validation check (for safety), but block the actual write
-      if (data.settings !== undefined || data.goals !== undefined || data.anti_goals !== undefined) {
-        console.log(`[Extension Save] Blocked settings write for inactive plan: ${userEmail}`);
-        return res.status(400).json({ 
-          ok: false, 
-          error: "plan_inactive", 
-          message: "Upgrade to Pro to change settings" 
-        });
-      }
-      // If only blocked_channels is being updated, we'll validate it but block the write below
-    }
 
     // ─────────────────────────────────────────────────────────────
     // SAFETY CHECK: Reject if blocked_channels list shrinks
@@ -1319,14 +1293,25 @@ app.post("/extension/save-data", async (req, res) => {
       });
     }
 
-    // Block all writes if user can't record
+    // Block Pro-only writes if user can't record
+    // blocked_channels is a core feature — allowed for ALL plans
     if (!canRecord) {
-      console.log(`[Extension Save] Blocked all writes for inactive plan: ${userEmail}`);
-      return res.status(400).json({ 
-        ok: false, 
-        error: "plan_inactive", 
-        message: "Upgrade to Pro to change settings" 
-      });
+      const hasProOnlyFields = data.settings !== undefined ||
+                                data.goals !== undefined ||
+                                data.pitfalls !== undefined ||
+                                data.channel_spiral_count !== undefined ||
+                                data.channel_lifetime_stats !== undefined ||
+                                data.watch_history !== undefined;
+      if (hasProOnlyFields) {
+        console.log(`[Extension Save] Blocked Pro-only writes for inactive plan: ${userEmail}`);
+        return res.status(400).json({
+          ok: false,
+          error: "plan_inactive",
+          message: "Upgrade to Pro to change settings"
+        });
+      }
+      // Allow through — payload only contains blocked_channels (free-tier feature)
+      console.log(`[Extension Save] Allowing blocked_channels write for ${userEmail} (free-tier feature)`);
     }
 
     const { error: extensionError } = await supabase

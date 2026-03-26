@@ -653,14 +653,13 @@ export async function loadExtensionDataFromServer() {
     // SUPABASE IS SOURCE OF TRUTH - Server data overwrites local cache directly
     // No merge logic for blocked_channels, settings, goals, pitfalls
     // Only watch_history is merged (append-only, local-first)
-    const { 
-      blocked_channels, 
-      watch_history, 
-      channel_spiral_count, 
+    const {
+      blocked_channels,
+      watch_history,
+      channel_spiral_count,
       settings,
       goals,
       pitfalls,
-      user_blocked_channels
     } = result.data;
     
     // Merge watch_history (append-only, local-first) - keep this merge
@@ -822,11 +821,6 @@ export async function loadExtensionDataFromServer() {
       }
     }
 
-    // Load user_blocked_channels if provided (from users table)
-    if (user_blocked_channels !== undefined) {
-      storageUpdate.ft_user_distraction_channels = Array.isArray(user_blocked_channels) ? user_blocked_channels : [];
-    }
-    
     await setLocal(storageUpdate);
     
     // Merge timer from server (for cross-device sync)
@@ -839,7 +833,6 @@ export async function loadExtensionDataFromServer() {
       watchHistory: (watch_history || []).length,
       goals: (goals || []).length,
       pitfalls: (pitfalls || []).length,
-      userBlockedChannels: (user_blocked_channels || []).length,
     });
 
     return result.data;

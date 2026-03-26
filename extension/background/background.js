@@ -174,15 +174,15 @@ setInterval(async () => {
     console.warn("[FT] Background plan sync failed:", err);
     return false;
   });
-  
+
   if (synced) {
     const newState = await getLocal(["ft_user_email", "ft_plan"]);
     // If user email or plan changed, notify popup to refresh
-    if (previousState.ft_user_email !== newState.ft_user_email || 
+    if (previousState.ft_user_email !== newState.ft_user_email ||
         previousState.ft_plan !== newState.ft_plan) {
       console.log("[FT] User state changed - notifying popup to refresh");
       // Send message to popup if it's open
-      chrome.runtime.sendMessage({ 
+      chrome.runtime.sendMessage({
         type: "FT_USER_STATE_CHANGED",
         email: newState.ft_user_email,
         plan: newState.ft_plan
@@ -191,6 +191,12 @@ setInterval(async () => {
       });
     }
   }
+
+  // Sync extension data (settings, blocked channels, goals, pitfalls)
+  // so changes made on the website propagate to the extension
+  await loadExtensionDataFromServer().catch((err) => {
+    console.warn("[FT] Background extension data sync failed:", err);
+  });
 }, 3 * 60 * 1000); // 3 minutes
 
 // ─────────────────────────────────────────────────────────────
