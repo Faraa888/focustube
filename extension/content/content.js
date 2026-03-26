@@ -957,7 +957,7 @@ function showP3SpiralToast(message) {
   document.body.appendChild(toast);
   const dismiss = () => { const el = document.getElementById('ft-toast-spiral'); if (el) el.remove(); };
   document.getElementById('ft-spiral-close')?.addEventListener('click', dismiss);
-  setTimeout(dismiss, 5000);
+  setTimeout(dismiss, 8000);
 }
 
 // ─────────────────────────────────────────────────────────────

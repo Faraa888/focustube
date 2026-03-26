@@ -323,10 +323,16 @@
 }
 
 .ft-milestone-intro {
-  font-size: 13px;
-  color: #888888;
+  font-size: 14px;
+  color: #ffffff;
   line-height: 1.5;
   margin: 0;
+}
+
+.ft-toast-message {
+  font-size: 14px;
+  color: #ffffff;
+  line-height: 1.5;
 }
 
 .ft-spiral-timer {
