@@ -682,7 +682,7 @@ function injectBlockChannelButton(channelName) {
       if (!channels.some(c => c.toLowerCase() === channelName.toLowerCase())) {
         channels.push(channelName);
         await chrome.storage.local.set({ ft_blocked_channels: channels });
-        chrome.runtime.sendMessage({ type: 'FT_BLOCK_CHANNEL', channelName, blockedChannels: channels }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'FT_BLOCK_CHANNEL', channel: channelName, blockedChannels: channels }).catch(() => {});
       }
       btn.textContent = 'Channel blocked ✓';
       btn.classList.add('blocked');
@@ -1046,6 +1046,23 @@ async function _p3CheckFocusWindow() {
 
 async function _p3HandleShorts() {
   if (!isChromeContextValid()) return;
+  // Check if current Shorts channel is blocked
+  try {
+    const { ft_blocked_channels = [] } = await chrome.storage.local.get(['ft_blocked_channels']);
+    const blockedChannels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
+    if (blockedChannels.length > 0) {
+      const channel = extractChannelFast();
+      if (channel) {
+        const channelLower = channel.toLowerCase().trim();
+        const isBlocked = blockedChannels.some(b => b.toLowerCase().trim() === channelLower);
+        if (isBlocked) {
+          pauseAndMuteVideo();
+          showChannelBlockedOverlay(channel);
+          return;
+        }
+      }
+    }
+  } catch (_) {}
   try {
     const plan = await getEffectivePlan();
     const { ft_extension_settings = {} } = await chrome.storage.local.get(['ft_extension_settings']);
