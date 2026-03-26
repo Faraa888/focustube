@@ -872,6 +872,28 @@ function hideP3SearchCounter() {
   }
 }
 
+/**
+ * Shows a nudge-style overlay when the daily search limit (15) is reached.
+ * Uses ft-overlay-nudge-distracting styling. Non-dismissable (no continue button).
+ */
+function _showSearchLimitOverlay() {
+  if (document.getElementById('ft-overlay-nudge-distracting')) return;
+  destroyTier2();
+  const overlay = document.createElement('div');
+  overlay.id = 'ft-overlay-nudge-distracting';
+  overlay.innerHTML = `
+    <div class="ft-nudge-card">
+      <div class="ft-nudge-header">
+        <div class="ft-wordmark">FocusTube</div>
+      </div>
+      <div class="ft-nudge-body">
+        <div class="ft-nudge-message">You've hit your daily search limit. Resets at midnight.</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
 async function _p3IncrementSearchCount() {
   if (!isChromeContextValid()) return;
   try {
@@ -882,18 +904,7 @@ async function _p3IncrementSearchCount() {
     await chrome.storage.local.set({ ft_search_count_today: count, ft_search_count_date: todayKey });
     showP3SearchCounter(count, 15);
     if (count >= 15) {
-      // Block search input submission
-      document.querySelectorAll('input#search, input[name="search_query"]').forEach(input => {
-        input.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); }, { capture: true });
-      });
-      // Block search form submission
-      document.querySelectorAll('form#search-form, form[action*="/search"]').forEach(form => {
-        form.addEventListener('submit', e => { e.preventDefault(); e.stopPropagation(); }, { capture: true });
-      });
-      // Block search button clicks
-      document.querySelectorAll('button#search-icon-legacy, button[aria-label*="Search"]').forEach(btn => {
-        btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); }, { capture: true });
-      });
+      _showSearchLimitOverlay();
     }
   } catch (e) {
     console.warn('[FT P3] Search count error:', e.message);
@@ -1208,8 +1219,15 @@ async function _p3InitOnPageLoad(pageType) {
   if (pageType === 'SHORTS') await _p3HandleShorts();
   if (pageType === 'SEARCH') {
     try {
-      const { ft_search_count_today = 0 } = await chrome.storage.local.get(['ft_search_count_today']);
-      showP3SearchCounter(ft_search_count_today, 15);
+      const { ft_search_count_today = 0, ft_search_count_date = '' } =
+        await chrome.storage.local.get(['ft_search_count_today', 'ft_search_count_date']);
+      const todayKey = _ftTodayKey();
+      const currentCount = ft_search_count_date === todayKey ? ft_search_count_today : 0;
+      showP3SearchCounter(currentCount, 15);
+      // If already at limit, show overlay immediately (before incrementing)
+      if (currentCount >= 15) {
+        _showSearchLimitOverlay();
+      }
       await _p3IncrementSearchCount();
     } catch (_) {}
   }
