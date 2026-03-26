@@ -503,6 +503,48 @@ Deletes all `video_sessions`, `video_classifications`, `journal_entries`, and `e
 }
 ```
 
+#### `POST /admin/reset-extension`
+Full test reset in one command. Clears server-side data for today and sets a flag that the extension picks up on its next `/extension/get-data` poll (within ~3 minutes), causing it to wipe all local counter state without requiring logout/login.
+
+**What it does (server):**
+1. Deletes today's `video_sessions` for the user
+2. Deletes today's `video_classifications` for the user
+3. Resets `extension_data.settings` to clean defaults (all fields from the locked settings schema, all counters zeroed)
+4. Sets `_pending_full_reset: true` inside `extension_data.settings`
+
+**What the extension does (on next poll):**
+When `/extension/get-data` returns `full_reset: true` (top-level field), the extension clears:
+`ft_daily_counters`, `ft_break_lockout_until`, `ft_search_count_today`, `ft_search_count_date`,
+`ft_shorts_time_today`, `ft_shorts_count_today`, `ft_channel_counts`,
+`ft_spiral_dismissed_channels`, `ft_spiral_detected`,
+`ft_distracting_count_global`, `ft_distracting_time_global`,
+`ft_neutral_count_global`, `ft_neutral_time_global`,
+`ft_productive_count_global`, `ft_productive_time_global`
+
+The `_pending_full_reset` flag is consumed (cleared) on first read — subsequent polls return no flag.
+
+**Request body:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "reset": {
+    "video_sessions_deleted": 5,
+    "video_classifications_deleted": 5,
+    "settings_reset": true
+  }
+}
+```
+
+**Auth:** `X-Admin-Secret` header required.
+**Rate limit:** 10 requests/hour (IP-based).
+
 **Rate limit:** 10 requests/hour (all admin endpoints combined). Admin endpoints log every call server-side.
 
 ---

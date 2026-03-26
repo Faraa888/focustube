@@ -622,10 +622,32 @@ export async function loadExtensionDataFromServer() {
     }
 
     const result = await response.json();
-    
+
     if (!result.ok || !result.data) {
       console.warn("[FT] Invalid extension data response:", result);
       return null;
+    }
+
+    // Full reset flag: server signals extension to wipe all local counter state
+    if (result.full_reset === true) {
+      console.log("[FT] Full reset flag received — clearing local counter state");
+      await setLocal({
+        ft_daily_counters: null,
+        ft_break_lockout_until: 0,
+        ft_search_count_today: 0,
+        ft_search_count_date: "",
+        ft_shorts_time_today: 0,
+        ft_shorts_count_today: 0,
+        ft_channel_counts: {},
+        ft_spiral_dismissed_channels: {},
+        ft_spiral_detected: null,
+        ft_distracting_count_global: 0,
+        ft_distracting_time_global: 0,
+        ft_neutral_count_global: 0,
+        ft_neutral_time_global: 0,
+        ft_productive_count_global: 0,
+        ft_productive_time_global: 0,
+      });
     }
 
     // SUPABASE IS SOURCE OF TRUTH - Server data overwrites local cache directly
