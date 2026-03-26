@@ -60,6 +60,7 @@ function detectPageType() {
   if (path.startsWith("/results")) return "SEARCH";
   if (path.startsWith("/watch")) return "WATCH";
   if (path === "/") return "HOME";
+  if (path.startsWith("/@") || path.startsWith("/channel/") || path.startsWith("/c/")) return "CHANNEL";
 
   return "OTHER";
 }
@@ -665,33 +666,97 @@ function showP3ChannelBlockOverlay(channelName) {
   }, 1000);
 }
 
-function injectBlockChannelButton(channelName) {
-  if (!channelName) return;
+/**
+ * Blocks a single channel by @handle. Saves to local storage and syncs to Supabase.
+ * @param {{ handle: string, name: string }} channelInfo
+ */
+async function _blockChannel(channelInfo) {
+  if (!isChromeContextValid() || !channelInfo?.handle) return;
+  try {
+    const { ft_blocked_channels = [] } = await chrome.storage.local.get(['ft_blocked_channels']);
+    const channels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
+    const handleLower = channelInfo.handle.toLowerCase();
+    const alreadyBlocked = channels.some(entry => {
+      if (typeof entry === 'string') return entry.toLowerCase() === handleLower;
+      return entry.handle?.toLowerCase() === handleLower;
+    });
+    if (!alreadyBlocked) {
+      const newEntry = {
+        handle: channelInfo.handle,
+        name: channelInfo.name || channelInfo.handle.replace('@', ''),
+        blockedAt: new Date().toISOString().split('T')[0],
+      };
+      channels.push(newEntry);
+      await chrome.storage.local.set({ ft_blocked_channels: channels });
+      chrome.runtime.sendMessage({
+        type: 'FT_BLOCK_CHANNEL',
+        channel: channelInfo.handle,
+        channelEntry: newEntry,
+        blockedChannels: channels,
+      }).catch(() => {});
+    }
+  } catch (e) {
+    console.warn('[FT P3] Block channel error:', e.message);
+  }
+}
+
+/**
+ * Injects the Block Channel button(s) based on detected @handles.
+ * Single channel: immediate block button.
+ * Multiple channels: picker to choose which to block.
+ */
+function injectBlockChannelButtons() {
   if (document.getElementById('ft-block-channel-btn')) return;
+  if (document.getElementById('ft-block-channel-picker')) return;
+
+  const channelHandles = extractChannelHandles();
+  if (channelHandles.length === 0) return;
+
   const ownerEl = document.querySelector('#owner, ytd-video-owner-renderer, #upload-info');
   if (!ownerEl) return;
-  const btn = document.createElement('button');
-  btn.id = 'ft-block-channel-btn';
-  btn.className = 'ft-block-channel-btn';
-  btn.textContent = 'Block Channel';
-  btn.addEventListener('click', async () => {
-    if (!isChromeContextValid()) return;
-    try {
-      const { ft_blocked_channels = [] } = await chrome.storage.local.get(['ft_blocked_channels']);
-      const channels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
-      if (!channels.some(c => c.toLowerCase() === channelName.toLowerCase())) {
-        channels.push(channelName);
-        await chrome.storage.local.set({ ft_blocked_channels: channels });
-        chrome.runtime.sendMessage({ type: 'FT_BLOCK_CHANNEL', channel: channelName, blockedChannels: channels }).catch(() => {});
-      }
-      btn.textContent = 'Channel blocked ✓';
+
+  if (channelHandles.length === 1) {
+    // Single channel — simple button
+    const info = channelHandles[0];
+    const btn = document.createElement('button');
+    btn.id = 'ft-block-channel-btn';
+    btn.className = 'ft-block-channel-btn';
+    btn.textContent = 'Block Channel';
+    btn.addEventListener('click', async () => {
+      await _blockChannel(info);
+      btn.textContent = 'Blocked';
       btn.classList.add('blocked');
-      setTimeout(() => { btn.textContent = 'Block Channel'; btn.classList.remove('blocked'); }, 2000);
-    } catch (e) {
-      console.warn('[FT P3] Block channel error:', e.message);
+    });
+    ownerEl.appendChild(btn);
+  } else {
+    // Multiple channels — picker
+    const wrapper = document.createElement('div');
+    wrapper.id = 'ft-block-channel-picker';
+    wrapper.style.cssText = 'display:inline-flex;gap:6px;align-items:center;margin-left:8px;';
+    const label = document.createElement('span');
+    label.textContent = 'Block:';
+    label.style.cssText = 'color:#aaa;font-size:13px;font-family:system-ui,sans-serif;';
+    wrapper.appendChild(label);
+    for (const info of channelHandles) {
+      const btn = document.createElement('button');
+      btn.className = 'ft-block-channel-btn';
+      btn.textContent = info.handle;
+      btn.style.fontSize = '12px';
+      btn.style.padding = '4px 10px';
+      btn.addEventListener('click', async () => {
+        await _blockChannel(info);
+        btn.textContent = 'Blocked';
+        btn.classList.add('blocked');
+      });
+      wrapper.appendChild(btn);
     }
-  });
-  ownerEl.appendChild(btn);
+    ownerEl.appendChild(wrapper);
+  }
+}
+
+// Keep old function name as alias for any remaining callers
+function injectBlockChannelButton(channelName) {
+  injectBlockChannelButtons();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1046,18 +1111,16 @@ async function _p3CheckFocusWindow() {
 
 async function _p3HandleShorts() {
   if (!isChromeContextValid()) return;
-  // Check if current Shorts channel is blocked
+  // Check if current Shorts channel is blocked (using @handle extraction)
   try {
     const { ft_blocked_channels = [] } = await chrome.storage.local.get(['ft_blocked_channels']);
     const blockedChannels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
     if (blockedChannels.length > 0) {
-      const channel = extractChannelFast();
-      if (channel) {
-        const channelLower = channel.toLowerCase().trim();
-        const isBlocked = blockedChannels.some(b => b.toLowerCase().trim() === channelLower);
-        if (isBlocked) {
+      const handles = extractChannelHandles();
+      for (const ch of handles) {
+        if (isChannelBlocked(ch.handle, blockedChannels) || isChannelBlocked(ch.name, blockedChannels)) {
           pauseAndMuteVideo();
-          showChannelBlockedOverlay(channel);
+          showChannelBlockedOverlay(ch.name || ch.handle);
           return;
         }
       }
@@ -1117,11 +1180,27 @@ async function _p3InitOnPageLoad(pageType) {
       await showP3TrialBanner(ft_days_left);
     }
   } catch (_) {}
-  if (pageType === 'WATCH') {
-    setTimeout(() => {
+  if (pageType === 'WATCH' || pageType === 'CHANNEL') {
+    setTimeout(async () => {
+      // Check blocked channels using @handle extraction
+      try {
+        const { ft_blocked_channels = [] } = await chrome.storage.local.get(['ft_blocked_channels']);
+        const blockedList = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
+        const handles = extractChannelHandles();
+        if (blockedList.length > 0) {
+          for (const ch of handles) {
+            if (isChannelBlocked(ch.handle, blockedList) || isChannelBlocked(ch.name, blockedList)) {
+              pauseAndMuteVideo();
+              showChannelBlockedOverlay(ch.name || ch.handle);
+              return;
+            }
+          }
+        }
+      } catch (_) {}
+      // Not blocked — inject block button and check spiral
+      injectBlockChannelButtons();
       const channel = extractChannelFast();
       if (channel) {
-        injectBlockChannelButton(channel);
         _p3CheckChannelSpiral(channel).catch(() => {});
       }
     }, 1500);
@@ -1411,6 +1490,97 @@ function extractChannelFast() {
   }
   
   return null; // Not found - don't block (safer than false positive)
+}
+
+/**
+ * Extracts all @handles from the current page by scraping anchor hrefs.
+ * Works on watch pages, Shorts, and channel pages.
+ * Returns array of { handle: "@username", name: "Display Name" } objects.
+ * The first entry is the primary uploader.
+ */
+function extractChannelHandles() {
+  const results = [];
+  const seenHandles = new Set();
+  const pageType = detectPageType();
+
+  // On channel pages, the @handle is in the URL itself
+  if (pageType === 'CHANNEL' && location.pathname.startsWith('/@')) {
+    const handle = '@' + location.pathname.split('/')[1].replace('@', '');
+    if (handle.length > 1) {
+      const nameEl = document.querySelector('#channel-name yt-formatted-string, #channel-header-container yt-formatted-string');
+      results.push({ handle, name: nameEl?.textContent?.trim() || handle.replace('@', '') });
+      seenHandles.add(handle.toLowerCase());
+    }
+  }
+
+  // Scrape all anchor tags linking to /@username in owner/collaborators area
+  const ownerSelectors = [
+    '#owner a[href*="/@"]',
+    'ytd-video-owner-renderer a[href*="/@"]',
+    '#upload-info a[href*="/@"]',
+    'ytd-watch-metadata a[href*="/@"]',
+    // Shorts
+    'ytd-reel-video-renderer a[href*="/@"]',
+    '#shorts-player a[href*="/@"]',
+    'ytd-shorts a[href*="/@"]',
+    // Channel page header
+    '#channel-header a[href*="/@"]',
+    '#channel-header-container a[href*="/@"]',
+  ];
+
+  const allLinks = document.querySelectorAll(ownerSelectors.join(', '));
+
+  for (const link of allLinks) {
+    const href = link.getAttribute('href') || '';
+    const match = href.match(/\/@([^/?#]+)/);
+    if (!match) continue;
+    const handle = '@' + match[1];
+    const handleLower = handle.toLowerCase();
+    if (seenHandles.has(handleLower)) continue;
+    seenHandles.add(handleLower);
+    // Use the link text or nearest text as display name
+    const name = link.textContent?.trim() || handle.replace('@', '');
+    results.push({ handle, name });
+  }
+
+  // Fallback for Shorts: try the channel link below the video
+  if (results.length === 0 && pageType === 'SHORTS') {
+    const shortsLinks = document.querySelectorAll('a[href*="/@"]');
+    for (const link of shortsLinks) {
+      const href = link.getAttribute('href') || '';
+      const match = href.match(/\/@([^/?#]+)/);
+      if (!match) continue;
+      const handle = '@' + match[1];
+      const handleLower = handle.toLowerCase();
+      if (seenHandles.has(handleLower)) continue;
+      seenHandles.add(handleLower);
+      const name = link.textContent?.trim() || handle.replace('@', '');
+      results.push({ handle, name });
+      break; // Only need primary for Shorts
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Checks if a @handle or legacy display name matches any entry in ft_blocked_channels.
+ * Supports both new object format { handle, name, blockedAt } and legacy plain strings.
+ */
+function isChannelBlocked(handleOrName, blockedList) {
+  if (!handleOrName || !Array.isArray(blockedList) || blockedList.length === 0) return false;
+  const lower = handleOrName.toLowerCase().trim();
+  return blockedList.some(entry => {
+    if (typeof entry === 'string') {
+      // Legacy string entry — match by display name or handle
+      return entry.toLowerCase().trim() === lower;
+    }
+    // Object entry — match by handle
+    if (entry.handle && entry.handle.toLowerCase().trim() === lower) return true;
+    // Also match by display name for backwards compat
+    if (entry.name && entry.name.toLowerCase().trim() === lower) return true;
+    return false;
+  });
 }
 
 /**
@@ -2804,8 +2974,8 @@ async function ensureInitialBlockButton() {
   
   const pageType = detectPageType();
   console.log("[FT content] ensureInitialBlockButton pageType:", pageType);
-  if (pageType !== "WATCH") {
-    console.log("[FT content] Not on WATCH page during bootstrap, skipping button ensure");
+  if (pageType !== "WATCH" && pageType !== "CHANNEL") {
+    console.log("[FT content] Not on WATCH/CHANNEL page during bootstrap, skipping button ensure");
     return;
   }
 
@@ -2840,39 +3010,38 @@ async function ensureInitialBlockButton() {
  */
 async function checkBlockingAndInjectButton(channelName, channelElement) {
   try {
-    // Check if user can record data (Pro or active Trial only)
-    // Free users and expired trial users should not have channels blocked
     const { ft_blocked_channels = [], ft_can_record } = await chrome.storage.local.get(["ft_blocked_channels", "ft_can_record"]);
-    
-    // Only check blocked channels if user can record (Pro/active Trial)
+
     if (ft_can_record) {
       const blockedChannels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
-      
+
       if (blockedChannels.length > 0) {
-        const channelLower = channelName.toLowerCase().trim();
-        const isBlocked = blockedChannels.some(blocked => {
-          const blockedLower = blocked.toLowerCase().trim();
-          return blockedLower === channelLower; // Exact match only
-        });
-        
-        if (isBlocked) {
-          console.log("[FT] 🚫 Channel blocked (button injection check):", channelName);
-          pauseAndMuteVideo(); // Immediate pause
-          showChannelBlockedOverlay(channelName); // Show overlay instead of immediate redirect
-          return; // Don't inject button
+        // Check using @handle extraction first
+        const handles = extractChannelHandles();
+        for (const ch of handles) {
+          if (isChannelBlocked(ch.handle, blockedChannels) || isChannelBlocked(ch.name, blockedChannels)) {
+            console.log("[FT] Channel blocked (handle check):", ch.handle);
+            pauseAndMuteVideo();
+            showChannelBlockedOverlay(ch.name || ch.handle);
+            return;
+          }
+        }
+        // Legacy fallback: check by display name
+        if (channelName && isChannelBlocked(channelName, blockedChannels)) {
+          console.log("[FT] Channel blocked (legacy name check):", channelName);
+          pauseAndMuteVideo();
+          showChannelBlockedOverlay(channelName);
+          return;
         }
       }
     } else {
-      // Free/expired trial - blocked channels are ignored (preserved but not enforced)
-      console.log("[FT] Channel blocking disabled (plan inactive) - channels preserved but not enforced");
+      console.log("[FT] Channel blocking disabled (plan inactive)");
     }
-    
-    // Not blocked, inject button (only for Pro users)
+
+    // Not blocked — inject button
     const plan = await getEffectivePlan();
     if (plan === "pro") {
-      await injectBlockChannelButton(channelName);
-    } else {
-      console.log("[FT] Block channel button hidden (Free plan)");
+      injectBlockChannelButtons();
     }
   } catch (e) {
     console.warn("[FT] Error checking blocking for button injection:", e);
@@ -5637,29 +5806,28 @@ async function handleNavigation() {
     removeSearchCounter();
   }
 
-  // ISSUE 4: Check blocked channels for SHORTS page type
+  // Check blocked channels for SHORTS page type (using @handle extraction)
   if (pageType === "SHORTS") {
     try {
       const { ft_blocked_channels = [] } = await chrome.storage.local.get(["ft_blocked_channels"]);
       const blockedChannels = Array.isArray(ft_blocked_channels) ? ft_blocked_channels : [];
-      
+
       if (blockedChannels.length > 0) {
-        // Extract channel from Shorts page
-        const channel = extractChannelFast();
-        
-        if (channel) {
-          const channelLower = channel.toLowerCase().trim();
-          const isBlocked = blockedChannels.some(blocked => {
-            const blockedLower = blocked.toLowerCase().trim();
-            return blockedLower === channelLower;
-          });
-          
-          if (isBlocked) {
-            console.log("[FT] 🚫 Channel blocked on Shorts page:", channel);
+        const handles = extractChannelHandles();
+        for (const ch of handles) {
+          if (isChannelBlocked(ch.handle, blockedChannels) || isChannelBlocked(ch.name, blockedChannels)) {
+            console.log("[FT] Channel blocked on Shorts page:", ch.handle);
             pauseAndMuteVideo();
-            showP3ChannelBlockOverlay(channel);
-            return; // Stop processing, don't show counter
+            showP3ChannelBlockOverlay(ch.name || ch.handle);
+            return;
           }
+        }
+        // Legacy fallback
+        const channel = extractChannelFast();
+        if (channel && isChannelBlocked(channel, blockedChannels)) {
+          pauseAndMuteVideo();
+          showP3ChannelBlockOverlay(channel);
+          return;
         }
       }
     } catch (e) {

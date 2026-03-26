@@ -31,11 +31,9 @@ const Settings = () => {
   const [antiGoalInput, setAntiGoalInput] = useState("");
   const [savingGoals, setSavingGoals] = useState(false);
   
-  // Blocked channels state
-  const [blockedChannels, setBlockedChannels] = useState<string[]>([]);
-  const [newChannelName, setNewChannelName] = useState("");
+  // Blocked channels state — read-only list of { handle, name, blockedAt } or legacy strings
+  const [blockedChannels, setBlockedChannels] = useState<any[]>([]);
   const [loadingChannels, setLoadingChannels] = useState(true);
-  const [savingChannel, setSavingChannel] = useState(false);
   
   // Controls state
   const [blockShorts, setBlockShorts] = useState(false);
@@ -370,163 +368,15 @@ const Settings = () => {
     }
   };
 
-  // Save blocked channels with normalization
-  const handleSaveBlockedChannels = async () => {
-    if (blockedChannels.length === 0) {
-      toast({
-        title: "No channels",
-        description: "Add at least one channel to block.",
-        variant: "destructive",
-      });
-      return;
+  // Helper to display a blocked channel entry (supports both legacy strings and new objects)
+  const getChannelDisplay = (entry: any): { handle: string; date: string } => {
+    if (typeof entry === "string") {
+      return { handle: entry, date: "" };
     }
-
-    setSavingChannel(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.email) {
-        toast({
-          title: "Error",
-          description: "You must be logged in to block channels",
-          variant: "destructive",
-        });
-        setSavingChannel(false);
-        return;
-      }
-
-      // Normalize all channel names
-      console.log("[Settings] 🔄 Starting normalization for channels:", blockedChannels);
-      
-      const normalizeResponse = await fetch(getApiUrl('/ai/normalize-channels'), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel_names: blockedChannels }),
-      });
-
-      let normalizedChannels = blockedChannels;
-      let normalizationWarning = null;
-      
-      if (normalizeResponse.ok) {
-        const normalizeData = await normalizeResponse.json();
-        console.log("[Settings] 📥 Normalization response:", normalizeData);
-        
-        if (normalizeData.ok && normalizeData.normalized_names) {
-          normalizedChannels = normalizeData.normalized_names;
-          console.log("[Settings] ✅ Normalized channels:", normalizedChannels);
-          
-          // Check if any names actually changed
-          const namesChanged = normalizedChannels.some((name: string, idx: number) => 
-            name.toLowerCase().trim() !== blockedChannels[idx]?.toLowerCase().trim()
-          );
-          
-          if (!namesChanged) {
-            console.warn("[Settings] ⚠️ No channel names changed after normalization");
-          }
-          
-          // Check for warnings
-          if (normalizeData.warning) {
-            normalizationWarning = normalizeData.warning;
-            console.warn("[Settings] ⚠️ Normalization warning:", normalizeData.warning);
-          }
-        } else {
-          console.warn("[Settings] ⚠️ Normalization response missing normalized_names, using original");
-        }
-      } else {
-        const errorText = await normalizeResponse.text().catch(() => "Unknown error");
-        console.error("[Settings] ❌ Normalization API failed:", normalizeResponse.status, errorText);
-        normalizationWarning = `Normalization API returned ${normalizeResponse.status}`;
-      }
-      
-      // Show warning toast if normalization had issues (but still save)
-      if (normalizationWarning) {
-        toast({
-          title: "Normalisation Warning",
-          description: `Some channel names may not have been normalised: ${normalizationWarning}`,
-          variant: "default",
-        });
-      }
-
-      // Save normalized channels
-      const response = await fetch(getApiUrl('/extension/save-data'), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: user.email,
-          data: {
-            blocked_channels: normalizedChannels,
-          },
-        }),
-      });
-
-      if (response.ok) {
-        // Show success toast with normalization info
-        const changedCount = normalizedChannels.filter((name: string, idx: number) => 
-          name.toLowerCase().trim() !== blockedChannels[idx]?.toLowerCase().trim()
-        ).length;
-        
-        toast({
-          title: "Channels Saved",
-          description: changedCount > 0 
-            ? `${changedCount} channel name(s) normalised and saved`
-            : "Channels saved (no normalisation needed)",
-          variant: "default",
-        });
-        
-        // Notify extension to reload settings immediately (no page reload needed)
-        // Add small delay to ensure server has finished saving
-        setTimeout(() => {
-          try {
-            window.postMessage({
-              type: "FT_RELOAD_SETTINGS",
-              requestId: `channels_${Date.now()}`
-            }, window.location.origin);
-            console.log("[Settings] Sent FT_RELOAD_SETTINGS message to extension (channels)");
-          } catch (err) {
-            console.log("Extension not available for immediate sync (will sync on next reload)");
-          }
-        }, 500); // Wait 500ms for server to finish saving
-      } else {
-        throw new Error("Failed to save");
-      }
-    } catch (error) {
-      console.error("Error saving blocked channels:", error);
-      toast({
-        title: "Error",
-        description: "Failed to save blocked channels. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setSavingChannel(false);
-    }
-  };
-
-  const handleAddChannel = () => {
-    const trimmed = newChannelName.trim();
-    if (!trimmed) {
-      toast({
-        title: "Error",
-        description: "Please enter a channel name",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const channelLower = trimmed.toLowerCase();
-    const isAlreadyBlocked = blockedChannels.some(
-      ch => ch.toLowerCase().trim() === channelLower
-    );
-
-    if (isAlreadyBlocked) {
-      toast({
-        title: "Already blocked",
-        description: "This channel is already in your blocklist",
-      });
-      setNewChannelName("");
-      return;
-    }
-
-    setBlockedChannels([...blockedChannels, trimmed]);
-    setNewChannelName("");
+    return {
+      handle: entry.handle || entry.name || "Unknown",
+      date: entry.blockedAt || "",
+    };
   };
 
 
@@ -816,65 +666,40 @@ const Settings = () => {
               <CardHeader>
                 <CardTitle>Blocked Channels</CardTitle>
                 <CardDescription>
-                  Channels you have blocked to stay focused. All names will be normalised when you save.
+                  Channels you have blocked via the Block Channel button on YouTube.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="bg-muted/50 p-3 rounded-lg border">
-                  <p className="text-sm text-muted-foreground">
-                    Channels are permanently blocked once added. Use the monthly reset feature to clear all (coming soon).
-                  </p>
-                </div>
-                
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Enter channel name (e.g., Eddie Hall)"
-                    value={newChannelName}
-                    onChange={(e) => setNewChannelName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddChannel();
-                      }
-                    }}
-                    disabled={savingChannel}
-                  />
-                  <Button
-                    onClick={handleAddChannel}
-                    disabled={savingChannel || !newChannelName.trim()}
-                    variant="outline"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add
-                  </Button>
-                </div>
-                
                 {loadingChannels ? (
                   <p className="text-sm text-muted-foreground text-center py-4">Loading blocked channels...</p>
                 ) : blockedChannels.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">No channels blocked yet</p>
+                  <div className="text-center py-8">
+                    <p className="text-sm text-muted-foreground">
+                      No channels blocked yet. Visit a YouTube channel and click Block Channel to add one.
+                    </p>
+                  </div>
                 ) : (
-                  <div className="space-y-2">
-                    {blockedChannels.map((channel, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-                      >
-                        <span className="font-medium">{channel}</span>
-                      </div>
-                    ))}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between px-3 py-2 text-xs text-muted-foreground uppercase tracking-wide border-b">
+                      <span>Channel</span>
+                      <span>Date blocked</span>
+                    </div>
+                    {blockedChannels.map((entry, index) => {
+                      const { handle, date } = getChannelDisplay(entry);
+                      return (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-3 border rounded-lg"
+                        >
+                          <span className="font-medium">{handle}</span>
+                          <span className="text-sm text-muted-foreground">{date || "--"}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-                
-                <Button
-                  onClick={handleSaveBlockedChannels}
-                  disabled={savingChannel || blockedChannels.length === 0}
-                  className="w-full"
-                >
-                  {savingChannel ? "Normalising & Saving..." : "Save & Normalise Channels"}
-                </Button>
-                <p className="text-xs text-muted-foreground text-center">
-                  Channel names will be normalised to match YouTube metadata. The page will refresh after saving.
+                <p className="text-xs text-muted-foreground text-center pt-2">
+                  To unblock a channel, email support@focustube.co.uk
                 </p>
               </CardContent>
             </Card>

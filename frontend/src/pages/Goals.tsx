@@ -6,15 +6,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import { storeEmailForExtension } from "@/lib/extensionStorage";
-import { getApiUrl } from "@/lib/api";
 
 const Goals = () => {
   const navigate = useNavigate();
   const [goalsText, setGoalsText] = useState("");
   const [pitfallsText, setPitfallsText] = useState("");
-  const [channelsText, setChannelsText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [normalizingChannels, setNormalizingChannels] = useState(false);
   const [error, setError] = useState("");
   const [checkingAuth, setCheckingAuth] = useState(true);
 
@@ -69,36 +66,6 @@ const Goals = () => {
         return;
       }
 
-      // Parse channels from textarea — split on commas or newlines
-      const channelList = channelsText
-        .split(/[,\n]+/)
-        .map((c) => c.trim())
-        .filter((c) => c.length > 0);
-
-      // Normalize channel names through AI endpoint
-      let normalizedChannels = channelList;
-      if (channelList.length > 0) {
-        setNormalizingChannels(true);
-        try {
-          const normalizeResponse = await fetch(getApiUrl("/ai/normalize-channels"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ channel_names: channelList }),
-          });
-
-          if (normalizeResponse.ok) {
-            const normalizeData = await normalizeResponse.json();
-            if (normalizeData.ok && normalizeData.normalized_names) {
-              normalizedChannels = normalizeData.normalized_names;
-            }
-          }
-        } catch (_) {
-          // Continue with original names if normalization fails
-        } finally {
-          setNormalizingChannels(false);
-        }
-      }
-
       // Store goals and pitfalls as single-element JSON arrays so the
       // classifier receives the full sentence rather than keyword fragments
       const goalsValue = goalsText.trim()
@@ -107,7 +74,6 @@ const Goals = () => {
       const pitfallsValue = pitfallsText.trim()
         ? JSON.stringify([pitfallsText.trim()])
         : JSON.stringify([]);
-      const channelsValue = JSON.stringify(normalizedChannels);
 
       const { data: existingUser } = await supabase
         .from("users")
@@ -126,7 +92,7 @@ const Goals = () => {
             trial_expires_at: trialEnd.toISOString(),
             goals: goalsValue,
             pitfalls: pitfallsValue,
-            blocked_channels: channelsValue,
+            blocked_channels: JSON.stringify([]),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           },
@@ -144,7 +110,6 @@ const Goals = () => {
           .update({
             goals: goalsValue,
             pitfalls: pitfallsValue,
-            blocked_channels: channelsValue,
             updated_at: new Date().toISOString(),
           })
           .eq("email", user.email);
@@ -209,20 +174,6 @@ const Goals = () => {
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="channels">
-                  Channels to block{" "}
-                  <span className="text-muted-foreground font-normal">(optional)</span>
-                </Label>
-                <Textarea
-                  id="channels"
-                  placeholder="e.g. PewDiePie, MrBeast, Sidemen (one per line or comma-separated)"
-                  value={channelsText}
-                  onChange={(e) => setChannelsText(e.target.value)}
-                  rows={2}
-                />
-              </div>
-
               {error && (
                 <div className="text-sm text-red-500 text-center">{error}</div>
               )}
@@ -230,13 +181,9 @@ const Goals = () => {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={loading || normalizingChannels || !goalsText.trim()}
+                disabled={loading || !goalsText.trim()}
               >
-                {normalizingChannels
-                  ? "Normalising channel names..."
-                  : loading
-                  ? "Saving..."
-                  : "Save and start using FocusTube"}
+                {loading ? "Saving..." : "Save and start using FocusTube"}
               </Button>
 
               <button

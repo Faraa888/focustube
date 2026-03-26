@@ -289,9 +289,10 @@ Auth guard: `useRequireAuth` hook returns `"loading" | "authenticated" | "unauth
 
 1. **Goals** — Textarea, placeholder: "e.g. Learn to code, Build my SaaS, Improve my marketing skills"
 2. **Pitfalls** — Textarea, placeholder: "e.g. gaming videos, vlogs, reaction videos, celebrity drama"
-3. **Channels to block** — Textarea, placeholder: "e.g. PewDiePie, MrBeast, Sidemen (one per line or comma-separated)"
 
-**Submit button:** "Save and start using FocusTube" / "Normalising channel names..." → "Saving..."
+**Submit button:** "Save and start using FocusTube" / "Saving..."
+
+No channel blocking input on this page. Channels are blocked directly on YouTube via the Block Channel button.
 
 **Skip link:** "Skip for now" — saves empty, navigates to YouTube
 
@@ -351,13 +352,10 @@ Right — **Biggest distractions:**
 - Save button
 
 **Tab 2: Channels**
-- Add channels to block: text input + "Block" button
-- Blocked channels list (read-only):
-  ```
-  Channel Name          [no button]
-  ```
-  Below list: "To unblock a channel, email support@focustube.co.uk"
-- Empty state: "No channels blocked yet."
+- Read-only list of blocked channels with two columns: @handle | date blocked
+- Below list: "To unblock a channel, email support@focustube.co.uk"
+- Empty state: "No channels blocked yet. Visit a YouTube channel and click Block Channel to add one."
+- No add/remove controls — channels are blocked exclusively via the extension's Block Channel button on YouTube
 
 **Tab 3: Controls**
 - Block Shorts toggle (Switch) — label: "Block Shorts entirely"

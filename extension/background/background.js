@@ -1058,60 +1058,59 @@ async function handleMessage(msg) {
   }
 
   if (msg?.type === "FT_BLOCK_CHANNEL") {
-    const channel = msg?.channel?.trim();
-    if (!channel) {
+    // Accept both legacy string and new object format
+    const channelHandle = msg?.channel?.trim();
+    const channelEntry = msg?.channelEntry; // { handle, name, blockedAt }
+    if (!channelHandle) {
       return { ok: false, error: "Channel is required" };
     }
-    
+
     const { ft_blocked_channels = [] } = await getLocal(["ft_blocked_channels"]);
     const currentList = Array.isArray(ft_blocked_channels) ? [...ft_blocked_channels] : [];
-    
-    // Check if already blocked (exact case-insensitive match)
-    const channelLower = channel.toLowerCase().trim();
-    const normalizedChannel = channel.trim();
-    const isAlreadyBlocked = currentList.some(blocked => {
-      const blockedLower = blocked.toLowerCase().trim();
-      return blockedLower === channelLower; // Exact match only
+
+    // Check if already blocked (by handle or legacy name)
+    const handleLower = channelHandle.toLowerCase().trim();
+    const isAlreadyBlocked = currentList.some(entry => {
+      if (typeof entry === 'string') return entry.toLowerCase().trim() === handleLower;
+      return (entry.handle || '').toLowerCase().trim() === handleLower;
     });
-    
+
     if (!isAlreadyBlocked) {
-      // Store previous state for rollback
       const previousList = [...currentList];
-      const newList = [...previousList, normalizedChannel];
-      
-      // Optimistic update: update local cache immediately
-      await setLocal({ 
+      // Use the full object entry if provided, otherwise fall back to string
+      const newEntry = channelEntry || channelHandle;
+      const newList = [...previousList, newEntry];
+
+      // Optimistic update
+      await setLocal({
         ft_blocked_channels: newList,
-        ft_spiral_detected: null  // Clear spiral flag
+        ft_spiral_detected: null,
       });
-      LOG("Channel blocked (optimistic update):", normalizedChannel);
-      
-      // Save to Supabase (source of truth)
+      LOG("Channel blocked (optimistic update):", channelHandle);
+
+      // Save to Supabase
       try {
         const saved = await saveExtensionDataToServer({
-          blocked_channels: newList
+          blocked_channels: newList,
         });
-        
+
         if (saved) {
-          LOG("✅ Channel block saved to Supabase:", normalizedChannel);
-          // No reload needed - we already have the correct data in cache
+          LOG("Channel block saved to Supabase:", channelHandle);
         } else {
-          // Save failed - rollback local cache
           await setLocal({ ft_blocked_channels: previousList });
-          LOG("⚠️ Failed to save to Supabase, rolled back local cache");
+          LOG("Failed to save to Supabase, rolled back local cache");
           return { ok: false, error: "Failed to save to Supabase" };
         }
       } catch (err) {
-        // Save failed - rollback local cache
         await setLocal({ ft_blocked_channels: previousList });
-        LOG("⚠️ Error saving to Supabase, rolled back:", err);
+        LOG("Error saving to Supabase, rolled back:", err);
         return { ok: false, error: err.message || "Failed to save to Supabase" };
       }
     } else {
-      LOG("Channel already blocked:", normalizedChannel);
+      LOG("Channel already blocked:", channelHandle);
     }
-    
-    return { ok: true, channel: normalizedChannel };
+
+    return { ok: true, channel: channelHandle };
   }
 
   if (msg?.type === "FT_SYNC_PLAN") {

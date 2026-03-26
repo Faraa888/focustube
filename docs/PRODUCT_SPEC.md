@@ -87,11 +87,12 @@ Extension disables. Upgrade screen shown with usage stats from trial period.
 Fields:
 - **Goals** — what the user wants YouTube to help them achieve (free text, max 500 chars)
 - **Pitfalls** — common distractions to flag (free text, max 500 chars)
-- **Channels to block** — optional free text, passed through OpenAI normalization before saving
 
 Field name is `pitfalls` everywhere — DB, API, and UI. Not "anti-goals", not "bad channels".
 
-After submit: AI normalization call runs, then data saves to Supabase, then redirect to YouTube.
+After submit: data saves to Supabase, then redirect to YouTube.
+
+Channels are NOT blocked during onboarding. Users block channels directly on YouTube via the Block Channel button.
 
 ---
 
@@ -180,18 +181,27 @@ After 5-minute productive break, user can resume. Productive break resets only p
 
 ## 8. CHANNEL BLOCKING
 
-**Where users can add blocked channels:**
-- During onboarding (Goals page) — free text, AI-normalized
-- In Settings page — free text, AI-normalized
-- On any YouTube video page — "Block Channel" button in extension (main channel only, no confirmation needed)
+**How users block channels:**
+Channels can ONLY be blocked via the Block Channel button on YouTube itself. No text input anywhere.
+The button appears on three page types:
+- Watch pages — next to the channel name
+- Shorts pages — floating button
+- Channel pages (`/@handle`, `/channel/...`) — below the channel header
 
-**Behavior when matched:** Redirect to YouTube home with dismissable overlay ("Channel blocked").
+**Collaborative videos:** When multiple channels are detected (via `a[href^="/@"]` in the DOM), a small picker lets the user choose which channel(s) to block. Single-channel videos block immediately.
 
-**Only considers main channel.** Collaborators are ignored.
+**Identifier:** `@handle` scraped from DOM anchor hrefs. Stored as object:
+`{ handle: "@MrBeast", name: "MrBeast", blockedAt: "2026-03-20" }`
 
-**Unblocking:** No self-service unblock. User must email support. Settings page shows read-only list of blocked channels with no unblock button.
+**Behavior when matched:** Redirect to YouTube home with dismissable overlay ("Channel blocked"). Block check runs on page load before video plays by extracting all `@handle`s from the DOM.
+
+**Unblocking:** No self-service unblock. User must email support@focustube.co.uk.
+
+**Settings page:** Read-only list with two columns: @handle | date blocked. Empty state: "No channels blocked yet. Visit a YouTube channel and click Block Channel to add one."
 
 **Persistence:** Blocked channels stored server-side in Supabase. Sync to extension within 3 minutes of change.
+
+**Backwards compatibility:** Legacy entries stored as plain display-name strings are matched by case-insensitive display name. New entries always use @handle format.
 
 ---
 
