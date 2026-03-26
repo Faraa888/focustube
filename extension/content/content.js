@@ -97,29 +97,6 @@ async function getEffectivePlan() {
   }
 }
 
-/* COMMENTED OUT: Generic block overlay - removed per user request
- * Simple overlay creator. Shown when user is blocked (search/global scope).
- * Uses CSS classes from overlay.css instead of inline styles.
- */
-/*
-function showOverlay(reason, scope) {
-  removeOverlay(); // ensure no duplicates
-
-  const overlay = document.createElement("div");
-  overlay.id = "ft-overlay";
-
-  overlay.innerHTML = `
-    <div class="ft-box">
-      <h1>FocusTube Active</h1>
-      <p id="ft-overlay-message">You're blocked from ${scope.toLowerCase()} content.</p>
-      <p><strong>Reason:</strong> ${reason}</p>
-    </div>
-  `;
-
-  document.body.appendChild(overlay);
-}
-*/
-
 // Add this helper function before openStripeCheckout:
 async function checkServerHealth(serverUrl) {
   try {
@@ -2332,9 +2309,7 @@ function showSearchWarning(remaining, message) {
   }, 5000);
 }
 
-// REMOVED: Duplicate showGlobalLimitOverlay - Phase 3 version at line 660 is canonical
-
-/* COMMENTED OUT: Search block overlay - hidden per user request
+/**
  * Shows search block overlay with plan-specific buttons
  */
 async function showSearchBlockOverlay(plan) {
@@ -3288,65 +3263,6 @@ async function showJournalNudge(videoMetadata) {
   }, 100);
 }
 
-/* COMMENTED OUT: AI distracting popup - to be replaced with nudge/hide/remove per user request
- * Shows AI distracting content popup
- * Shows when content is classified as distracting and user has allowance
- */
-/*
-async function showAIDistractingPopup(classification, allowance) {
-  // Remove any existing popup
-  const existingPopup = document.getElementById("ft-ai-distracting-popup");
-  if (existingPopup) existingPopup.remove();
-  
-  // Pause and mute video before showing popup
-  pauseAndMuteVideo();
-  
-  // Format allowance display
-  let allowanceText = "";
-  
-  // Get allowance cost from classification
-  const allowanceCost = classification.allowance_cost || { type: "none", amount: 0 };
-  let costText = "";
-  if (allowanceCost.type === "video") {
-    costText = `This will use ${allowanceCost.amount} of your daily video allowance`;
-  } else if (allowanceCost.type === "minutes") {
-    costText = `This will use ${allowanceCost.amount} minutes of your daily time allowance`;
-  }
-  
-  // Create popup
-  const popup = document.createElement("div");
-  popup.id = "ft-ai-distracting-popup";
-  
-  popup.innerHTML = `
-    <div class="ft-milestone-box">
-      <h2>⚠️ This content is not aligned with your goals</h2>
-      <p class="ft-milestone-intro">${classification.reason || "This content may distract you from your goals"}</p>
-      ${costText ? `<p style="color: #ffcc66; margin: 12px 0; font-size: 14px;">${costText}</p>` : ''}
-      ${allowanceText ? `<p style="color: #ccc; margin: 8px 0; font-size: 13px;">Remaining allowance: ${allowanceText}</p>` : ''}
-      <div class="ft-milestone-buttons">
-        <button id="ft-ai-go-back" class="ft-button ft-button-secondary">Go Back</button>
-        <button id="ft-ai-continue" class="ft-button ft-button-primary">Continue</button>
-      </div>
-    </div>
-  `;
-  
-  // Go Back button - navigate away
-  popup.querySelector("#ft-ai-go-back").addEventListener("click", () => {
-    popup.remove();
-    restoreVideoState();
-    // Navigate to YouTube home
-    window.location.href = "https://www.youtube.com/";
-  });
-  
-  // Continue button - dismiss and restore video state
-  popup.querySelector("#ft-ai-continue").addEventListener("click", () => {
-    popup.remove();
-    restoreVideoState(); // Restore original muted state (but don't auto-play)
-  });
-  
-  document.body.appendChild(popup);
-}
-*/
 
 /**
  * Starts tracking time spent on Shorts (Pro plan only)
@@ -5933,30 +5849,6 @@ async function handleNavigation() {
     }
   }
 
-  // Handle AI classification popup (show before checking blocked status)
-  // Only show popup if content is NOT blocked (blocked content shows different overlay)
-  if (!resp.blocked && resp.aiClassification && resp.aiClassification.category === "distracting") {
-    const actionHint = resp.aiClassification.action_hint || "allow";
-    const allowanceVideosLeft = resp.counters?.allowanceVideosLeft || 0;
-    const allowanceSecondsLeft = resp.counters?.allowanceSecondsLeft || 0;
-    
-    // COMMENTED OUT: AI distracting popup - to be replaced with nudge/hide/remove per user request
-    // Show popup if:
-    // - action_hint is "soft-warn" OR
-    // - content is distracting but allowed (has allowance and not blocked)
-    /*
-    if (actionHint === "soft-warn" || (actionHint !== "block" && (allowanceVideosLeft > 0 || allowanceSecondsLeft > 0))) {
-      // Don't show if already showing popup or overlay
-      if (!document.getElementById("ft-overlay") && !document.getElementById("ft-ai-distracting-popup")) {
-        await showAIDistractingPopup(resp.aiClassification, {
-          allowanceVideosLeft,
-          allowanceSecondsLeft
-        });
-      }
-    }
-    */
-  }
-
   // Update dev panel with AI classification results (only if valid)
   // Dev panel disabled - removed per user request
   // const devPanel = document.getElementById("ft-dev-toggle");
@@ -6036,18 +5928,8 @@ async function handleNavigation() {
       if (!document.getElementById("ft-overlay")) {
         await showSearchBlockOverlay(resp.plan || "free");
       }
-    } 
-   
-    // Watch/AI blocking: show generic overlay for AI-blocked videos
-    // COMMENTED OUT: Generic overlay removed per user request
-    /*
-    else if (resp.scope === "watch") {
-      if (!document.getElementById("ft-overlay")) {
-        // Show generic block overlay for AI-blocked videos
-        showOverlay(resp.reason || "ai_distracting_blocked", "watch");
-      }
     }
-    */
+
     // Global blocking: show global limit overlay with daily summary
     if (resp.scope === "global" && !document.getElementById("ft-overlay")) {
       await showDailyLimitBlock(resp.plan || "free", resp.counters || {});

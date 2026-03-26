@@ -26,9 +26,9 @@ const Settings = () => {
   
   // Goals state
   const [goals, setGoals] = useState<string[]>([]);
-  const [antiGoals, setAntiGoals] = useState<string[]>([]);
+  const [pitfalls, setPitfalls] = useState<string[]>([]);
   const [goalInput, setGoalInput] = useState("");
-  const [antiGoalInput, setAntiGoalInput] = useState("");
+  const [pitfallInput, setPitfallInput] = useState("");
   const [savingGoals, setSavingGoals] = useState(false);
   
   // Blocked channels state — read-only list of { handle, name, blockedAt } or legacy strings
@@ -109,12 +109,12 @@ const Settings = () => {
           if (userData.pitfalls) {
             try {
               const parsed = JSON.parse(userData.pitfalls);
-              setAntiGoals(Array.isArray(parsed) ? parsed : []);
+              setPitfalls(Array.isArray(parsed) ? parsed : []);
             } catch {
-              setAntiGoals([]);
+              setPitfalls([]);
             }
           } else {
-            setAntiGoals([]);
+            setPitfalls([]);
           }
         }
 
@@ -290,10 +290,10 @@ const Settings = () => {
     setGoals(goals.filter((_, i) => i !== index));
   };
 
-  const addAntiGoal = () => {
-    const trimmed = antiGoalInput.trim();
+  const addPitfall = () => {
+    const trimmed = pitfallInput.trim();
     if (!trimmed) return;
-    if (antiGoals.length >= 5) {
+    if (pitfalls.length >= 5) {
       toast({
         title: "Maximum reached",
         description: "You can add up to 5 distractions. Remove one to add another.",
@@ -301,19 +301,19 @@ const Settings = () => {
       });
       return;
     }
-    if (antiGoals.some(g => g.toLowerCase() === trimmed.toLowerCase())) {
+    if (pitfalls.some(g => g.toLowerCase() === trimmed.toLowerCase())) {
       toast({
         title: "Already added",
         description: "This distraction is already in your list.",
       });
       return;
     }
-    setAntiGoals([...antiGoals, trimmed]);
-    setAntiGoalInput("");
+    setPitfalls([...pitfalls, trimmed]);
+    setPitfallInput("");
   };
 
-  const removeAntiGoal = (index: number) => {
-    setAntiGoals(antiGoals.filter((_, i) => i !== index));
+  const removePitfall = (index: number) => {
+    setPitfalls(pitfalls.filter((_, i) => i !== index));
   };
 
   // Save goals
@@ -335,7 +335,7 @@ const Settings = () => {
         .from("users")
         .update({
           goals: JSON.stringify(goals),
-          pitfalls: JSON.stringify(antiGoals),
+          pitfalls: JSON.stringify(pitfalls),
           updated_at: new Date().toISOString(),
         })
         .eq("email", user.email);
@@ -612,19 +612,19 @@ const Settings = () => {
                 <div className="flex gap-2">
                   <Input
                     placeholder="e.g., Gaming streams"
-                    value={antiGoalInput}
-                    onChange={(e) => setAntiGoalInput(e.target.value)}
+                    value={pitfallInput}
+                    onChange={(e) => setPitfallInput(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
-                        addAntiGoal();
+                        addPitfall();
                       }
                     }}
-                    disabled={antiGoals.length >= 5}
+                    disabled={pitfalls.length >= 5}
                   />
                   <Button
-                    onClick={addAntiGoal}
-                    disabled={antiGoals.length >= 5 || !antiGoalInput.trim()}
+                    onClick={addPitfall}
+                    disabled={pitfalls.length >= 5 || !pitfallInput.trim()}
                     variant="outline"
                   >
                     <Plus className="h-4 w-4 mr-1" />
@@ -632,18 +632,18 @@ const Settings = () => {
                   </Button>
                 </div>
                 
-                {antiGoals.length > 0 ? (
+                {pitfalls.length > 0 ? (
                   <div className="space-y-2">
-                    {antiGoals.map((antiGoal, index) => (
+                    {pitfalls.map((pitfall, index) => (
                       <div
                         key={index}
                         className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                       >
-                        <span className="font-medium">{antiGoal}</span>
+                        <span className="font-medium">{pitfall}</span>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => removeAntiGoal(index)}
+                          onClick={() => removePitfall(index)}
                           className="h-8 w-8 p-0"
                         >
                           <X className="h-4 w-4" />

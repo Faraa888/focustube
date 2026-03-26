@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Download as DownloadIcon, Chrome, Check } from "lucide-react";
 
 const Download = () => {
-  // TODO: Replace with actual Chrome Web Store URL
   const CHROME_STORE_URL = "https://chrome.google.com/webstore/detail/focustube/YOUR_EXTENSION_ID";
 
   return (

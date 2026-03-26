@@ -34,15 +34,11 @@ const Signup = () => {
     checkExistingSession();
   }, [navigate]);
 
-  // Debug: Log when component mounts
   useEffect(() => {
-    console.log("✅ [SIGNUP] Component mounted - Signup page loaded");
-    
-    // Check for error from OAuth redirect
     const errorParam = searchParams.get('error');
     if (errorParam) {
       setError(decodeURIComponent(errorParam));
-      console.error("🔴 [SIGNUP] OAuth error:", errorParam);
+      console.error("[SIGNUP] OAuth error:", errorParam);
     }
   }, [searchParams]);
 
@@ -72,7 +68,6 @@ const Signup = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log("🚀 [SIGNUP] handleSubmit called - form submitted");
     setLoading(true);
     setError("");
 
@@ -80,66 +75,43 @@ const Signup = () => {
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
 
-    console.log("🚀 [SIGNUP] Form data extracted:", { email, hasPassword: !!password });
-
-    // Validate email before attempting signup
-    console.log("🚀 [SIGNUP] Validating email...");
     const emailValidation = validateEmail(email);
     if (!emailValidation.isValid) {
-      console.error("🔴 [SIGNUP] Email validation failed:", emailValidation.error);
       setError(emailValidation.error || "Invalid email address");
       setLoading(false);
       return;
     }
-    console.log("✅ [SIGNUP] Email validation passed");
 
     try {
-      console.log("🚀 [SIGNUP] Calling supabase.auth.signUp...");
-      // Sign up with Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
       });
 
-      console.log("🚀 [SIGNUP] Supabase response:", { 
-        hasUser: !!authData?.user, 
-        hasSession: !!authData?.session,
-        userEmail: authData?.user?.email,
-        error: authError?.message 
-      });
-
       if (authError) {
-        console.error("🔴 [SIGNUP] Auth error:", authError);
+        console.error("[SIGNUP] Auth error:", authError.message);
         setError(authError.message);
         setLoading(false);
         return;
       }
 
       if (!authData.user) {
-        console.error("🔴 [SIGNUP] No user returned from Supabase");
         setError("Failed to create account. Please try again.");
         setLoading(false);
         return;
       }
 
-      // Check if email confirmation is required
       if (authData.user && !authData.session) {
-        console.log("🟡 [SIGNUP] No session - email confirmation required (but should be disabled)");
-        // Email confirmation required
         setEmailConfirmationSent(true);
         setUserEmail(authData.user.email || email);
         setLoading(false);
         return;
       }
 
-      console.log("✅ [SIGNUP] User created with session, proceeding to database...");
-
-      // Create user record in users table with trial plan
       const trialStart = new Date();
       const trialEnd = new Date();
       trialEnd.setDate(trialEnd.getDate() + 14);
 
-      console.log("🚀 [SIGNUP] Creating user in database...");
       const { data: userData, error: dbError } = await supabase.from("users").upsert({
         email: authData.user.email,
         plan: "trial",
@@ -151,39 +123,23 @@ const Signup = () => {
       });
 
       if (dbError) {
-        console.error("🔴 [SIGNUP] Database error:", dbError);
-        console.error("Error details:", {
-          message: dbError.message,
-          code: dbError.code,
-          details: dbError.details,
-          hint: dbError.hint
-        });
-        // Show error to user but don't block signup
+        console.error("[SIGNUP] Database error:", dbError.message);
         setError(`Account created, but couldn't save to database: ${dbError.message}. Please contact support.`);
-      } else {
-        console.log("✅ [SIGNUP] User created successfully in database:", userData);
       }
 
-      // Store email in chrome.storage for extension
       if (authData.user?.email) {
-        console.log("🚀 [SIGNUP] Storing email in chrome.storage...");
         await storeEmailForExtension(authData.user.email);
       }
 
-      // If we have a session, redirect to goals
-      // Otherwise, user needs to confirm email first
       if (authData.session) {
-        console.log("✅ [SIGNUP] Session exists, redirecting to /goals");
         navigate("/goals");
       } else {
-        console.log("🟡 [SIGNUP] No session (unexpected), showing email confirmation");
-        // This shouldn't happen if we handled it above, but just in case
         setEmailConfirmationSent(true);
         setUserEmail(authData.user.email || email);
         setLoading(false);
       }
     } catch (err) {
-      console.error("🔴 [SIGNUP] Exception caught:", err);
+      console.error("[SIGNUP] Exception:", err);
       setError("Something went wrong. Please try again.");
       setLoading(false);
     }
@@ -242,13 +198,7 @@ const Signup = () => {
             </div>
           </div>
 
-          <form 
-            onSubmit={(e) => {
-              console.log("🔵 [SIGNUP] Form onSubmit event fired");
-              handleSubmit(e);
-            }} 
-            className="space-y-4"
-          >
+          <form onSubmit={handleSubmit} className="space-y-4">
                 {error && (
                   <Alert variant="destructive">
                     <AlertTitle>Error</AlertTitle>

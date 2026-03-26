@@ -14,8 +14,6 @@ export const PLAN_TEST  = "test";    // Internal/dev tier - unlimited, logs ever
 // RESET PERIODS
 // ─────────────────────────────────────────────────────────────
 export const PERIOD_DAILY   = "daily";    // Reset every day
-export const PERIOD_WEEKLY  = "weekly";   // Reset every week
-export const PERIOD_MONTHLY = "monthly";  // Reset at start of each month
 
 // ─────────────────────────────────────────────────────────────
 // PAGE TYPES (detected by content.js and used by rules.js)
@@ -30,14 +28,11 @@ export const PAGE_OTHER  = "OTHER";    // anything else (channel pages, settings
 // MESSAGE TYPES (background <-> content communication)
 // ─────────────────────────────────────────────────────────────
 export const MSG_NAVIGATED   = "FT_NAVIGATED";     // user navigated to new page
-export const MSG_TEMP_UNLOCK = "FT_TEMP_UNLOCK";   // temporary unlock
 export const MSG_PING        = "FT_PING";          // connection check
-export const MSG_DEBUG       = "FT_DEBUG";         // used for internal dev/test commands
 
 // ─────────────────────────────────────────────────────────────
 // DEBUGGING / FEATURE FLAGS
 // ─────────────────────────────────────────────────────────────
-export const DEBUG_MODE = false;    // toggles extra console logs
 export const TEST_MODE  = false;    // when true, disables blocking for QA/dev
 
 // ─────────────────────────────────────────────────────────────
